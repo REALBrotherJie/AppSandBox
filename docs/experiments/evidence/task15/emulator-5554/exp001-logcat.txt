@@ -1,0 +1,50 @@
+--------- beginning of main
+09-23 15:58:14.111  5399  5399 I Task15  : mode=exp001 PID=5399 runCount=1 API=36
+09-23 15:58:14.194  5399  5399 I Task15  : imported=/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+09-23 15:58:14.226  5399  5399 I Task15  : experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/35072f89-c89d-4586-9613-b1a3bc4f5802/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494 readOnly=true
+09-23 15:58:14.260  5399  5399 I Task15  : guestId=934ad563-d21e-40ac-8be7-88bf5b1d7cfd
+09-23 15:58:14.260  5399  5399 I Task15  : apkPath=/data/user/0/com.example.appsandbox/cache/task15/35072f89-c89d-4586-9613-b1a3bc4f5802/base.apk
+09-23 15:58:14.260  5399  5399 I Task15  : exists=true readable=true size=30356
+09-23 15:58:14.260  5399  5399 I Task15  : sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+09-23 15:58:14.260  5399  5399 I Task15  : packageName=com.example.appsandbox.testguest
+09-23 15:58:14.260  5399  5399 I Task15  : guestInstalled=false
+09-23 15:58:14.260  5399  5399 I Task15  : hostLoader=dalvik.system.PathClassLoader
+09-23 15:58:14.260  5399  5399 I Task15  : hostLoaderToString=dalvik.system.PathClassLoader[DexPathList[[zip file "/data/app/~~dVHf6YHs33Yw4YZprrNzEA==/com.example.appsandbox-1oKXp0EVdolT5FBIpKPA4Q==/base.apk"],nativeLibraryDirectories=[/data/app/~~dVHf6YHs33Yw4YZprrNzEA==/com.example.appsandbox-1oKXp0EVdolT5FBIpKPA4Q==/lib/x86_64, /system/lib64, /system_ext/lib64]]]
+09-23 15:58:14.260  5399  5399 I Task15  : hostParent=java.lang.BootClassLoader
+09-23 15:58:14.260  5399  5399 I Task15  : hostParentToString=java.lang.BootClassLoader@56ad165
+09-23 15:58:14.260  5399  5399 I Task15  : hostClassLoader->com.example.appsandbox.testguest.runtime.GuestProbe=NOT FOUND
+09-23 15:58:14.260  5399  5399 I Task15  : guestLoaderA=dalvik.system.DexClassLoader
+09-23 15:58:14.260  5399  5399 I Task15  : guestLoaderToStringA=dalvik.system.DexClassLoader[DexPathList[[zip file "/data/user/0/com.example.appsandbox/cache/task15/35072f89-c89d-4586-9613-b1a3bc4f5802/base.apk"],nativeLibraryDirectories=[/system/lib64, /system_ext/lib64]]]
+09-23 15:58:14.260  5399  5399 I Task15  : guestParentA=dalvik.system.PathClassLoader
+09-23 15:58:14.260  5399  5399 I Task15  : guestParentToStringA=dalvik.system.PathClassLoader[DexPathList[[zip file "/data/app/~~dVHf6YHs33Yw4YZprrNzEA==/com.example.appsandbox-1oKXp0EVdolT5FBIpKPA4Q==/base.apk"],nativeLibraryDirectories=[/data/app/~~dVHf6YHs33Yw4YZprrNzEA==/com.example.appsandbox-1oKXp0EVdolT5FBIpKPA4Q==/lib/x86_64, /system/lib64, /system_ext/lib64]]]
+09-23 15:58:14.260  5399  5399 I Task15  : guestLibrarySearchPathA=null
+09-23 15:58:14.260  5399  5399 I Task15  : loadedClassA=com.example.appsandbox.testguest.runtime.GuestProbe
+09-23 15:58:14.260  5399  5399 I Task15  : clazzLoaderMatchesA=true
+09-23 15:58:14.260  5399  5399 I Task15  : constructorA=OK
+09-23 15:58:14.260  5399  5399 I Task15  : methodLookupA=ping
+09-23 15:58:14.260  5399  5399 I Task15  : invocationA=guest:exp001-A:EXP001_GUEST_7f2d8e91-4d42-4aa4-9a91-1d4f8c3e6b27
+09-23 15:58:14.260  5399  5399 I Task15  : guestHelperA=RESOLVED
+09-23 15:58:14.260  5399  5399 I Task15  : guestLoaderB=dalvik.system.DexClassLoader
+09-23 15:58:14.260  5399  5399 I Task15  : guestLoaderToStringB=dalvik.system.DexClassLoader[DexPathList[[zip file "/data/user/0/com.example.appsandbox/cache/task15/35072f89-c89d-4586-9613-b1a3bc4f5802/base.apk"],nativeLibraryDirectories=[/system/lib64, /system_ext/lib64]]]
+09-23 15:58:14.260  5399  5399 I Task15  : guestParentB=dalvik.system.PathClassLoader
+09-23 15:58:14.260  5399  5399 I Task15  : guestParentToStringB=dalvik.system.PathClassLoader[DexPathList[[zip file "/data/app/~~dVHf6YHs33Yw4YZprrNzEA==/com.example.appsandbox-1oKXp0EVdolT5FBIpKPA4Q==/base.apk"],nativeLibraryDirectories=[/data/app/~~dVHf6YHs33Yw4YZprrNzEA==/com.example.appsandbox-1oKXp0EVdolT5FBIpKPA4Q==/lib/x86_64, /system/lib64, /system_ext/lib64]]]
+09-23 15:58:14.260  5399  5399 I Task15  : guestLibrarySearchPathB=null
+09-23 15:58:14.260  5399  5399 I Task15  : loadedClassB=com.example.appsandbox.testguest.runtime.GuestProbe
+09-23 15:58:14.260  5399  5399 I Task15  : clazzLoaderMatchesB=true
+09-23 15:58:14.260  5399  5399 I Task15  : constructorB=OK
+09-23 15:58:14.260  5399  5399 I Task15  : methodLookupB=ping
+09-23 15:58:14.260  5399  5399 I Task15  : invocationB=guest:exp001-B:EXP001_GUEST_7f2d8e91-4d42-4aa4-9a91-1d4f8c3e6b27
+09-23 15:58:14.260  5399  5399 I Task15  : guestHelperB=RESOLVED
+09-23 15:58:14.260  5399  5399 I Task15  : classA==classB=false
+09-23 15:58:14.260  5399  5399 I Task15  : classA.classLoader=dalvik.system.DexClassLoader
+09-23 15:58:14.260  5399  5399 I Task15  : classB.classLoader=dalvik.system.DexClassLoader
+09-23 15:58:14.260  5399  5399 I Task15  : classA.classLoader==classB.classLoader=false
+09-23 15:58:14.260  5399  5399 I Task15  : classA.isAssignableFrom(classB)=false
+09-23 15:58:14.260  5399  5399 I Task15  : classB.isAssignableFrom(classA)=false
+09-23 15:58:14.260  5399  5399 I Task15  : classLoaderA==classLoaderB=false
+09-23 15:58:14.260  5399  5399 I Task15  : java.lang.String.classLoader=java.lang.BootClassLoader@56ad165
+09-23 15:58:14.260  5399  5399 I Task15  : android.os.Build.classLoader=java.lang.BootClassLoader@56ad165
+09-23 15:58:14.260  5399  5399 I Task15  : wrongClass=ClassNotFoundException
+09-23 15:58:14.260  5399  5399 I Task15  : corruptApk=java.lang.SecurityException: Writable dex file '/data/user/0/com.example.appsandbox/cache/exp001-corrupt.apk' is not allowed.
+09-23 15:58:14.260  5399  5399 I Task15  : conclusion=CONFIRMED
+09-23 15:58:14.264  5399  5399 I Task15  : END hostSurvived=true

@@ -1,0 +1,49 @@
+mode=exp001 PID=5399 runCount=1 API=36
+imported=/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/35072f89-c89d-4586-9613-b1a3bc4f5802/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494 readOnly=true
+guestId=934ad563-d21e-40ac-8be7-88bf5b1d7cfd
+apkPath=/data/user/0/com.example.appsandbox/cache/task15/35072f89-c89d-4586-9613-b1a3bc4f5802/base.apk
+exists=true readable=true size=30356
+sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+packageName=com.example.appsandbox.testguest
+guestInstalled=false
+hostLoader=dalvik.system.PathClassLoader
+hostLoaderToString=dalvik.system.PathClassLoader[DexPathList[[zip file "/data/app/~~dVHf6YHs33Yw4YZprrNzEA==/com.example.appsandbox-1oKXp0EVdolT5FBIpKPA4Q==/base.apk"],nativeLibraryDirectories=[/data/app/~~dVHf6YHs33Yw4YZprrNzEA==/com.example.appsandbox-1oKXp0EVdolT5FBIpKPA4Q==/lib/x86_64, /system/lib64, /system_ext/lib64]]]
+hostParent=java.lang.BootClassLoader
+hostParentToString=java.lang.BootClassLoader@56ad165
+hostClassLoader->com.example.appsandbox.testguest.runtime.GuestProbe=NOT FOUND
+guestLoaderA=dalvik.system.DexClassLoader
+guestLoaderToStringA=dalvik.system.DexClassLoader[DexPathList[[zip file "/data/user/0/com.example.appsandbox/cache/task15/35072f89-c89d-4586-9613-b1a3bc4f5802/base.apk"],nativeLibraryDirectories=[/system/lib64, /system_ext/lib64]]]
+guestParentA=dalvik.system.PathClassLoader
+guestParentToStringA=dalvik.system.PathClassLoader[DexPathList[[zip file "/data/app/~~dVHf6YHs33Yw4YZprrNzEA==/com.example.appsandbox-1oKXp0EVdolT5FBIpKPA4Q==/base.apk"],nativeLibraryDirectories=[/data/app/~~dVHf6YHs33Yw4YZprrNzEA==/com.example.appsandbox-1oKXp0EVdolT5FBIpKPA4Q==/lib/x86_64, /system/lib64, /system_ext/lib64]]]
+guestLibrarySearchPathA=null
+loadedClassA=com.example.appsandbox.testguest.runtime.GuestProbe
+clazzLoaderMatchesA=true
+constructorA=OK
+methodLookupA=ping
+invocationA=guest:exp001-A:EXP001_GUEST_7f2d8e91-4d42-4aa4-9a91-1d4f8c3e6b27
+guestHelperA=RESOLVED
+guestLoaderB=dalvik.system.DexClassLoader
+guestLoaderToStringB=dalvik.system.DexClassLoader[DexPathList[[zip file "/data/user/0/com.example.appsandbox/cache/task15/35072f89-c89d-4586-9613-b1a3bc4f5802/base.apk"],nativeLibraryDirectories=[/system/lib64, /system_ext/lib64]]]
+guestParentB=dalvik.system.PathClassLoader
+guestParentToStringB=dalvik.system.PathClassLoader[DexPathList[[zip file "/data/app/~~dVHf6YHs33Yw4YZprrNzEA==/com.example.appsandbox-1oKXp0EVdolT5FBIpKPA4Q==/base.apk"],nativeLibraryDirectories=[/data/app/~~dVHf6YHs33Yw4YZprrNzEA==/com.example.appsandbox-1oKXp0EVdolT5FBIpKPA4Q==/lib/x86_64, /system/lib64, /system_ext/lib64]]]
+guestLibrarySearchPathB=null
+loadedClassB=com.example.appsandbox.testguest.runtime.GuestProbe
+clazzLoaderMatchesB=true
+constructorB=OK
+methodLookupB=ping
+invocationB=guest:exp001-B:EXP001_GUEST_7f2d8e91-4d42-4aa4-9a91-1d4f8c3e6b27
+guestHelperB=RESOLVED
+classA==classB=false
+classA.classLoader=dalvik.system.DexClassLoader
+classB.classLoader=dalvik.system.DexClassLoader
+classA.classLoader==classB.classLoader=false
+classA.isAssignableFrom(classB)=false
+classB.isAssignableFrom(classA)=false
+classLoaderA==classLoaderB=false
+java.lang.String.classLoader=java.lang.BootClassLoader@56ad165
+android.os.Build.classLoader=java.lang.BootClassLoader@56ad165
+wrongClass=ClassNotFoundException
+corruptApk=java.lang.SecurityException: Writable dex file '/data/user/0/com.example.appsandbox/cache/exp001-corrupt.apk' is not allowed.
+conclusion=CONFIRMED
+END hostSurvived=true

@@ -39,9 +39,9 @@ object Exp003b0Runner {
 
         val apk = File(record.apkPath)
         val importedSha = sha256(apk)
-        line("buildSha256=$BUILD_SHA256")
+        line("task14ReferenceSha256=$BUILD_SHA256")
         line("importedSha256=$importedSha")
-        line("shaMatch=${importedSha.equals(BUILD_SHA256, true)}")
+        line("matchesTask14Reference=${importedSha.equals(BUILD_SHA256, true)}")
         val archive = archiveInfo(activity, apk)
         val applicationClass = archive.className ?: error("Guest Application className missing")
         line("guestApplicationClass=$applicationClass")

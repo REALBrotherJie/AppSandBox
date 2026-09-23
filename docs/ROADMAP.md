@@ -32,7 +32,7 @@ EXP-002 API28/29 = RESEARCH NEEDED
 EXP-003A = CONFIRMED C0 DEBUG BASELINE
 EXP-003B = DESIGNED / BLOCKED BY LOADEDAPK PRECHECK
 EXP-003C = NOT READY
-V-1 API34+ read-only DexClassLoader check = BLOCKED_NO_DEVICE
+V-1 API36 = CONFIRMED; writable GuestStore code is a BLOCKER for API34+ support
 ```
 
 EXP-003 is split into independently gated designs:

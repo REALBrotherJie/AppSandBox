@@ -1,7 +1,7 @@
-mode=exp003b0 PID=21046 runCount=1 API=31
-imported=/data/user/0/com.example.appsandbox/files/guests/2c360be5-df37-4458-83d1-9c2fc1c24bbe/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
-experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/3fb01ded-3ea8-463b-b355-09dc2a3536b8/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494 readOnly=true
-process.pid=21046
+mode=exp003b0 PID=5945 runCount=1 API=36
+imported=/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/b726b2fa-a0fc-438f-a59d-b85f0b0bdf92/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494 readOnly=true
+process.pid=5945
 process.runCount=1
 guestInstalled=false
 hiddenObservation=DEFERRED_NOT_APPROVED_TASK14
@@ -18,15 +18,15 @@ applicationContext.app.resourcesIsGuest=true
 applicationContext.app.assetsClass=android.content.res.AssetManager
 applicationContext.app.classLoader=dalvik.system.DexClassLoader
 applicationContext.app.applicationInfo.package=com.example.appsandbox.testguest
-applicationContext.app.applicationInfo.dataDir=/data/user/0/com.example.appsandbox/files/guests/2c360be5-df37-4458-83d1-9c2fc1c24bbe/instances/debug-exp003b0-2c360be5-df37-4458-83d1-9c2fc1c24bbe/data
-applicationContext.app.filesDir=/data/user/0/com.example.appsandbox/files/guests/2c360be5-df37-4458-83d1-9c2fc1c24bbe/instances/debug-exp003b0-2c360be5-df37-4458-83d1-9c2fc1c24bbe/data/files
+applicationContext.app.applicationInfo.dataDir=/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/instances/debug-exp003b0-934ad563-d21e-40ac-8be7-88bf5b1d7cfd/data
+applicationContext.app.filesDir=/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/instances/debug-exp003b0-934ad563-d21e-40ac-8be7-88bf5b1d7cfd/data/files
 applicationContext.app.applicationContext.class=com.example.appsandbox.experiments.exp003a.Exp003aControlledContext
 applicationContext.app.applicationContextIsApp=false
 applicationContext.app.applicationContextIsControlled=true
 applicationContext.app.applicationContextIsHost=false
 applicationContext.app.opPackageName=com.example.appsandbox
 applicationContext.app.attributionPackage=com.example.appsandbox
-applicationContext.app.attributionUid=10293
+applicationContext.app.attributionUid=10210
 applicationContext.app.packageManagerQuery=NameNotFoundException
 applicationContext.app.layoutInflaterClass=com.android.internal.policy.PhoneLayoutInflater
 applicationContext.app.layoutInflaterContext=android.app.Application
@@ -44,15 +44,15 @@ activity.app.resourcesIsGuest=true
 activity.app.assetsClass=android.content.res.AssetManager
 activity.app.classLoader=dalvik.system.DexClassLoader
 activity.app.applicationInfo.package=com.example.appsandbox.testguest
-activity.app.applicationInfo.dataDir=/data/user/0/com.example.appsandbox/files/guests/2c360be5-df37-4458-83d1-9c2fc1c24bbe/instances/debug-exp003b0-2c360be5-df37-4458-83d1-9c2fc1c24bbe/data
-activity.app.filesDir=/data/user/0/com.example.appsandbox/files/guests/2c360be5-df37-4458-83d1-9c2fc1c24bbe/instances/debug-exp003b0-2c360be5-df37-4458-83d1-9c2fc1c24bbe/data/files
+activity.app.applicationInfo.dataDir=/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/instances/debug-exp003b0-934ad563-d21e-40ac-8be7-88bf5b1d7cfd/data
+activity.app.filesDir=/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/instances/debug-exp003b0-934ad563-d21e-40ac-8be7-88bf5b1d7cfd/data/files
 activity.app.applicationContext.class=com.example.appsandbox.experiments.exp003a.Exp003aControlledContext
 activity.app.applicationContextIsApp=false
 activity.app.applicationContextIsControlled=true
 activity.app.applicationContextIsHost=false
 activity.app.opPackageName=com.example.appsandbox
 activity.app.attributionPackage=com.example.appsandbox
-activity.app.attributionUid=10293
+activity.app.attributionUid=10210
 activity.app.packageManagerQuery=NameNotFoundException
 activity.app.layoutInflaterClass=com.android.internal.policy.PhoneLayoutInflater
 activity.app.layoutInflaterContext=com.example.appsandbox.experiments.v1.ExperimentActivity
@@ -72,11 +72,11 @@ guest.observe.applicationContextIsThis=false
 guest.observe.classLoader=dalvik.system.DexClassLoader
 guest.observe.guestString=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10
 guest.observe.applicationInfoPackage=com.example.appsandbox.testguest
-guest.observe.applicationInfoDataDir=/data/user/0/com.example.appsandbox/files/guests/2c360be5-df37-4458-83d1-9c2fc1c24bbe/instances/debug-exp003b0-2c360be5-df37-4458-83d1-9c2fc1c24bbe/data
-guest.observe.filesDir=/data/user/0/com.example.appsandbox/files/guests/2c360be5-df37-4458-83d1-9c2fc1c24bbe/instances/debug-exp003b0-2c360be5-df37-4458-83d1-9c2fc1c24bbe/data/files
+guest.observe.applicationInfoDataDir=/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/instances/debug-exp003b0-934ad563-d21e-40ac-8be7-88bf5b1d7cfd/data
+guest.observe.filesDir=/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/instances/debug-exp003b0-934ad563-d21e-40ac-8be7-88bf5b1d7cfd/data/files
 guest.observe.opPackageName=com.example.appsandbox
 guest.observe.attributionPackage=com.example.appsandbox
-guest.observe.attributionUid=10293
+guest.observe.attributionUid=10210
 guest.observe.processName=com.example.appsandbox
 constructorCount=2
 onCreateCalled=false
@@ -90,7 +90,7 @@ hostAssetsSeesGuest=false
 systemResourcesSeesGuest=false
 systemAssetsSeesGuest=false
 hostLoaderLoadsGuestApplication=ClassNotFoundException
-error.missingClass=java.lang.ClassNotFoundException:Didn't find class "missing.GuestApplication" on path: DexPathList[[zip file "/data/user/0/com.example.appsandbox/cache/task15/3fb01ded-3ea8-463b-b355-09dc2a3536b8/base.apk"],nativeLibraryDirectories=[/system/lib64, /system_ext/lib64]]
+error.missingClass=java.lang.ClassNotFoundException:Didn't find class "missing.GuestApplication" on path: DexPathList[[zip file "/data/user/0/com.example.appsandbox/cache/task15/b726b2fa-a0fc-438f-a59d-b85f0b0bdf92/base.apk"],nativeLibraryDirectories=[/system/lib64, /system_ext/lib64]]
 error.nullBase=java.lang.ClassCastException:android.content.ContextWrapper cannot be cast to android.app.ContextImpl
 error.constructorThrows=java.lang.IllegalStateException:EXP003B0 constructor failure
 error.appSurvived=true

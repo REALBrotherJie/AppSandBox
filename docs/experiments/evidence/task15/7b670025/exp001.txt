@@ -1,21 +1,21 @@
-mode=exp001 PID=27425 runCount=1 API=31
-imported=/data/user/0/com.example.appsandbox/files/guests/382007d3-d82e-4617-b095-30967dd59da7/base.apk sha256=85f1cf6590b97b60ab09b4e55952e3df7a493e193a59a779756b24890cc33e0e
-experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/98d205c0-f202-48c8-aa3b-c71eb8b613d7/base.apk sha256=85f1cf6590b97b60ab09b4e55952e3df7a493e193a59a779756b24890cc33e0e readOnly=true
-guestId=382007d3-d82e-4617-b095-30967dd59da7
-apkPath=/data/user/0/com.example.appsandbox/cache/task15/98d205c0-f202-48c8-aa3b-c71eb8b613d7/base.apk
-exists=true readable=true size=17263
-sha256=85f1cf6590b97b60ab09b4e55952e3df7a493e193a59a779756b24890cc33e0e
+mode=exp001 PID=18269 runCount=1 API=31
+imported=/data/user/0/com.example.appsandbox/files/guests/2c360be5-df37-4458-83d1-9c2fc1c24bbe/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/44401e4b-3fd0-47a7-b17e-2b0ebb735e66/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494 readOnly=true
+guestId=2c360be5-df37-4458-83d1-9c2fc1c24bbe
+apkPath=/data/user/0/com.example.appsandbox/cache/task15/44401e4b-3fd0-47a7-b17e-2b0ebb735e66/base.apk
+exists=true readable=true size=30356
+sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
 packageName=com.example.appsandbox.testguest
 guestInstalled=false
 hostLoader=dalvik.system.PathClassLoader
-hostLoaderToString=dalvik.system.PathClassLoader[DexPathList[[zip file "/data/app/~~dnXxoESr84P0ePEMEV65GQ==/com.example.appsandbox-CLKfVnUzf3SSaHHJlYHfBw==/base.apk"],nativeLibraryDirectories=[/data/app/~~dnXxoESr84P0ePEMEV65GQ==/com.example.appsandbox-CLKfVnUzf3SSaHHJlYHfBw==/lib/arm64, /system/lib64, /system_ext/lib64]]]
+hostLoaderToString=dalvik.system.PathClassLoader[DexPathList[[zip file "/data/app/~~GSnn22xfqa0DrIO4o6AugA==/com.example.appsandbox-TbmRCGi0k6T646lZ6U64Xg==/base.apk"],nativeLibraryDirectories=[/data/app/~~GSnn22xfqa0DrIO4o6AugA==/com.example.appsandbox-TbmRCGi0k6T646lZ6U64Xg==/lib/arm64, /system/lib64, /system_ext/lib64]]]
 hostParent=java.lang.BootClassLoader
 hostParentToString=java.lang.BootClassLoader@161f180
 hostClassLoader->com.example.appsandbox.testguest.runtime.GuestProbe=NOT FOUND
 guestLoaderA=dalvik.system.DexClassLoader
-guestLoaderToStringA=dalvik.system.DexClassLoader[DexPathList[[zip file "/data/user/0/com.example.appsandbox/cache/task15/98d205c0-f202-48c8-aa3b-c71eb8b613d7/base.apk"],nativeLibraryDirectories=[/system/lib64, /system_ext/lib64]]]
+guestLoaderToStringA=dalvik.system.DexClassLoader[DexPathList[[zip file "/data/user/0/com.example.appsandbox/cache/task15/44401e4b-3fd0-47a7-b17e-2b0ebb735e66/base.apk"],nativeLibraryDirectories=[/system/lib64, /system_ext/lib64]]]
 guestParentA=dalvik.system.PathClassLoader
-guestParentToStringA=dalvik.system.PathClassLoader[DexPathList[[zip file "/data/app/~~dnXxoESr84P0ePEMEV65GQ==/com.example.appsandbox-CLKfVnUzf3SSaHHJlYHfBw==/base.apk"],nativeLibraryDirectories=[/data/app/~~dnXxoESr84P0ePEMEV65GQ==/com.example.appsandbox-CLKfVnUzf3SSaHHJlYHfBw==/lib/arm64, /system/lib64, /system_ext/lib64]]]
+guestParentToStringA=dalvik.system.PathClassLoader[DexPathList[[zip file "/data/app/~~GSnn22xfqa0DrIO4o6AugA==/com.example.appsandbox-TbmRCGi0k6T646lZ6U64Xg==/base.apk"],nativeLibraryDirectories=[/data/app/~~GSnn22xfqa0DrIO4o6AugA==/com.example.appsandbox-TbmRCGi0k6T646lZ6U64Xg==/lib/arm64, /system/lib64, /system_ext/lib64]]]
 guestLibrarySearchPathA=null
 loadedClassA=com.example.appsandbox.testguest.runtime.GuestProbe
 clazzLoaderMatchesA=true
@@ -24,9 +24,9 @@ methodLookupA=ping
 invocationA=guest:exp001-A:EXP001_GUEST_7f2d8e91-4d42-4aa4-9a91-1d4f8c3e6b27
 guestHelperA=RESOLVED
 guestLoaderB=dalvik.system.DexClassLoader
-guestLoaderToStringB=dalvik.system.DexClassLoader[DexPathList[[zip file "/data/user/0/com.example.appsandbox/cache/task15/98d205c0-f202-48c8-aa3b-c71eb8b613d7/base.apk"],nativeLibraryDirectories=[/system/lib64, /system_ext/lib64]]]
+guestLoaderToStringB=dalvik.system.DexClassLoader[DexPathList[[zip file "/data/user/0/com.example.appsandbox/cache/task15/44401e4b-3fd0-47a7-b17e-2b0ebb735e66/base.apk"],nativeLibraryDirectories=[/system/lib64, /system_ext/lib64]]]
 guestParentB=dalvik.system.PathClassLoader
-guestParentToStringB=dalvik.system.PathClassLoader[DexPathList[[zip file "/data/app/~~dnXxoESr84P0ePEMEV65GQ==/com.example.appsandbox-CLKfVnUzf3SSaHHJlYHfBw==/base.apk"],nativeLibraryDirectories=[/data/app/~~dnXxoESr84P0ePEMEV65GQ==/com.example.appsandbox-CLKfVnUzf3SSaHHJlYHfBw==/lib/arm64, /system/lib64, /system_ext/lib64]]]
+guestParentToStringB=dalvik.system.PathClassLoader[DexPathList[[zip file "/data/app/~~GSnn22xfqa0DrIO4o6AugA==/com.example.appsandbox-TbmRCGi0k6T646lZ6U64Xg==/base.apk"],nativeLibraryDirectories=[/data/app/~~GSnn22xfqa0DrIO4o6AugA==/com.example.appsandbox-TbmRCGi0k6T646lZ6U64Xg==/lib/arm64, /system/lib64, /system_ext/lib64]]]
 guestLibrarySearchPathB=null
 loadedClassB=com.example.appsandbox.testguest.runtime.GuestProbe
 clazzLoaderMatchesB=true

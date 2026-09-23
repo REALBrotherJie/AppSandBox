@@ -19,6 +19,11 @@ class ExperimentActivity : Activity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         val mode = intent.getStringExtra("mode") ?: "v1"
+        if (state != null) {
+            val report = File(filesDir, "task15-$mode.txt")
+            setContentView(android.widget.TextView(this).apply { text = if (report.exists()) report.readText() else "No completed experiment" })
+            return
+        }
         val out = StringBuilder()
         fun line(s: String) { out.appendLine(s); Log.i("Task15", s) }
         line("mode=$mode PID=${Process.myPid()} runCount=${++runs} API=${android.os.Build.VERSION.SDK_INT}")

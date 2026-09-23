@@ -45,9 +45,9 @@ object Exp002Runner {
         val installed = installed(activity, record.packageName)
         val importedSha = sha256(apk)
         log("guestInstalled=$installed")
-        log("buildSha256=$BUILD_SHA")
+        log("historicalReferenceSha256=$BUILD_SHA")
         log("importedSha256=$importedSha")
-        log("apkShaMatch=${importedSha.equals(BUILD_SHA, true)}")
+        log("matchesHistoricalReference=${importedSha.equals(BUILD_SHA, true)}")
 
         val before = snapshot(activity, ids.stringId, record.packageName, ::log, "before")
         val optionB = runOptionB(activity, apk, record, ids, ::log)
@@ -58,7 +58,7 @@ object Exp002Runner {
         log("SYSTEM_CHANGED=$systemChanged")
         log("hostSystemLeakage=${if (!hostChanged && !systemChanged) "NONE_OBSERVED_API31" else "OBSERVED"}")
         log("optionBResult=$optionB")
-        log("conclusion=${if (optionB && !installed && !hostChanged && !systemChanged) "CONFIRMED_API31" else "PARTIALLY_CONFIRMED"}")
+        log("conclusion=${if (optionB && !installed && !hostChanged && !systemChanged) "CONFIRMED_API${android.os.Build.VERSION.SDK_INT}" else "PARTIALLY_CONFIRMED"}")
         return out.joinToString("\n")
     }
 

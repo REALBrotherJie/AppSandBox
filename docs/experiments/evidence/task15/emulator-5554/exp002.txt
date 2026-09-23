@@ -1,7 +1,7 @@
-mode=exp002 PID=19185 runCount=1 API=31
-imported=/data/user/0/com.example.appsandbox/files/guests/2c360be5-df37-4458-83d1-9c2fc1c24bbe/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
-experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/d12f5d2f-07ec-4504-848d-d0e554295e80/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494 readOnly=true
-process.pid=19185
+mode=exp002 PID=5590 runCount=1 API=36
+imported=/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/e4284273-4b70-4043-b1a8-10346c85fb8e/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494 readOnly=true
+process.pid=5590
 process.runCount=1
 legacyExecuted=false
 optionAExecuted=false
@@ -17,7 +17,7 @@ before.systemResourcesSeesGuest=false
 before.systemAssetsSeesGuest=false
 OPTION_B.ARCHIVE_PARSE=PASS
 OPTION_B.APPLICATION_INFO_PREPARE=PASS
-OPTION_B.GET_RESOURCES=PASS class=android.content.res.MiuiResources
+OPTION_B.GET_RESOURCES=PASS class=android.content.res.Resources
 OPTION_B.DEFAULT.string.expected=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10
 OPTION_B.DEFAULT.string.actual=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10
 OPTION_B.DEFAULT.string.exactMatch=true
@@ -86,5 +86,5 @@ HOST_CHANGED=false
 SYSTEM_CHANGED=false
 hostSystemLeakage=NONE_OBSERVED_API31
 optionBResult=true
-conclusion=CONFIRMED_API31
+conclusion=CONFIRMED_API36
 END hostSurvived=true

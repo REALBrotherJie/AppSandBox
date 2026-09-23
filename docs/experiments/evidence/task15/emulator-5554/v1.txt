@@ -1,0 +1,7 @@
+mode=v1 PID=5163 runCount=1 API=36
+imported=/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+writable writable=true
+writable step=constructClassLoader exception=java.lang.SecurityException:Writable dex file '/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/base.apk' is not allowed.
+readonly writable=false
+readonly result=guest:V1:EXP001_GUEST_7f2d8e91-4d42-4aa4-9a91-1d4f8c3e6b27
+END hostSurvived=true
