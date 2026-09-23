@@ -1,0 +1,5 @@
+<resources>
+    <style name="Exp003GuestTheme" parent="android:style/Theme.DeviceDefault.Light">
+        <item name="exp003AccentColor">@color/exp002_color</item>
+    </style>
+</resources>

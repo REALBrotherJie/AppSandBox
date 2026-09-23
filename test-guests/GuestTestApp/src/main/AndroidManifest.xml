@@ -2,5 +2,6 @@
     <application
         android:label="GuestTestApp"
         android:name=".runtime.Exp003GuestApplication"
+        android:theme="@style/Exp003GuestTheme"
         android:appComponentFactory=".runtime.Exp003GuestComponentFactory" />
 </manifest>

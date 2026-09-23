@@ -1,0 +1,11 @@
+mode=layout PID=23611 runCount=1 API=31
+imported=/data/user/0/com.example.appsandbox/files/guests/ee698d43-2c5a-4740-adcb-feb2dd4f0475/base.apk sha256=92651aee64f0235fd3a6307e2ca14763c2dd22b8a35775ab641c74eef790c920
+experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/0f1d6844-fc83-4cf4-aac6-ff86bb330e3f/base.apk sha256=92651aee64f0235fd3a6307e2ca14763c2dd22b8a35775ab641c74eef790c920 readOnly=true
+exp002_test_layout root=android.widget.LinearLayout child=android.widget.TextView text=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10 contextIsC1=true color=ff70777c
+exp002_test_layout=PASS
+exp003_themed_layout root=android.widget.LinearLayout child=android.widget.TextView text=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10 contextIsC1=true color=ff12ab34
+exp003_themed_layout=PASS
+landscape=EXP002_LANDSCAPE contextIsDerived=true
+hostInflater=android.view.InflateException:Binary XML file line #17 in com.example.appsandbox:color/abc_background_cache_hint_selector_material_dark: Binary XML file line #17 in com.example.appsandbox:color/abc_background_cache_hint_selector_material_dark: Error inflating class selector
+gate.layout=true
+END hostSurvived=true

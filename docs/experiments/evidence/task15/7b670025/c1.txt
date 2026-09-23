@@ -1,6 +1,6 @@
-mode=c1 PID=4993 runCount=1 API=31
-imported=/data/user/0/com.example.appsandbox/files/guests/382007d3-d82e-4617-b095-30967dd59da7/base.apk sha256=85f1cf6590b97b60ab09b4e55952e3df7a493e193a59a779756b24890cc33e0e
-experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/add887e0-fb3c-4285-bcbe-c57a1c500c3e/base.apk sha256=85f1cf6590b97b60ab09b4e55952e3df7a493e193a59a779756b24890cc33e0e readOnly=true
+mode=c1 PID=21684 runCount=1 API=31
+imported=/data/user/0/com.example.appsandbox/files/guests/ee698d43-2c5a-4740-adcb-feb2dd4f0475/base.apk sha256=92651aee64f0235fd3a6307e2ca14763c2dd22b8a35775ab641c74eef790c920
+experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/fb08b181-d4b0-4224-89bc-87b16b399e35/base.apk sha256=92651aee64f0235fd3a6307e2ca14763c2dd22b8a35775ab641c74eef790c920 readOnly=true
 unbound.applicationContext=PASS
 C0.preferences.write=PASS
 C0.preferences.path=/data/user/0/com.example.appsandbox/shared_prefs/exp003c1.xml
@@ -13,7 +13,7 @@ base.applicationInfo=PASS
 base.applicationContext=PASS
 base.inflater=PASS
 base.theme=PASS
-base.themeId=16974123
+base.themeId=2131230720
 base.files.path=/data/user/0/com.example.appsandbox/files/task15-instances/c1/files
 base.files.path=PASS
 base.cache.path=/data/user/0/com.example.appsandbox/files/task15-instances/c1/cache
@@ -56,7 +56,7 @@ configuration.applicationInfo=PASS
 configuration.applicationContext=PASS
 configuration.inflater=PASS
 configuration.theme=PASS
-configuration.themeId=16974123
+configuration.themeId=2131230720
 configuration.files.path=/data/user/0/com.example.appsandbox/files/task15-instances/c1/files
 configuration.files.path=PASS
 configuration.cache.path=/data/user/0/com.example.appsandbox/files/task15-instances/c1/cache
@@ -99,7 +99,7 @@ deviceProtected.applicationInfo=PASS
 deviceProtected.applicationContext=PASS
 deviceProtected.inflater=PASS
 deviceProtected.theme=PASS
-deviceProtected.themeId=16974123
+deviceProtected.themeId=2131230720
 deviceProtected.files.path=/data/user_de/0/com.example.appsandbox/files/task15-instances/c1/files
 deviceProtected.files.path=PASS
 deviceProtected.cache.path=/data/user_de/0/com.example.appsandbox/files/task15-instances/c1/cache
@@ -142,7 +142,7 @@ attribution.applicationInfo=PASS
 attribution.applicationContext=PASS
 attribution.inflater=PASS
 attribution.theme=PASS
-attribution.themeId=16974123
+attribution.themeId=2131230720
 attribution.files.path=/data/user/0/com.example.appsandbox/files/task15-instances/c1/files
 attribution.files.path=PASS
 attribution.cache.path=/data/user/0/com.example.appsandbox/files/task15-instances/c1/cache

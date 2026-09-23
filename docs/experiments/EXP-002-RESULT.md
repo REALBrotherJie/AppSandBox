@@ -345,3 +345,9 @@ ON TESTED API31 PATH`.
 The prior `PARTIALLY CONFIRMED` status was caused by the Host-based resource
 construction and is superseded by this corrected experiment. No Guest Context,
 Application, Activity, or EXP-003 work was performed.
+
+## Deferred item resolved: layout inflation via C1
+
+Task-15 WS-3 validated ordinary Guest layout and Guest theme-attribute inflation
+on API31 through C1. See [C1 layout result](EXP-003C1-LAYOUT-INFLATE-RESULT.md).
+This is a subsequent experiment, not a change to the historical EXP-002 run.
