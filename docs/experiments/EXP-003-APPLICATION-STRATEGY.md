@@ -13,9 +13,16 @@ Guest ClassLoader
 Instrumentation.newApplication(...)
 ```
 
-Status: **PROPOSED**. Public API, explicit ClassLoader and Context inputs, and
-an observable attach step. It still does not provide a real PMS record, UID,
-process, or system-service identity.
+Status: **PROPOSED BUT BLOCKED BY LOADEDAPK SEMANTICS**. Public API, explicit
+ClassLoader and Context inputs, and an observable attach step. It still does
+not provide a real PMS record, UID, process, or system-service identity.
+`Application.attach()` calls through `ContextImpl.getImpl()`, which unwraps
+ContextWrapper and can leave the Application holding Host `LoadedApk` state.
+This must be prechecked before EXP-003B execution.
+
+Task-13 keeps this candidate blocked pending the API31 AOSP dependency
+matrix and the future `EXP-003B0-HOST-LOADEDAPK-IMPACT-PLAN.md`. It is not a
+production recommendation.
 
 ### Option B: Direct Object Construction
 
@@ -35,7 +42,8 @@ in EXP-003A/B/C.
 ## Proposed Order
 
 1. EXP-003A validates the Controlled Context without an Application.
-2. EXP-003B validates `Instrumentation.newApplication` without `onCreate`.
+2. EXP-003B validates `Instrumentation.newApplication` without `onCreate`
+   only after the LoadedApk precheck passes.
 3. EXP-003C invokes a minimal `onCreate` only after A and B pass.
 4. EXP-003D, if needed, expands compatibility one capability family at a time.
 
@@ -51,4 +59,3 @@ in EXP-003A/B/C.
 
 `ActivityThread`, `LoadedApk`, and `ContextImpl` are framework implementation
 details for this design round.
-

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted as an experimental API 30+ baseline.
+SUPERSEDED / INVALIDATED
 
 ## Context
 
@@ -19,13 +19,12 @@ On the tested Android 12 / API 31 device, both of these public paths work:
 2. `PackageManager.getPackageArchiveInfo()` followed by a copied
    `ApplicationInfo` and `getResourcesForApplication()`.
 
-Both paths resolved Guest numeric resource IDs, strings, raw resources, assets,
-colors, drawables, configuration-qualified values, and compiled layout XML
-without exposing Host-only resources or assets.
+The Option A conclusion is invalid. `Resources.getSystem().assets` is shared
+System state and `Resources.addLoaders()` mutates that shared AssetManager.
+The path therefore cannot be an isolated Guest resource architecture.
 
-The preferred candidate for further design review is Option B because it
-avoids the deprecated `Resources(AssetManager, DisplayMetrics, Configuration)`
-constructor. Option A remains a useful API 30+ baseline and diagnostic path.
+Option A is rejected and must not be used for Guest runtime or as a fallback.
+Option B is evaluated separately in the task-11 fresh-process revalidation.
 
 ## Scope
 

@@ -10,6 +10,13 @@ calling `onCreate`?
 
 The public API will load the class with the Guest loader and attach the
 Controlled Context, but will not provide PMS installation or Guest OS identity.
+This plan is blocked on `EXP-003B-LOADEDAPK-PRECHECK.md`: `Application.attach`
+may unwrap the supplied Context to a Host `ContextImpl` and populate
+`Application.mLoadedApk` with Host state.
+
+Before execution, review the route comparison and approve the separate
+`EXP-003B0-HOST-LOADEDAPK-IMPACT-PLAN.md`. No `onCreate` call is part of that
+precheck.
 
 ## Tests
 
@@ -35,4 +42,3 @@ implicit lifecycle call occurs.
 
 If attach or base Context is not observable as intended, stop before C. Do not
 reflect into ActivityThread or ContextImpl.
-

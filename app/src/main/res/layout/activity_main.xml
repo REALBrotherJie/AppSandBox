@@ -26,6 +26,13 @@
             android:layout_marginTop="8dp"
             android:text="Run EXP-001"
             android:visibility="gone" />
+        <Button
+            android:id="@+id/runExp003aButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Run EXP-003A"
+            android:visibility="gone" />
         <LinearLayout
             android:id="@+id/guestSummary"
             android:layout_width="match_parent"

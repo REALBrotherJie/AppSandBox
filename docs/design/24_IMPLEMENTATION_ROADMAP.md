@@ -38,7 +38,9 @@ Dependencies: M1, M2 only for metadata. Deliverables: loader/resource owner, lea
 
 ## M4 Application lifecycle
 
-Status: DESIGN READY, NOT IMPLEMENTED (2026-09-23).
+Status: EXP-003A DEBUG BASELINE CONFIRMED (2026-09-23). EXP-003B remains
+designed and blocked by the LoadedApk precheck; task-13 completed the
+docs-only route comparison and B0 design.
 
 Goal: construct and stop a guest Application with an explicit Context
 contract, beginning with EXP-003A, then EXP-003B, then EXP-003C.

@@ -1,9 +1,15 @@
 # EXP-002 Resource Strategy Comparison
 
+## Current decision
+
+Legacy and Option A are rejected. They may remain as historical diagnostics,
+but neither may run in the normal runner or be used for Guest runtime
+construction. Option B is the only formal candidate.
+
 Test device: Xiaomi Mi 10, Android 12, API 31. Guest package was not
 installed in PackageManager.
 
-| Dimension | Legacy Host-based | Option A: System-base + ResourcesLoader | Option B: archive ApplicationInfo |
+| Dimension | Legacy Host-based (REJECTED) | Option A: System-base + ResourcesLoader (REJECTED) | Option B: archive ApplicationInfo (ONLY FORMAL CANDIDATE) |
 |---|---|---|---|
 | Base | Host `activity.resources.assets` | `Resources.getSystem().assets` | PackageManager-created resources |
 | Host resource isolation | Failed | Passed | Passed |
@@ -24,10 +30,10 @@ The legacy result was invalid as an isolation result because its base
 `AssetManager` was the Host AssetManager. It also caused Guest-only asset
 visibility through the Host AssetManager.
 
-Option A produced an isolated Guest resource space on API 31, including
-compiled layout XML. It remains experimental because the public
-`Resources(AssetManager, DisplayMetrics, Configuration)` constructor is
-deprecated.
+Option A's historical reads are not an isolation result. Its base is
+`Resources.getSystem().assets`, and `Resources.addLoaders()` mutates the shared
+System AssetManager loader set. It is rejected as shared AssetManager
+mutation.
 
 Option B successfully created resources from a copied archive
 `ApplicationInfo` with `PackageManager.getResourcesForApplication()`. The
@@ -38,9 +44,9 @@ isolation checks. API 28/29 remain unverified.
 
 ```text
 Preferred candidate = PROPOSED Option B
-Secondary candidate = PROPOSED Option A for API 30+
+Option A = REJECTED
 ```
 
-Option B is preferred for further review because it avoids the deprecated
-`Resources` constructor and returned a framework-created resource environment.
-Neither choice is a production architecture decision yet.
+Option B is the only formal candidate because it avoids the deprecated
+constructor and uses the PackageManager resource API. This does not claim a
+security boundary or all-version compatibility.

@@ -1,6 +1,19 @@
 # EXP-002 Result: Uninstalled APK Resources Loading
 
-## A. EXP-002 Final Status
+## CURRENT STATUS
+
+```text
+Legacy = INVALIDATED / REJECTED
+Option A = REJECTED (SHARED ASSETMANAGER MUTATION)
+Option B API31 = CONFIRMED (FRESH PROCESS, TESTED DEVICE)
+```
+
+Only Option B is a formal candidate. The remainder of this file preserves
+historical evidence and must not be read as approval of Legacy or Option A.
+
+## HISTORICAL RESULTS
+
+## A. EXP-002 Historical Status
 
 PARTIALLY CONFIRMED
 
@@ -258,7 +271,7 @@ but the legacy isolation design is definitively invalid.
 
 ## Reverified Options
 
-### Option A: System-only base plus ResourcesLoader
+### Option A: System-only base plus ResourcesLoader (REJECTED)
 
 ```text
 guestAssets === Host assets = false
@@ -272,9 +285,10 @@ getIdentifier forms 1/2/3 = Guest numeric ID / Guest numeric ID / Guest numeric 
 cleanup = SUCCESS
 ```
 
-Option A is an experimentally working API 30+ baseline, but uses the
-deprecated public `Resources(AssetManager, DisplayMetrics, Configuration)`
-constructor.
+The historical values were reproducible, but the architecture is rejected:
+`Resources.getSystem().assets` is shared process System state and
+`Resources.addLoaders()` mutates that shared AssetManager. Do not use this
+path for Guest runtime construction or as a production fallback.
 
 ### Option B: PackageManager archive ApplicationInfo
 
@@ -295,9 +309,38 @@ Option B is a working API 31 candidate and does not require the deprecated
 ## Corrected Final Status
 
 ```text
-EXP-002 API30+ = CONFIRMED for Option A and Option B on the tested API 31 device
+Legacy = REJECTED
+Option A = REJECTED
+Option B API31 = CONFIRMED (fresh-process result recorded below)
 API28/29 = RESEARCH NEEDED
 ```
+
+## Task-11 Fresh Option B API31 Verification
+
+```text
+Process PID = 23101
+Option B run count in process = 1
+Legacy executed = false
+Option A executed = false
+Guest installed = false
+Build/import SHA match = true
+HOST_CHANGED = false
+SYSTEM_CHANGED = false
+Option B result = true
+Conclusion = EXP-002 OPTION B API31 CONFIRMED
+```
+
+The Xiaomi Mi 10 / Android 12 / API31 run passed string, raw, asset, color,
+drawable, layout XML, metadata, all three `getIdentifier()` forms, default
+and landscape configuration, two-Resources behavior, missing ID, wrong type,
+corrupt APK, Guest-to-Host and Host-to-Guest checks. `aapt2 dump resources`
+listed `0x7f060002` but did not list the tested missing ID `0x7f06ffff`.
+The corrupt APK was created and removed under Host `cacheDir/experiments/exp002`.
+
+Pollution detection compared Host resource collision/Host-only resource and
+asset observations plus System resource/asset Guest visibility before and
+after the run. This supports only: `NO OBSERVED HOST/SYSTEM RESOURCE LEAKAGE
+ON TESTED API31 PATH`.
 
 The prior `PARTIALLY CONFIRMED` status was caused by the Host-based resource
 construction and is superseded by this corrected experiment. No Guest Context,

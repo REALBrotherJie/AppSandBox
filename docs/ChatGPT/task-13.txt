@@ -1,0 +1,1742 @@
+继续负责当前 AppSandbox 项目。
+
+当前有效状态：
+
+```text
+EXP-001 = CONFIRMED
+EXP-002 Option B / API31 = CONFIRMED
+EXP-003A Controlled Context C0 / API31 = CONFIRMED
+
+EXP-003B Application Instantiation = BLOCKED
+EXP-003C Application.onCreate = NOT READY
+```
+
+当前 EXP-003A 已经证明：
+
+```text
+Guest logical package
+Guest DexClassLoader
+Guest Resources
+Guest Assets
+Guest ApplicationInfo view
+Guest Instance storage routing
+```
+
+可以通过 Controlled Context 提供。
+
+但：
+
+Controlled Context 最底层仍然是：
+
+```text
+Host MainActivity
+↓
+Host ContextImpl
+```
+
+现在必须完成：
+
+# EXP-003B LoadedApk / ContextImpl Precheck
+
+本轮只研究、审计、设计。
+
+# 不创建 Guest Application。
+
+禁止调用：
+
+```text
+Instrumentation.newApplication()
+Application.attach()
+Application.onCreate()
+```
+
+禁止实现 hidden API solution。
+
+禁止修改 ActivityThread。
+
+禁止修改 LoadedApk。
+
+---
+
+# 一、核心问题
+
+我们需要回答：
+
+> 如果把 EXP-003A 的 Controlled Context 传给 `Instrumentation.newApplication()`，Guest Application 最终持有 Host LoadedApk，这到底会造成什么实际影响？
+
+不要仅仅因为：
+
+```text
+mLoadedApk = Host
+```
+
+就直接判定整个方案不可用。
+
+也不要反过来因为：
+
+```text
+Application 常用 getter 都来自 base Context
+```
+
+就认为没有问题。
+
+需要真正研究：
+
+# mLoadedApk 的使用范围和语义影响。
+
+---
+
+# 二、首先确认 API31 AOSP 调用链
+
+主要以：
+
+```text
+Android 12 / API31
+```
+
+AOSP 为基线。
+
+研究：
+
+```text
+Instrumentation.newApplication()
+↓
+Application.attach()
+↓
+attachBaseContext()
+↓
+ContextImpl.getImpl()
+↓
+unwrap ContextWrapper
+↓
+ContextImpl.mPackageInfo
+↓
+Application.mLoadedApk
+```
+
+记录：
+
+具体 AOSP 文件
+方法
+Android version
+源码链接
+
+不要依赖博客转述。
+
+---
+
+# 三、同时比较 Android 13～16
+
+检查：
+
+Android 13
+Android 14
+Android 15
+Android 16
+
+这条链是否发生关键变化。
+
+建立：
+
+| Version | newApplication | Application.attach | ContextImpl.getImpl | mLoadedApk |
+| ------- | -------------- | ------------------ | ------------------- | ---------- |
+
+如果没有实质变化：
+
+明确记录。
+
+如果变化：
+
+指出。
+
+---
+
+# 四、研究 Application.mLoadedApk 到底在哪里使用
+
+这是本轮最重要的任务之一。
+
+全局搜索 AOSP：
+
+```text
+Application.mLoadedApk
+mLoadedApk
+```
+
+区分：
+
+### Application 自己直接使用
+
+### Framework 通过 Application.mLoadedApk 使用
+
+### Debug / dump / diagnostics
+
+### 生命周期
+
+### Component callback
+
+### Activity / Service / Provider
+
+### Resources
+
+### ClassLoader
+
+### Package metadata
+
+### Receiver registration
+
+### Context operations
+
+不要看到字段存在就猜它很重要。
+
+必须列出真实 call sites。
+
+---
+
+# 五、建立 mLoadedApk Dependency Matrix
+
+例如：
+
+| Behavior | Uses Base Context | Uses mLoadedApk | Uses ContextImpl.mPackageInfo | Risk |
+| -------- | ----------------- | --------------- | ----------------------------- | ---- |
+
+至少研究：
+
+```text
+getPackageName
+getResources
+getAssets
+getClassLoader
+getApplicationInfo
+getFilesDir
+getApplicationContext
+
+registerComponentCallbacks
+registerActivityLifecycleCallbacks
+
+registerReceiver
+bindService
+startService
+startActivity
+
+ContentResolver
+PackageManager
+SystemService
+
+configuration callbacks
+memory callbacks
+```
+
+如果行为实际上走：
+
+Controlled Context
+
+就记录：
+
+BASE CONTEXT DOMINANT。
+
+如果绕过 Context：
+
+直接依赖 LoadedApk，
+
+记录：
+
+LOADEDAPK-SENSITIVE。
+
+---
+
+# 六、区分两个不同的问题
+
+一定不要混淆：
+
+## Problem A
+
+```text
+Application.mLoadedApk == Host LoadedApk
+```
+
+## Problem B
+
+```text
+Application.baseContext == Controlled Guest Context
+```
+
+这两个可能同时成立。
+
+需要研究：
+
+哪些 Application 行为：
+
+使用 B。
+
+哪些：
+
+使用 A。
+
+---
+
+# 七、研究 LoadedApk 本身承载什么
+
+至少整理：
+
+```text
+packageName
+ApplicationInfo
+ClassLoader
+Resources
+Application instance
+receiver dispatcher
+service dispatcher
+split APK information
+resource paths
+code paths
+AppComponentFactory
+native paths
+compatibility info
+```
+
+实际字段以 API31 AOSP 为准。
+
+不要根据旧 Android 博客填写。
+
+---
+
+# 八、重点研究 LoadedApk.getClassLoader
+
+如果 Application.mLoadedApk 是 Host：
+
+是否存在 Guest 代码：
+
+通过某种正常 Android API
+
+最终拿到：
+
+```text
+Host LoadedApk.getClassLoader()
+```
+
+而绕过：
+
+```text
+ControlledContext.getClassLoader()
+```
+
+找出具体路径。
+
+如果没有公开路径：
+
+也要记录。
+
+---
+
+# 九、重点研究 LoadedApk.getResources
+
+同理：
+
+Guest Application 是否存在路径：
+
+绕过：
+
+```text
+ControlledContext.getResources()
+```
+
+而通过：
+
+Host LoadedApk
+
+获取 Host Resources。
+
+寻找实际 call chain。
+
+不要假设。
+
+---
+
+# 十、重点研究 getApplicationContext
+
+当前 EXP-003A bootstrap：
+
+```text
+controlledContext.applicationContext
+=
+controlledContext
+```
+
+但 Application attach 后：
+
+正常 Android 语义应该是什么？
+
+研究：
+
+ContextImpl.getApplicationContext()
+
+如何通过：
+
+```text
+mPackageInfo.getApplication()
+```
+
+返回 Application。
+
+如果底层是 Host ContextImpl / Host LoadedApk：
+
+会返回什么？
+
+这可能是：
+
+# CRITICAL。
+
+---
+
+# 十一、研究 ContextImpl.mPackageInfo
+
+不要只研究 Application.mLoadedApk。
+
+正常 Android ContextImpl：
+
+本身持有：
+
+```text
+LoadedApk mPackageInfo
+```
+
+它影响大量 API。
+
+所以实际风险可能不是：
+
+```text
+Application.mLoadedApk
+```
+
+本身，
+
+而是：
+
+Controlled Context 最底层仍然是：
+
+```text
+Host ContextImpl
++
+Host LoadedApk
+```
+
+建立：
+
+# ContextImpl LoadedApk Dependency Matrix
+
+---
+
+# 十二、研究 Normal Android Application 创建模型
+
+正常流程不是：
+
+```text
+arbitrary ContextWrapper
+→ newApplication
+```
+
+而是大致：
+
+```text
+LoadedApk
+↓
+ContextImpl.createAppContext(ActivityThread, LoadedApk)
+↓
+Instrumentation.newApplication(
+    LoadedApk ClassLoader,
+    Application class,
+    ContextImpl
+)
+↓
+Application.attach()
+```
+
+分析：
+
+为什么 Android Framework 要这样做。
+
+---
+
+# 十三、研究 LoadedApk.makeApplication
+
+重点阅读：
+
+API31：
+
+```text
+LoadedApk.makeApplication
+```
+
+以及现代版本对应实现。
+
+整理：
+
+它在 Application 创建前后负责：
+
+* ClassLoader
+* ContextImpl
+* OuterContext
+* Application cache
+* ActivityThread application list
+* onCreate 调用与否
+
+哪些事情。
+
+---
+
+# 十四、研究 ContextImpl.createAppContext
+
+确定：
+
+它需要：
+
+```text
+ActivityThread
+LoadedApk
+```
+
+哪些参数。
+
+创建出的 ContextImpl：
+
+如何获得：
+
+Resources
+ClassLoader
+ApplicationInfo
+packageName
+dataDir
+system services
+
+---
+
+# 十五、Public API 可否获得 Guest ContextImpl？
+
+寻找所有 Public API 路线。
+
+例如研究：
+
+```text
+createPackageContext()
+createContextForSplit()
+createConfigurationContext()
+PackageManager
+```
+
+回答：
+
+能否对：
+
+# 未安装 Guest APK
+
+创建真正：
+
+Guest ContextImpl + Guest LoadedApk。
+
+预期不要先写 NO。
+
+实际研究。
+
+---
+
+# 十六、特别研究 createPackageContext
+
+当前：
+
+```text
+createPackageContext(guestPkg)
+```
+
+已经因为 PMS 不知道 Guest 而失败。
+
+研究正常内部链：
+
+```text
+createPackageContext
+↓
+ActivityThread.getPackageInfo
+↓
+PMS ApplicationInfo
+↓
+LoadedApk
+↓
+ContextImpl
+```
+
+确认未安装 Guest 卡在哪。
+
+---
+
+# 十七、研究 ActivityThread.getPackageInfoNoCheck
+
+AOSP 存在内部：
+
+```text
+getPackageInfoNoCheck(ApplicationInfo, ...)
+```
+
+研究：
+
+* visibility
+* hidden/non-SDK status
+* API31 签名
+* Android 13～16 变化
+* 是否会创建 LoadedApk
+* 是否缓存进 ActivityThread
+* 是否要求 PMS 中存在 package
+* `registerPackage=false` 的含义
+* ApplicationInfo.uid 对它有什么影响
+* ClassLoader 如何建立
+* Resources 如何建立
+
+本轮：
+
+# 只研究。
+
+不要调用。
+
+---
+
+# 十八、特别注意缓存污染
+
+如果未来使用：
+
+```text
+ActivityThread.getPackageInfoNoCheck()
+```
+
+可能涉及：
+
+```text
+mPackages
+mResourcePackages
+```
+
+缓存。
+
+研究：
+
+Guest package 是否会进入 ActivityThread 全局缓存。
+
+这对：
+
+multi Guest
+multi instance
+same package multiple instances
+
+可能非常关键。
+
+---
+
+# 十九、研究同 package 多 Instance 冲突
+
+假设：
+
+```text
+Guest package =
+com.example.app
+```
+
+Instance A
+Instance B
+
+如果 ActivityThread / LoadedApk cache：
+
+以：
+
+```text
+packageName
+```
+
+为 key，
+
+两个 Instance 是否会共享：
+
+LoadedApk
+ClassLoader
+Resources
+Application
+
+这可能直接影响 ADR-0003。
+
+列为：
+
+CRITICAL。
+
+---
+
+# 二十、研究 LoadedApk.sApplications / Application caching
+
+现代 Android 中：
+
+LoadedApk / framework
+
+可能按 package 缓存 Application。
+
+研究：
+
+是否允许同一 package：
+
+同一进程内创建两个独立 Application。
+
+如果不允许：
+
+这对：
+
+single-process multi-instance
+
+是重大约束。
+
+---
+
+# 二十一、形成四条候选路线
+
+至少研究以下方案。
+
+---
+
+## Route A — Accept Host LoadedApk
+
+模型：
+
+```text
+Guest Application
+baseContext = Controlled Guest Context
+
+mLoadedApk = Host
+```
+
+依赖：
+
+Guest 实际使用的大多数 API
+
+仍通过 Controlled Context。
+
+需要回答：
+
+Host LoadedApk 是否只是：
+
+internal bookkeeping
+
+还是会产生不可接受泄漏。
+
+状态只能：
+
+```text
+VIABLE
+LIMITED
+REJECTED
+UNKNOWN
+```
+
+---
+
+## Route B — Guest-specific framework LoadedApk
+
+概念：
+
+```text
+Guest ApplicationInfo
+↓
+ActivityThread internal LoadedApk creation
+↓
+Guest ContextImpl
+↓
+Instrumentation.newApplication
+```
+
+研究：
+
+需要哪些：
+
+hidden API
+reflection
+non-SDK
+framework internals
+
+以及：
+
+Android version sensitivity。
+
+本轮不要实现。
+
+---
+
+## Route C — Application without framework attach semantics
+
+例如：
+
+```text
+Guest Application class
+↓
+constructor
+↓
+custom bootstrap
+```
+
+或者通过 Guest-defined bootstrap entry。
+
+研究：
+
+这样还能不能称为：
+
+Android Application compatibility。
+
+哪些第三方 Application 会失败。
+
+将其作为：
+
+Reduced Compatibility Runtime
+
+候选。
+
+---
+
+## Route D — Interception / Compatibility Layer
+
+保留：
+
+Host ContextImpl / Host LoadedApk
+
+但通过：
+
+method interception
+framework interception
+Binder compatibility
+Context routing
+
+降低差异。
+
+研究：
+
+哪些问题可以解决，
+
+哪些无法解决。
+
+本轮不 Hook。
+
+---
+
+# 二十二、可以增加 Route E
+
+如果外部调研发现：
+
+更合理路线，
+
+加入。
+
+例如：
+
+isolated process
+separate sandbox process
+per-instance process
+
+但必须说明：
+
+它是否真正解决 LoadedApk
+
+还是只改变污染范围。
+
+---
+
+# 二十三、不要把 Process isolation 当成自动答案
+
+即使 Guest 在：
+
+独立 Host sandbox process
+
+ActivityThread 仍然绑定：
+
+AppSandbox package。
+
+system_server
+
+仍然只知道 Host。
+
+所以：
+
+separate process
+
+可以解决：
+
+static/native/crash isolation
+
+但不自动创造：
+
+Guest LoadedApk/system identity。
+
+---
+
+# 二十四、研究 Public API 最低兼容路线
+
+问题：
+
+如果坚持：
+
+# Public API only
+
+最多能做到什么？
+
+例如：
+
+```text
+Guest Application Java object
++
+Controlled Context
++
+Host LoadedApk artifact
+```
+
+能达到：
+
+A0?
+A1?
+A2?
+
+参考之前 Compatibility Levels。
+
+明确上限。
+
+---
+
+# 二十五、研究 Hidden API 路线价值
+
+不要默认：
+
+Hidden API = 不可用。
+
+项目允许以后研究。
+
+但需要回答：
+
+使用：
+
+ActivityThread
+LoadedApk
+ContextImpl
+
+会带来：
+
+* non-SDK restriction
+* targetSdk restrictions
+* Android version coupling
+* OEM differences
+* Play compatibility
+* maintenance burden
+
+多大风险。
+
+---
+
+# 二十六、不要开始绕过 Hidden API restrictions
+
+本轮只记录。
+
+禁止实现：
+
+hidden API exemption
+reflection bypass
+Unsafe
+JNI access
+ART tricks
+
+---
+
+# 二十七、搜索外部成熟研究
+
+除了 AOSP，
+
+允许网络搜索：
+
+```text
+Android plugin Application LoadedApk
+dynamic APK Application ContextImpl
+plugin framework LoadedApk
+uninstalled APK Application Android
+Virtual Application Context LoadedApk
+```
+
+可以阅读：
+
+技术文章
+论文
+项目设计文档
+
+但：
+
+不要复制 VirtualApp / BlackBox 等 GPL/来源不清项目实现。
+
+只记录：
+
+technical pattern。
+
+---
+
+# 二十八、外部资料必须标来源
+
+每条重要外部结论：
+
+```text
+PRIMARY AOSP
+OFFICIAL DOC
+PROJECT DOCUMENTATION
+TECH ARTICLE
+UNVERIFIED
+```
+
+不要把博客当 framework 事实。
+
+---
+
+# 二十九、特别研究插件框架
+
+研究：
+
+Shadow
+RePlugin
+VirtualAPK
+DroidPlugin
+
+等公开项目/文章
+
+在：
+
+Application
+LoadedApk
+Context
+
+方面采用什么高层策略。
+
+重点：
+
+# 插件框架通常控制插件设计
+
+而：
+
+AppSandbox 要运行 arbitrary Guest APK。
+
+必须指出：
+
+哪些插件方案无法直接迁移。
+
+---
+
+# 三十、LoadedApk Patent / Provenance
+
+本轮只研究：
+
+Android Framework mechanism。
+
+如果第三方项目有具体实现：
+
+只记录 architecture pattern。
+
+不要抄代码。
+
+如果发现某方案来自特定专利：
+
+记录 patent candidate。
+
+不实现。
+
+---
+
+# 三十一、设计一个 Future EXP-003B0
+
+本轮不要执行。
+
+但设计：
+
+# EXP-003B0 — Host LoadedApk Impact Experiment
+
+目的：
+
+不是创建正式 Guest Runtime。
+
+而是最小验证：
+
+如果：
+
+```text
+Instrumentation.newApplication(
+    guestLoader,
+    GuestApplication,
+    controlledContext
+)
+```
+
+导致：
+
+```text
+baseContext = controlled Guest
+mLoadedApk = Host
+```
+
+那么：
+
+哪些可观察 Guest Application APIs：
+
+仍然正确，
+
+哪些会泄漏 Host。
+
+---
+
+# 三十二、EXP-003B0 未来不能调用 onCreate
+
+如果将来执行：
+
+只创建并 attach。
+
+不要：
+
+```text
+callApplicationOnCreate()
+```
+
+这样将：
+
+Instantiation/Attach
+
+和：
+
+Guest startup logic
+
+分离。
+
+---
+
+# 三十三、设计 EXP-003B0 Observation Matrix
+
+未来至少观察：
+
+```text
+application.javaClass.classLoader
+
+application.baseContext
+
+application.getPackageName
+application.getResources
+application.getAssets
+application.getClassLoader
+application.getApplicationInfo
+application.getFilesDir
+application.getApplicationContext
+
+application.mLoadedApk package
+application.mLoadedApk ApplicationInfo
+application.mLoadedApk ClassLoader
+application.mLoadedApk Resources
+```
+
+注意：
+
+最后四项是 hidden/internal observation。
+
+本轮只设计：
+
+未来如果需要如何观察。
+
+不要现在通过 reflection 访问。
+
+---
+
+# 三十四、先决定 mLoadedApk 是否必须观察
+
+如果未来实验为了确认风险：
+
+必须读取：
+
+Application.mLoadedApk
+
+那么这本身：
+
+是 hidden field。
+
+可以在：
+
+debug experiment
+
+中通过有限反射观察，
+
+但必须单独审批。
+
+本轮只提出：
+
+REQUIRES HIDDEN OBSERVATION
+
+不要实现。
+
+---
+
+# 三十五、研究 getApplicationContext 循环
+
+这是高优先级。
+
+正常：
+
+ContextImpl.getApplicationContext()
+
+依赖：
+
+```text
+mPackageInfo.getApplication()
+```
+
+如果 mPackageInfo 是 Host LoadedApk：
+
+则可能返回：
+
+Host Application。
+
+但 EXP-003A Controlled Context 已 override：
+
+getApplicationContext()
+
+因此 Application 自身通过 ContextWrapper 调：
+
+getApplicationContext()
+
+可能仍然得到 Guest bootstrap semantics。
+
+需要区分：
+
+```text
+Application.getApplicationContext()
+```
+
+和：
+
+底层：
+
+```text
+Host ContextImpl.getApplicationContext()
+```
+
+哪些 framework 路径会直接调用后者。
+
+---
+
+# 三十六、研究 system service Context capture
+
+很多 Manager：
+
+创建时可能缓存：
+
+```text
+Context
+packageName
+opPackageName
+AttributionSource
+```
+
+如果底层 ContextImpl 是 Host：
+
+即使外层 Controlled Context getter 正确，
+
+通过 Host：
+
+getSystemService()
+
+产生的 Manager
+
+可能永久缓存 Host identity。
+
+标记：
+
+CRITICAL。
+
+这与 LoadedApk 问题相关，
+
+但属于后续 SystemService compatibility。
+
+---
+
+# 三十七、研究 LayoutInflater Context
+
+EXP-003A 已发现：
+
+LayoutInflater 是 Host-backed。
+
+未来 Guest Application：
+
+如果：
+
+```text
+getSystemService(LAYOUT_INFLATER_SERVICE)
+```
+
+可能获得持有 Host Context 的 inflater。
+
+这不是 LoadedApk 直接问题，
+
+但说明：
+
+Controlled Context 只覆盖 getter
+
+不足以形成完整 runtime。
+
+记录关联。
+
+---
+
+# 三十八、不要把 EXP-003A 推翻
+
+LoadedApk 风险：
+
+不否定：
+
+EXP-003A C0。
+
+因为 EXP-003A 明确只证明：
+
+Guest-facing controlled Context contract。
+
+ADR-0008 保持：
+
+CONFIRMED。
+
+只需要增加：
+
+EXP-003B boundary note
+
+如果尚未存在。
+
+---
+
+# 三十九、更新 Host Leakage Matrix
+
+至少增加：
+
+```text
+Application.mLoadedApk
+ContextImpl.mPackageInfo
+LoadedApk.getApplication()
+LoadedApk.getClassLoader()
+LoadedApk.getResources()
+LoadedApk.getApplicationInfo()
+ActivityThread package cache
+Application context lookup
+```
+
+风险等级。
+
+---
+
+# 四十、Multi-instance 是本轮必须考虑的维度
+
+对于每种候选 LoadedApk 路线：
+
+回答：
+
+同一个 package：
+
+Instance A
+Instance B
+
+能否在：
+
+同一进程
+
+拥有：
+
+独立 Application
+独立 ClassLoader
+独立 Resources
+独立 dataDir
+
+如果 framework cache 按：
+
+packageName
+
+合并，
+
+明确指出。
+
+---
+
+# 四十一、输出 Compatibility Ceiling
+
+对以下方案分别给出：
+
+```text
+Pure Public API
+Hidden framework integration
+Interception-based
+Separate process
+```
+
+最多可能达到：
+
+A0
+A1
+A2
+...
+
+但不要写百分比。
+
+---
+
+# 四十二、建立 Decision Gate
+
+EXP-003B 只有在以下问题回答后才可以执行：
+
+1. Host LoadedApk 的实际风险范围
+2. Public-only Route A 是否值得实验
+3. mLoadedApk 是否必须 Guest-specific
+4. 同 package multi-instance cache 风险
+5. hidden LoadedApk route 是否需要提前研究
+6. future experiment 如何避免误把“getter 正确”当 runtime 正确
+
+---
+
+# 四十三、文档
+
+至少创建/更新：
+
+```text
+docs/experiments/EXP-003B-LOADEDAPK-PRECHECK.md
+
+docs/experiments/EXP-003B-LOADEDAPK-ROUTE-COMPARISON.md
+
+docs/experiments/EXP-003B0-HOST-LOADEDAPK-IMPACT-PLAN.md
+
+docs/experiments/EXP-003-HOST-LEAKAGE-MATRIX.md
+```
+
+必要时更新：
+
+```text
+EXP-003-APPLICATION-STRATEGY.md
+EXP-003B-APPLICATION-INSTANTIATION-PLAN.md
+ROADMAP.md
+```
+
+---
+
+# 四十四、本轮只允许 docs 修改
+
+不要修改：
+
+```text
+app/src/
+test-guests/
+```
+
+不要创建 GuestApplication。
+
+如果为了理解需要查看当前代码：
+
+只读。
+
+---
+
+# 四十五、EXP-003B 状态可能有三种
+
+最终只能给：
+
+```text
+READY_FOR_B0_EXPERIMENT
+
+NEEDS_MORE_RESEARCH
+
+ARCHITECTURE_BLOCKED
+```
+
+不要直接：
+
+READY FOR EXP-003C。
+
+---
+
+# 四十六、最终回传格式
+
+## A. Precheck Status
+
+```text
+READY_FOR_B0_EXPERIMENT
+NEEDS_MORE_RESEARCH
+ARCHITECTURE_BLOCKED
+```
+
+---
+
+## B. API31 Creation Chain
+
+完整：
+
+```text
+Instrumentation
+→ Application
+→ ContextImpl
+→ LoadedApk
+```
+
+---
+
+## C. Version Comparison
+
+Android 12–16：
+
+是否发生关键变化。
+
+---
+
+## D. mLoadedApk Usage
+
+列出所有重要真实使用位置。
+
+分：
+
+DIRECT
+INDIRECT
+DIAGNOSTIC
+UNKNOWN。
+
+---
+
+## E. ContextImpl.mPackageInfo Usage
+
+列最重要的 15 项。
+
+---
+
+## F. Host LoadedApk Consequences
+
+分别说明：
+
+```text
+Package
+ClassLoader
+Resources
+ApplicationInfo
+ApplicationContext
+SystemService
+Receiver
+Service
+callbacks
+multi-instance
+```
+
+风险。
+
+---
+
+## G. Route A
+
+Accept Host LoadedApk：
+
+```text
+status =
+advantages =
+limitations =
+compatibility ceiling =
+```
+
+---
+
+## H. Route B
+
+Guest-specific LoadedApk：
+
+```text
+possible mechanism =
+public/hidden =
+version sensitivity =
+ActivityThread cache impact =
+multi-instance impact =
+```
+
+---
+
+## I. Route C
+
+Non-framework Application bootstrap：
+
+```text
+status =
+compatibility loss =
+possible use =
+```
+
+---
+
+## J. Route D
+
+Interception route：
+
+只列设计。
+
+不要实现。
+
+---
+
+## K. ActivityThread Internals
+
+返回：
+
+```text
+getPackageInfoNoCheck visibility =
+creates LoadedApk =
+PMS requirement =
+cache behavior =
+registerPackage behavior =
+```
+
+全部基于 AOSP。
+
+---
+
+## L. Multi-instance
+
+回答：
+
+同 package 两 Instance
+
+在每种 route 下：
+
+是否可能冲突。
+
+---
+
+## M. ApplicationContext Risk
+
+说明：
+
+Host LoadedApk
+
+是否可能返回 Host Application，
+
+Controlled Context override
+
+能否完全遮住。
+
+---
+
+## N. SystemService Risk
+
+说明 Manager 如何可能捕获 Host Context/identity。
+
+---
+
+## O. Public API Ceiling
+
+回答：
+
+Public API only
+
+可以做到什么，
+
+不能做到什么。
+
+---
+
+## P. Hidden API Need
+
+如果需要：
+
+列出具体 framework internal candidate。
+
+不要实现。
+
+---
+
+## Q. External Research
+
+列：
+
+至少 10 个高价值来源。
+
+优先：
+
+AOSP
+官方文档
+框架作者架构文章
+论文。
+
+---
+
+## R. Provenance
+
+明确：
+
+是否阅读第三方源码。
+
+如果有：
+
+仅用于架构研究还是复制实现。
+
+目标：
+
+NO CODE COPYING。
+
+---
+
+## S. EXP-003B0 Plan
+
+给未来最小实验：
+
+Question
+Hypothesis
+Observations
+Negative Controls
+Exit Criteria
+
+不要执行。
+
+---
+
+## T. ADR Impact
+
+回答：
+
+ADR-0008 是否仍有效。
+
+预期：
+
+EXP-003A C0 结果本身不因 LoadedApk 风险失效。
+
+---
+
+## U. Modified Files
+
+应只有：
+
+```text
+docs/
+```
+
+---
+
+## V. Git
+
+```bash
+git status --short
+git diff --stat
+```
+
+---
+
+## W. Recommended Route
+
+只能：
+
+```text
+PROPOSED
+```
+
+不能称 FINAL。
+
+---
+
+## X. Next Step
+
+只能回答：
+
+```text
+Ready to execute EXP-003B0: YES / NO
+```
+
+最多给 5 条理由。
+
+不要执行 EXP-003B0。

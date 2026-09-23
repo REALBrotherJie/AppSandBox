@@ -1,0 +1,1423 @@
+继续负责当前 AppSandbox 项目。
+
+本轮是一次架构纠偏任务。
+
+不要执行 EXP-003A。
+
+不要继续扩展 Runtime。
+
+先纠正 EXP-002 的资源模型结论，并修正 EXP-003 Application 设计中的一个关键前置风险。
+
+当前仓库已经有提交：
+
+30db956
+
+不要回滚整个提交。
+
+保留历史，使用新的文档/状态明确标记哪些结论已经失效。
+
+---
+
+# 一、本轮两个核心纠偏点
+
+## Correction 1 — EXP-002 Option A 无效
+
+之前 Option A 使用：
+
+Resources(
+Resources.getSystem().assets,
+...
+).apply {
+addLoaders(loader)
+}
+
+之前把它认为：
+
+“System-only AssetManager + Guest loader = isolated Guest Resources”
+
+这个结论撤销。
+
+原因：
+
+Resources.addLoaders() 会更新 Resources 底层 AssetManager 的 loader 集合。
+
+而：
+
+Resources.getSystem().assets
+
+来自进程共享的 System AssetManager。
+
+因此：
+
+Option A 会修改共享 AssetManager 状态。
+
+它不是一个独立 Guest AssetManager。
+
+不能作为 Guest resource isolation architecture。
+
+---
+
+## Correction 2 — EXP-003 Application.attach 风险
+
+当前设计准备：
+
+Controlled Context
+→ Instrumentation.newApplication()
+→ Guest Application
+
+但 Android Application.attach() 内部会获取：
+
+ContextImpl.getImpl(context)
+
+而 ContextImpl.getImpl() 会剥开 ContextWrapper。
+
+如果：
+
+ControlledGuestContext
+↓
+Host ContextWrapper
+↓
+Host ContextImpl
+
+那么最终 Guest Application 可能获得：
+
+Host LoadedApk / Host package runtime state。
+
+因此：
+
+Instrumentation.newApplication()
+
+现在不能继续被视为“只要 Controlled Context getter 正确就安全”。
+
+必须先研究：
+
+Application.attach
+ContextImpl.getImpl
+LoadedApk
+
+之间的关系。
+
+---
+
+# 二、本轮目标
+
+只完成：
+
+1. 撤销 Option A 的有效方案地位
+2. 在全新进程中重新验证 Option B
+3. 补齐 Option B configuration test
+4. 建立更严格的污染检测
+5. 修复 EXP-002 文档和 ADR
+6. 修复 EXP-003 的 LoadedApk 风险设计
+7. 决定是否仍具备进入 EXP-003A 的条件
+
+不要执行 EXP-003A。
+
+---
+
+# 三、EXP-002 正式候选只保留 Option B
+
+目前唯一正式候选：
+
+PackageManager.getPackageArchiveInfo()
+↓
+ApplicationInfo copy
+↓
+sourceDir = Guest private APK
+publicSourceDir = Guest private APK
+↓
+PackageManager.getResourcesForApplication(ApplicationInfo)
+
+当前名称：
+
+Option B
+
+继续使用这个名称。
+
+状态：
+
+PROPOSED
+
+不是 FINAL。
+
+---
+
+# 四、Option A 状态改为 REJECTED
+
+更新所有相关文档。
+
+Option A：
+
+Resources.getSystem().assets
++
+Resources(...)
++
+ResourcesLoader
+
+状态统一修改：
+
+REJECTED
+
+原因：
+
+SHARED ASSETMANAGER MUTATION
+
+不要再写：
+
+Secondary candidate
+
+不要再把它作为 production fallback。
+
+可以保留历史实验数据。
+
+但明确：
+
+DO NOT USE FOR GUEST RUNTIME.
+
+---
+
+# 五、LEGACY 同样改为 REJECTED
+
+Legacy：
+
+activity.resources.assets
++
+ResourcesLoader
+
+状态：
+
+REJECTED
+
+原因：
+
+直接修改 Host AssetManager。
+
+它只能作为历史错误实验。
+
+不要再在正常 Runner 中执行。
+
+---
+
+# 六、删除/禁用污染型实验执行路径
+
+当前 Exp002Runner 中：
+
+LEGACY
+Option A
+
+不能继续作为一次按钮点击中的正常测试步骤。
+
+要求：
+
+默认 EXP-002 Runner：
+
+只执行 Option B。
+
+Legacy / Option A：
+
+可以保留源码作为历史诊断代码，
+
+但必须：
+
+* 不自动运行
+* 不出现在正常 EXP-002 执行路径
+* 明确标记 REJECTED
+* 不允许污染当前测试进程
+
+如果保留可执行入口：
+
+必须 debug-only 且明显标：
+
+UNSAFE / MUTATES SHARED ASSETMANAGER
+
+但建议本轮直接停止执行它们。
+
+---
+
+# 七、必须使用全新进程验证 Option B
+
+因为之前进程可能已经执行过：
+
+Legacy
+Option A
+
+所以之前的 Option B 结果可能受到同进程污染影响。
+
+本轮开始前：
+
+执行：
+
+adb shell am force-stop com.example.appsandbox
+
+然后重新启动 AppSandbox。
+
+在这个新进程中：
+
+# 绝对不能执行 Legacy 或 Option A。
+
+只执行 Option B。
+
+记录：
+
+PID。
+
+例如：
+
+Process.myPid()
+
+确保本轮结果来自新进程。
+
+如果对进程状态仍不放心：
+
+可以重启测试设备后执行。
+
+但通常 force-stop + 新 PID 即可。
+
+---
+
+# 八、建立 Process Freshness Evidence
+
+实验结果必须记录：
+
+Process PID =
+EXP-002 Option B run count in this process =
+
+Runner 启动时确认：
+
+Legacy executed in this process = false
+Option A executed in this process = false
+
+可以使用 debug-only 内存状态记录。
+
+不要持久化后伪造。
+
+---
+
+# 九、重新验证 Guest 未安装
+
+执行：
+
+adb shell pm path com.example.appsandbox.testguest
+
+必须无输出。
+
+---
+
+# 十、重新核对 APK
+
+记录：
+
+Build Guest APK SHA256
+Imported Guest APK SHA256
+
+必须完全一致。
+
+---
+
+# 十一、Option B 默认 Configuration Test
+
+调用：
+
+PackageManager.getResourcesForApplication(
+guestApplicationInfo
+)
+
+验证：
+
+String
+Raw
+Assets
+Color
+Drawable
+Layout XML
+getIdentifier
+metadata
+
+全部重新执行。
+
+---
+
+# 十二、Option B 横屏 Configuration Test
+
+上一轮缺少这一项。
+
+当前设备：
+
+Android 12
+API 31
+
+API31 存在带 Configuration 参数的公开：
+
+getResourcesForApplication(
+ApplicationInfo,
+Configuration
+)
+
+优先使用这条公开 API。
+
+不要：
+
+resources.updateConfiguration()
+
+不要：
+
+修改共享 AssetManager Configuration。
+
+不要：
+
+复用同一个 Resources 后强行修改 configuration。
+
+---
+
+# 十三、Configuration Test 设计
+
+Guest：
+
+同一个 numeric resource ID：
+
+exp002_config_value
+
+默认：
+
+EXP002_DEFAULT
+
+land：
+
+EXP002_LAND
+
+具体 marker 使用项目当前实际值。
+
+创建：
+
+default Configuration resources
+
+和：
+
+land Configuration resources
+
+分别读取同一个 Guest resource ID。
+
+必须：
+
+default → default marker
+land → landscape marker
+
+同时记录：
+
+defaultResources === landResources
+defaultAssets === landAssets
+
+不要提前假设结果。
+
+---
+
+# 十四、不要修改设备方向作为唯一验证
+
+优先使用：
+
+getResourcesForApplication(ApplicationInfo, Configuration)
+
+创建 override configuration。
+
+这样实验可重复。
+
+设备真实 rotation 可以作为额外验证，
+
+但不是主要依据。
+
+---
+
+# 十五、重新设计污染检测
+
+上一轮：
+
+hostFingerprint()
+
+不足。
+
+废弃旧 fingerprint 作为唯一污染判断。
+
+本轮至少检测三层：
+
+## Host Resources
+
+Host Resources 在 Option B 前后：
+
+Host-only resource
+Guest-only resource
+Host collision value
+
+必须保持一致。
+
+---
+
+## Host AssetManager
+
+Host AssetManager：
+
+实验前：
+
+不能打开 Guest-only asset。
+
+实验后：
+
+仍然不能打开 Guest-only asset。
+
+---
+
+## System Resources
+
+重点增加：
+
+Resources.getSystem()
+
+实验前后检查：
+
+Resources.getSystem().getIdentifier(
+guest resource name,
+type,
+guest package
+)
+
+必须：
+
+0
+
+或者明确 not found。
+
+实验后仍必须：
+
+0。
+
+---
+
+# 十六、System AssetManager Leakage Test
+
+使用：
+
+Resources.getSystem().assets
+
+实验前：
+
+尝试打开 Guest-only asset。
+
+应该失败。
+
+Option B 执行后：
+
+再次尝试。
+
+仍应失败。
+
+记录：
+
+SYSTEM_ASSETS_SEE_GUEST_BEFORE =
+SYSTEM_ASSETS_SEE_GUEST_AFTER =
+
+必须都是 false。
+
+---
+
+# 十七、真正的污染退出条件
+
+Option B 只有满足：
+
+Host Resources unchanged
+Host AssetManager unchanged
+System Resources unchanged
+System AssetManager unchanged
+
+才允许认为：
+
+“在本次测试范围内没有观察到 Host/System resource contamination”。
+
+不要写：
+
+“绝对隔离”。
+
+正确措辞：
+
+NO OBSERVED HOST/SYSTEM RESOURCE LEAKAGE ON TESTED API31 PATH.
+
+---
+
+# 十八、重新执行双向隔离
+
+Guest Resources：
+
+不能读取 Host-only resource。
+
+Guest AssetManager：
+
+不能读取 Host-only asset。
+
+Host Resources：
+
+不能读取 Guest-only resource。
+
+Host AssetManager：
+
+不能读取 Guest-only asset。
+
+System Resources：
+
+不能读取 Guest resource。
+
+System AssetManager：
+
+不能读取 Guest asset。
+
+全部必须实际测试。
+
+---
+
+# 十九、Two Resources Test 恢复
+
+上一版本 Runner 中丢失的：
+
+Two Resources
+
+补回来。
+
+同一个 ApplicationInfo / Guest APK：
+
+连续调用两次：
+
+getResourcesForApplication()
+
+记录：
+
+resourcesA === resourcesB
+assetsA === assetsB
+
+然后分别读取：
+
+Guest string
+Guest layout
+Guest asset
+
+结果都必须正确。
+
+如果返回缓存的同一个 Resources：
+
+记录。
+
+不要判失败。
+
+重点是：
+
+行为正确且无污染。
+
+---
+
+# 二十、Option B Error Tests 补齐
+
+Option B 必须单独执行：
+
+Missing Resource
+
+Wrong Type
+
+Corrupt APK
+
+不能沿用 Option A 的结果。
+
+每一项明确标：
+
+OPTION_B.
+
+---
+
+# 二十一、Missing ID 必须真实验证不存在
+
+不要硬编码：
+
+TEST_ID_ABSENT_FROM_APK_TABLE=true
+
+必须实际通过：
+
+aapt2 dump resources
+
+或等价的 Android SDK 官方工具
+
+确认：
+
+测试 ID 不存在。
+
+保存验证结果。
+
+然后才执行 Missing Resource test。
+
+---
+
+# 二十二、Corrupt APK 不得写入 Guest Revision
+
+损坏 APK：
+
+不能放进：
+
+guest package revision directory
+
+因为该目录语义是：
+
+immutable valid Guest package revision。
+
+改成：
+
+Host cacheDir/experiments/exp002/
+
+或 debug experiment cache。
+
+运行完成后删除。
+
+不要污染 GuestStore。
+
+---
+
+# 二十三、Option B exception 分类
+
+当前 runOptionB 的大 catch：
+
+不能把所有异常统一标：
+
+getResourcesForApplication=FAILS
+
+重新按阶段记录：
+
+ARCHIVE_PARSE
+APPLICATION_INFO_PREPARE
+GET_RESOURCES
+STRING
+RAW
+ASSET
+COLOR
+DRAWABLE
+LAYOUT
+CONFIGURATION
+GET_IDENTIFIER
+ERROR_TEST
+
+异常必须包含：
+
+stage
+exception class
+message
+cause
+
+---
+
+# 二十四、重新验证 getIdentifier
+
+只对 Option B。
+
+Form 1
+Form 2
+Form 3
+
+记录实际结果。
+
+如果成功：
+
+记录。
+
+但仍然不作为最关键 Runtime 路径。
+
+numeric R ID 仍然是主要 Guest 访问方式。
+
+---
+
+# 二十五、重新验证完整 marker
+
+禁止：
+
+startsWith
+
+所有测试：
+
+expected == actual
+
+完整 UUID。
+
+---
+
+# 二十六、修复结果文档结构
+
+当前：
+
+EXP-002-RESULT.md
+
+前面仍保留旧 A-U：
+
+PARTIALLY CONFIRMED
+
+容易误导。
+
+不要删除历史。
+
+将文档顶部改成：
+
+# CURRENT STATUS
+
+明确：
+
+Legacy result: INVALIDATED
+Option A: REJECTED
+Option B API31: 当前重新验证状态
+
+然后：
+
+# HISTORICAL RESULTS
+
+再保留旧结果。
+
+读者打开文件首先必须看到：
+
+当前有效结论。
+
+---
+
+# 二十七、修复 ADR-0006
+
+不要直接删除 ADR-0006。
+
+把：
+
+ADR-0006-GUEST-RESOURCE-LOADING-API30PLUS.md
+
+状态改成：
+
+SUPERSEDED / INVALIDATED
+
+明确：
+
+原 ADR 同时认可 Option A 的隔离结论不成立。
+
+原因：
+
+Option A mutates shared System AssetManager.
+
+---
+
+# 二十八、创建新的纠偏 ADR
+
+如果本轮 Option B 全部重新通过：
+
+创建：
+
+ADR-0007-GUEST-RESOURCE-LOADING-PACKAGE-MANAGER-API31.md
+
+编号按仓库实际。
+
+只确认：
+
+在 Android 12 / API31 测试设备上，
+
+对于未安装 Guest APK，
+
+使用：
+
+PackageManager.getPackageArchiveInfo()
++
+ApplicationInfo.sourceDir/publicSourceDir
++
+PackageManager.getResourcesForApplication()
+
+可以获得能够正确解析 Guest compiled resources 的 Resources。
+
+且：
+
+在本轮测试范围中没有观察到 Host/System resource leakage。
+
+不要写：
+
+perfect isolation
+all Android versions
+security boundary
+
+---
+
+# 二十九、新 ADR 必须明确未确认内容
+
+包括：
+
+API 28
+API 29
+API 30
+API 32+
+Android 13/14/15/16
+multi Guest simultaneous resources
+resource lifecycle under process pressure
+configuration change propagation
+Activity resources
+Theme
+Split APK
+dynamic feature
+overlay APK
+
+全部仍：
+
+RESEARCH NEEDED。
+
+---
+
+# 三十、EXP-002 API31 最终退出条件
+
+只有全部通过：
+
+Guest not installed
+SHA match
+String PASS
+Raw PASS
+Asset PASS
+Color PASS
+Drawable PASS
+Layout XML PASS
+default Configuration PASS
+land Configuration PASS
+getIdentifier verified
+metadata correct
+Guest cannot see Host resources
+Guest cannot see Host assets
+Host cannot see Guest resources
+Host cannot see Guest assets
+System Resources cannot see Guest resources
+System Assets cannot see Guest assets
+Host unchanged before/after
+System unchanged before/after
+Two Resources PASS
+Missing PASS
+Wrong type PASS
+Corrupt APK PASS
+App survives
+
+才能：
+
+EXP-002 OPTION B API31 = CONFIRMED
+
+---
+
+# 三十一、Option A 不得影响最终状态
+
+Option A 已：
+
+REJECTED
+
+不要再出现：
+
+Option A = PASS
+
+这样的最终报告。
+
+历史实验可以写：
+
+historically produced valid resource values
+
+但：
+
+isolation architecture = rejected.
+
+---
+
+# 三十二、现在修订 EXP-003 设计
+
+资源纠偏之外，
+
+本轮必须修改 EXP-003 文档中的一个重要问题。
+
+---
+
+# 三十三、加入 Application.mLoadedApk 风险
+
+更新：
+
+EXP-003-HOST-LEAKAGE-MATRIX.md
+
+加入至少：
+
+Application.mLoadedApk
+
+以及：
+
+Application.attach / ContextImpl.getImpl chain
+
+风险等级：
+
+CRITICAL。
+
+---
+
+# 三十四、明确风险链
+
+设计文档写明：
+
+Instrumentation.newApplication(...)
+↓
+Application.attach(context)
+↓
+attachBaseContext(context)
+↓
+ContextImpl.getImpl(context)
+↓
+unwrap ContextWrapper chain
+↓
+bottom ContextImpl
+↓
+mPackageInfo / LoadedApk
+
+当前 Controlled Context 方案：
+
+ContextWrapper
+↓
+Host ContextImpl
+
+因此存在：
+
+# Guest Application.mLoadedApk
+
+Host LoadedApk
+
+风险。
+
+---
+
+# 三十五、修订 EXP-003B 状态
+
+之前：
+
+Instrumentation.newApplication
+
+状态：
+
+PROPOSED preferred candidate
+
+现在改成：
+
+PROPOSED BUT BLOCKED BY LOADEDAPK SEMANTICS
+
+或者等价状态。
+
+不要删除该候选。
+
+它仍值得实验。
+
+但不能在不了解：
+
+mLoadedApk
+
+影响之前直接执行。
+
+---
+
+# 三十六、EXP-003A 与 EXP-003B 分开
+
+这个 LoadedApk 风险：
+
+# 不阻止未来 EXP-003A Controlled Context 实验本身。
+
+因为 EXP-003A 不创建 Application。
+
+但它阻止：
+
+直接从 EXP-003A 自动进入 EXP-003B。
+
+因此 Gate 改为：
+
+EXP-003A
+↓
+Context confirmed
+↓
+EXP-003B PRECHECK:
+Application.attach / LoadedApk strategy
+↓
+EXP-003B
+
+---
+
+# 三十七、增加新的 EXP-003B Precheck 文档
+
+创建：
+
+docs/experiments/EXP-003B-LOADEDAPK-PRECHECK.md
+
+只研究和设计。
+
+不要执行 Application。
+
+至少回答：
+
+1. Application.mLoadedApk 被哪些 API/Framework 行为使用？
+2. 如果它是 Host LoadedApk，会泄漏哪些 Host semantics？
+3. 是否可以允许 mLoadedApk 为 Host，仅把 BaseContext virtualize？
+4. 哪些 Guest APIs 会绕过 Controlled Context，直接使用 mLoadedApk？
+5. 是否必须得到 Guest-specific LoadedApk？
+6. 创建 Guest-specific LoadedApk 是否需要 hidden/framework internal API？
+7. Public API 路线是否存在？
+8. 如果不存在，下一步可能需要哪类 interception/framework integration？
+
+不要现在实现。
+
+---
+
+# 三十八、不要错误地认为 Context getter 可以覆盖一切
+
+特别记录：
+
+即使：
+
+guestApplication.getPackageName()
+guestApplication.getResources()
+guestApplication.getFilesDir()
+
+通过 BaseContext 返回 Guest 值，
+
+Application 内部仍可能持有：
+
+Host LoadedApk。
+
+这是两套状态。
+
+以后必须单独验证。
+
+---
+
+# 三十九、检查 ContextImpl.getImpl failure case
+
+设计文档补充：
+
+如果 Controlled Context 最底层：
+
+不是 ContextImpl
+
+那么：
+
+ContextImpl.getImpl()
+
+最终 cast 可能失败。
+
+所以：
+
+“造一个完全独立的 Context 实现”
+
+也不一定能直接传给：
+
+Instrumentation.newApplication。
+
+这是 EXP-003B 的关键约束。
+
+---
+
+# 四十、本轮禁止 EXP-003A 实现
+
+虽然 LoadedApk 风险主要属于 B，
+
+但为了先把 EXP-002 基线重新确认，
+
+本轮不要实现：
+
+Controlled Context。
+
+只修改 EXP-003 docs。
+
+---
+
+# 四十一、更新 Roadmap
+
+应该显示：
+
+EXP-001 = CONFIRMED
+
+EXP-002:
+Legacy = REJECTED
+Option A = REJECTED
+Option B API31 = CONFIRMED / 当前结果
+
+EXP-003A:
+DESIGNED
+NOT EXECUTED
+
+EXP-003B:
+DESIGNED
+BLOCKED BY LOADEDAPK PRECHECK
+
+EXP-003C:
+NOT READY
+
+---
+
+# 四十二、任务书重复清理
+
+检查：
+
+task-09
+task-10
+
+如果内容完全重复：
+
+不要删除历史任务。
+
+在其中后生成的重复任务顶部标：
+
+DUPLICATE OF <task>
+
+或者在：
+
+docs/ChatGPT/README.md
+
+建立 task index：
+
+task
+purpose
+status
+duplicate/superseded
+
+防止以后误读。
+
+---
+
+# 四十三、提交纪律
+
+本轮不要再做一个包含所有历史内容的巨型提交。
+
+如果当前工作区干净：
+
+完成 task-11 后，
+
+可以建议一个单独 focused commit：
+
+fix(exp002): validate isolated package-manager resources
+
+但：
+
+除非当前协作流程要求自动提交，
+
+不要擅自 commit。
+
+只返回：
+
+建议 commit message。
+
+不要修改历史提交。
+
+---
+
+# 四十四、本轮最终回传
+
+严格返回：
+
+## A. Resource Correction Status
+
+Option A =
+Legacy =
+Option B =
+
+---
+
+## B. Fresh Process Evidence
+
+PID =
+Legacy executed =
+Option A executed =
+
+---
+
+## C. Guest State
+
+Guest installed =
+APK SHA match =
+
+---
+
+## D. Option B Default Resources
+
+String =
+Raw =
+Asset =
+Color =
+Drawable =
+Layout =
+getIdentifier =
+Metadata =
+
+---
+
+## E. Configuration
+
+default resources =
+land resources =
+
+same resource ID =
+default value =
+land value =
+match =
+
+---
+
+## F. Isolation Matrix
+
+至少：
+
+| Boundary                    | Before | After |
+| --------------------------- | ------ | ----- |
+| Host Resources sees Guest   |        |       |
+| Host Assets sees Guest      |        |       |
+| System Resources sees Guest |        |       |
+| System Assets sees Guest    |        |       |
+| Guest Resources sees Host   |        |       |
+| Guest Assets sees Host      |        |       |
+
+---
+
+## G. Host/System Pollution
+
+HOST_CHANGED =
+SYSTEM_CHANGED =
+
+说明检测方法。
+
+---
+
+## H. Two Resources
+
+resourcesA == resourcesB =
+assetsA == assetsB =
+A marker =
+B marker =
+A layout =
+B layout =
+
+---
+
+## I. Error Tests
+
+Missing =
+Missing ID existence verified =
+Wrong Type =
+Corrupt APK =
+Corrupt APK location =
+App survived =
+
+---
+
+## J. Option B API Classification
+
+列出核心 API：
+
+PUBLIC
+PUBLIC-DEPRECATED
+HIDDEN
+REFLECTION
+
+理想：
+
+只有 PUBLIC。
+
+---
+
+## K. EXP-002 Status
+
+只能：
+
+EXP-002 OPTION B API31 =
+CONFIRMED / PARTIALLY CONFIRMED / REJECTED
+
+API28/29 =
+RESEARCH NEEDED / CONFIRMED / REJECTED
+
+---
+
+## L. ADR
+
+ADR-0006 status =
+新 correction ADR =
+摘要 =
+
+---
+
+## M. EXP-003 LoadedApk Risk
+
+回答：
+
+Application.attach chain =
+Controlled Context bottom context =
+Potential mLoadedApk =
+Risk classification =
+
+---
+
+## N. EXP-003B Status
+
+READY
+或
+BLOCKED
+
+并说明原因。
+
+---
+
+## O. Documentation Corrections
+
+列出修改的：
+
+EXP-002 result
+strategy comparison
+ADR
+EXP-003 leakage matrix
+EXP-003B plan
+Roadmap
+task index
+
+---
+
+## P. Modified Code
+
+区分：
+
+EXP-002 debug runner
+Guest test app
+production code
+docs
+
+---
+
+## Q. Release Pollution
+
+确认：
+
+Release APK 是否包含：
+
+Legacy runner
+Option A runner
+EXP-only Host resources
+
+---
+
+## R. Git
+
+git status --short
+git diff --stat
+
+---
+
+## S. Suggested Commit
+
+只给建议 commit message。
+
+不要擅自 commit。
+
+---
+
+## T. Next Step
+
+只能回答：
+
+Ready to execute EXP-003A: YES / NO
+
+注意：
+
+这里问的是 EXP-003A Controlled Context。
+
+不是 EXP-003B Application。
+
+最多给 5 条理由。
+
+完成后停止。

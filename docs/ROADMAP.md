@@ -25,19 +25,24 @@ Phase 2 must first define registry identity, version/update semantics, corruptio
 
 ```text
 EXP-001 = CONFIRMED
-EXP-002 API30+ = CONFIRMED
+EXP-002 Legacy = REJECTED
+EXP-002 Option A = REJECTED
+EXP-002 Option B API31 = CONFIRMED (TESTED ANDROID 12/API31 PATH)
 EXP-002 API28/29 = RESEARCH NEEDED
-EXP-003 = DESIGN READY / NOT EXECUTED
+EXP-003A = CONFIRMED C0 DEBUG BASELINE
+EXP-003B = DESIGNED / BLOCKED BY LOADEDAPK PRECHECK
+EXP-003C = NOT READY
 ```
 
 EXP-003 is split into independently gated designs:
 
 ```text
-EXP-003A Controlled Guest Context
-EXP-003B Guest Application instantiation
-EXP-003C Minimal Application.onCreate
+EXP-003A Controlled Guest Context = CONFIRMED C0
+EXP-003B Guest Application instantiation = BLOCKED
+EXP-003C Minimal Application.onCreate = NOT READY
 EXP-003D Compatibility surface (future)
 ```
+
 
 No Guest Context, Guest Application, Activity, Hook, Binder, JNI, or native
 runtime implementation is authorized by this roadmap yet.
