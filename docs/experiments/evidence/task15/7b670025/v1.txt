@@ -1,0 +1,7 @@
+mode=v1 PID=26519 runCount=1 API=31
+imported=/data/user/0/com.example.appsandbox/files/guests/382007d3-d82e-4617-b095-30967dd59da7/base.apk sha256=85f1cf6590b97b60ab09b4e55952e3df7a493e193a59a779756b24890cc33e0e
+writable writable=true
+writable result=guest:V1:EXP001_GUEST_7f2d8e91-4d42-4aa4-9a91-1d4f8c3e6b27
+readonly writable=false
+readonly result=guest:V1:EXP001_GUEST_7f2d8e91-4d42-4aa4-9a91-1d4f8c3e6b27
+END hostSurvived=true

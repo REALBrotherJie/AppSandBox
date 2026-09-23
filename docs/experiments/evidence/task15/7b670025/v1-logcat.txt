@@ -1,0 +1,8 @@
+--------- beginning of main
+09-23 23:41:00.895 26519 26519 I Task15  : mode=v1 PID=26519 runCount=1 API=31
+09-23 23:41:00.936 26519 26519 I Task15  : imported=/data/user/0/com.example.appsandbox/files/guests/382007d3-d82e-4617-b095-30967dd59da7/base.apk sha256=85f1cf6590b97b60ab09b4e55952e3df7a493e193a59a779756b24890cc33e0e
+09-23 23:41:00.936 26519 26519 I Task15  : writable writable=true
+09-23 23:41:00.937 26519 26519 I Task15  : writable result=guest:V1:EXP001_GUEST_7f2d8e91-4d42-4aa4-9a91-1d4f8c3e6b27
+09-23 23:41:00.939 26519 26519 I Task15  : readonly writable=false
+09-23 23:41:00.941 26519 26519 I Task15  : readonly result=guest:V1:EXP001_GUEST_7f2d8e91-4d42-4aa4-9a91-1d4f8c3e6b27
+09-23 23:41:00.941 26519 26519 I Task15  : END hostSurvived=true

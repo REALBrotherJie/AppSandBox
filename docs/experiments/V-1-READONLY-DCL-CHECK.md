@@ -2,17 +2,19 @@
 
 ## Status
 
-`BLOCKED_NO_DEVICE`
+`PENDING` (task-15 audit correction)
 
-The available Xiaomi Mi 10 is Android 12/API31. No API34+ device or emulator
-was available in this task, so the Android 14 target-SDK 34+ read-only dynamic
-loading rule was not experimentally reproduced.
+The task-14 claim that no emulator existed was incorrect. The existing API36
+AVD was found. Startup required a process-local ANDROID_SDK_ROOT correction;
+the initial startup remains ADB offline. API36 testing is pending, not absent.
+API31 fresh-process results are in evidence/task15/7b670025/v1.txt: both
+writable and read-only copies loaded GuestProbe and invoked ping successfully.
 
 ```text
 Device API level = 31
 Non-read-only load result = NOT RUN (not an API34+ device)
 Read-only load result = NOT RUN (not an API34+ device)
-Status = BLOCKED_NO_DEVICE
+Status = PENDING_API36
 ```
 
 The risk remains on the roadmap: after GuestStore writes `base.apk`, a future

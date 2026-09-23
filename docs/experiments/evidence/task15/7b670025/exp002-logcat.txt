@@ -1,0 +1,91 @@
+--------- beginning of main
+09-23 23:41:07.992 28436 28436 I Task15  : mode=exp002 PID=28436 runCount=1 API=31
+09-23 23:41:08.027 28436 28436 I Task15  : imported=/data/user/0/com.example.appsandbox/files/guests/382007d3-d82e-4617-b095-30967dd59da7/base.apk sha256=85f1cf6590b97b60ab09b4e55952e3df7a493e193a59a779756b24890cc33e0e
+09-23 23:41:08.036 28436 28436 I Task15  : experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/5b7fa3b7-9d8f-405f-b1d8-e2c943019d49/base.apk sha256=85f1cf6590b97b60ab09b4e55952e3df7a493e193a59a779756b24890cc33e0e readOnly=true
+09-23 23:41:08.069 28436 28436 I Task15  : process.pid=28436
+09-23 23:41:08.069 28436 28436 I Task15  : process.runCount=1
+09-23 23:41:08.069 28436 28436 I Task15  : legacyExecuted=false
+09-23 23:41:08.069 28436 28436 I Task15  : optionAExecuted=false
+09-23 23:41:08.069 28436 28436 I Task15  : legacyStatus=REJECTED_NOT_EXECUTED
+09-23 23:41:08.069 28436 28436 I Task15  : optionAStatus=REJECTED_NOT_EXECUTED
+09-23 23:41:08.069 28436 28436 I Task15  : guestInstalled=false
+09-23 23:41:08.069 28436 28436 I Task15  : buildSha256=125c7c57d575f1d7d8bb84a9d83a6cd26679bae696d6ffad91e75226b2f109b5
+09-23 23:41:08.069 28436 28436 I Task15  : importedSha256=85f1cf6590b97b60ab09b4e55952e3df7a493e193a59a779756b24890cc33e0e
+09-23 23:41:08.069 28436 28436 I Task15  : apkShaMatch=false
+09-23 23:41:08.069 28436 28436 I Task15  : before.hostResourcesSeesGuest=false
+09-23 23:41:08.069 28436 28436 I Task15  : before.hostAssetsSeesGuest=false
+09-23 23:41:08.069 28436 28436 I Task15  : before.systemResourcesSeesGuest=false
+09-23 23:41:08.069 28436 28436 I Task15  : before.systemAssetsSeesGuest=false
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.ARCHIVE_PARSE=PASS
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.APPLICATION_INFO_PREPARE=PASS
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.GET_RESOURCES=PASS class=android.content.res.MiuiResources
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.string.expected=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.string.actual=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.string.exactMatch=true
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.raw.actual=EXP002_RAW_5c9a8e21-6f34-4b7d-91c2-8e0f3a6d4b11 expected=EXP002_RAW_5c9a8e21-6f34-4b7d-91c2-8e0f3a6d4b11 exactMatch=true
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.asset.actual=EXP002_ASSET_b7e3d902-1a64-4c8f-95d0-2e6b4a1c8f33 expected=EXP002_ASSET_b7e3d902-1a64-4c8f-95d0-2e6b4a1c8f33 exactMatch=true
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.color.actual=-15553740 expected=-15553740 exactMatch=true
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.drawable.class=android.graphics.drawable.GradientDrawable
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.layoutMetadata=com.example.appsandbox.testguest/layout/exp002_test_layout
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.layout=PASS root=LinearLayout child=TextView
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.metadata=com.example.appsandbox.testguest/string/exp002_string
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.getIdentifier.form1=2131099650
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.getIdentifier.form2=2131099650
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.getIdentifier.form3=2131099650
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.collision.expected=GUEST_COLLISION
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.collision.actual=GUEST_COLLISION
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.collision.exactMatch=true
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.guestSeesHostResource=false
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.guestSeesHostAsset=false
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.hostSeesGuestResource=false
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.DEFAULT.hostSeesGuestAsset=false
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.CONFIGURATION=PASS
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.defaultConfig.expected=EXP002_DEFAULT
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.defaultConfig.actual=EXP002_DEFAULT
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.defaultConfig.exactMatch=true
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.landConfig.expected=EXP002_LANDSCAPE
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.landConfig.actual=EXP002_LANDSCAPE
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.landConfig.exactMatch=true
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.defaultResources===landResources=false
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.defaultAssets===landAssets=false
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.twoResources.resourcesA===resourcesB=false
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.twoResources.assetsA===assetsB=true
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.twoResources.A.expected=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.twoResources.A.actual=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.twoResources.A.exactMatch=true
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.twoResources.A.marker=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.twoResources.B.expected=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.twoResources.B.actual=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.twoResources.B.exactMatch=true
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.twoResources.B.marker=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.twoResources.A.layoutMetadata=com.example.appsandbox.testguest/layout/exp002_test_layout
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.twoResources.A.layout=PASS root=LinearLayout child=TextView
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.twoResources.A.layout=true
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.twoResources.B.layoutMetadata=com.example.appsandbox.testguest/layout/exp002_test_layout
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.twoResources.B.layout=PASS root=LinearLayout child=TextView
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.twoResources.B.layout=true
+09-23 23:41:08.069 28436 28436 I Task15  : ERROR_TEST.MISSING.exceptionClass=android.content.res.Resources$NotFoundException
+09-23 23:41:08.069 28436 28436 I Task15  : ERROR_TEST.MISSING.message=String resource ID #0x7f06ffff
+09-23 23:41:08.069 28436 28436 I Task15  : ERROR_TEST.MISSING.cause=null:null
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.missing=true
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.missingIdExistenceVerified=EXTERNAL_AAPT2_EVIDENCE
+09-23 23:41:08.069 28436 28436 I Task15  : ERROR_TEST.WRONG_TYPE.exceptionClass=android.content.res.Resources$NotFoundException
+09-23 23:41:08.069 28436 28436 I Task15  : ERROR_TEST.WRONG_TYPE.message=Drawable com.example.appsandbox.testguest:string/exp002_string with resource ID #0x7f060002
+09-23 23:41:08.069 28436 28436 I Task15  : ERROR_TEST.WRONG_TYPE.cause=android.content.res.Resources$NotFoundException:File EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10 from drawable resource ID #0x7f060002
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.wrongType=true
+09-23 23:41:08.069 28436 28436 I Task15  : ERROR_TEST.CORRUPT_APK.exceptionClass=android.content.pm.PackageManager$NameNotFoundException
+09-23 23:41:08.069 28436 28436 I Task15  : ERROR_TEST.CORRUPT_APK.message=Unable to open /data/user/0/com.example.appsandbox/cache/experiments/exp002/corrupt.apk
+09-23 23:41:08.069 28436 28436 I Task15  : ERROR_TEST.CORRUPT_APK.cause=null:null
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.corruptApk=true
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.corruptApkLocation=/data/user/0/com.example.appsandbox/cache/experiments/exp002
+09-23 23:41:08.069 28436 28436 I Task15  : OPTION_B.appSurvived=true
+09-23 23:41:08.069 28436 28436 I Task15  : after.hostResourcesSeesGuest=false
+09-23 23:41:08.069 28436 28436 I Task15  : after.hostAssetsSeesGuest=false
+09-23 23:41:08.069 28436 28436 I Task15  : after.systemResourcesSeesGuest=false
+09-23 23:41:08.069 28436 28436 I Task15  : after.systemAssetsSeesGuest=false
+09-23 23:41:08.069 28436 28436 I Task15  : HOST_CHANGED=false
+09-23 23:41:08.069 28436 28436 I Task15  : SYSTEM_CHANGED=false
+09-23 23:41:08.069 28436 28436 I Task15  : hostSystemLeakage=NONE_OBSERVED_API31
+09-23 23:41:08.069 28436 28436 I Task15  : optionBResult=true
+09-23 23:41:08.069 28436 28436 I Task15  : conclusion=CONFIRMED_API31
+09-23 23:41:08.069 28436 28436 I Task15  : END hostSurvived=true
