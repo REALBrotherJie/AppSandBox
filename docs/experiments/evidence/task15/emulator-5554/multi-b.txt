@@ -1,0 +1,22 @@
+mode=multi-b PID=7008 runCount=1 API=36
+imported=/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/27553d58-3ea4-4b4d-85de-ded659fbb226/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494 readOnly=true
+form=M-B
+firstCountBeforeSecond=1
+applicationSame=false
+classSame=false
+loaderSame=false
+resourcesSame=false
+assetsSame=true
+instance1 appIdentity=165966824 resourcesIdentity=215489232
+instance1 constructorCount=1 applicationContextIsOwn=true onCreateCalled=false
+instance1 data=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-1 files=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-1/files cache=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-1/cache codeCache=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-1/code_cache preferences=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-1/shared_prefs/multi.xml database=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-1/databases/multi.db
+instance2 appIdentity=152645798 resourcesIdentity=204333274
+instance2 constructorCount=1 applicationContextIsOwn=true onCreateCalled=false
+instance2 data=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-2 files=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-2/files cache=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-2/cache codeCache=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-2/code_cache preferences=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-2/shared_prefs/multi.xml database=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-2/databases/multi.db
+instance1.preferencesReadback=true
+instance1.databaseReadback=true
+instance2.preferencesSeesMarker=false instance2.databaseSeesMarker=false
+host.preferencesAbsent=true host.databaseAbsent=true
+scope=JAVA_STATIC_AND_CONTEXT_STORAGE_ONLY; CALLBACK_DISPATCH_NOT_TESTED; NO_ONCREATE
+END hostSurvived=true

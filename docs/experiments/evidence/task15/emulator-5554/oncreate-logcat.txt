@@ -1,0 +1,16 @@
+--------- beginning of main
+09-23 15:58:45.249  6710  6710 I Task15  : mode=oncreate PID=6710 runCount=1 API=36
+09-23 15:58:45.457  6710  6710 I Task15  : imported=/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+09-23 15:58:45.466  6710  6710 I Task15  : experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/2894cbc6-8dde-4a56-98ae-a85e1a6e31aa/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494 readOnly=true
+09-23 15:58:45.699  6710  6710 I Task15  : gates={c1=true, layout=true}
+09-23 15:58:45.699  6710  6710 I Task15  : callApplicationOnCreate=RETURNED
+09-23 15:58:45.699  6710  6710 I Task15  : results={1.resources=PASS, 2.applicationCast=PASS, 3.files=PASS, 4.preferences=PASS, 5.database=PASS, 6.layout=PASS, clipboardClass=android.content.ClipboardManager, 7.clipboard=PASS, 8.lifecycle=PASS}
+09-23 15:58:45.699  6710  6710 I Task15  : onCreateCalled=true
+09-23 15:58:45.699  6710  6710 I Task15  : host.files.absent=true
+09-23 15:58:45.699  6710  6710 I Task15  : host.preferences.absent=true
+09-23 15:58:45.699  6710  6710 I Task15  : host.database.absent=true
+09-23 15:58:45.699  6710  6710 I Task15  : guest.files=/data/user/0/com.example.appsandbox/files/task15-instances/oncreate/files/guest-oncreate.txt exists=true
+09-23 15:58:45.699  6710  6710 I Task15  : guest.preferences=/data/user/0/com.example.appsandbox/files/task15-instances/oncreate/shared_prefs/guest_prefs.xml exists=true
+09-23 15:58:45.699  6710  6710 I Task15  : guest.database=/data/user/0/com.example.appsandbox/files/task15-instances/oncreate/databases/guest-oncreate.db exists=true
+09-23 15:58:45.699  6710  6710 I Task15  : services=[layout_inflater, clipboard]
+09-23 15:58:45.700  6710  6710 I Task15  : END hostSurvived=true

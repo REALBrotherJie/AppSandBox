@@ -1,0 +1,23 @@
+--------- beginning of main
+09-23 15:59:00.646  7008  7008 I Task15  : mode=multi-b PID=7008 runCount=1 API=36
+09-23 15:59:00.715  7008  7008 I Task15  : imported=/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+09-23 15:59:00.722  7008  7008 I Task15  : experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/27553d58-3ea4-4b4d-85de-ded659fbb226/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494 readOnly=true
+09-23 15:59:00.920  7008  7008 I Task15  : form=M-B
+09-23 15:59:00.920  7008  7008 I Task15  : firstCountBeforeSecond=1
+09-23 15:59:00.920  7008  7008 I Task15  : applicationSame=false
+09-23 15:59:00.920  7008  7008 I Task15  : classSame=false
+09-23 15:59:00.920  7008  7008 I Task15  : loaderSame=false
+09-23 15:59:00.920  7008  7008 I Task15  : resourcesSame=false
+09-23 15:59:00.920  7008  7008 I Task15  : assetsSame=true
+09-23 15:59:00.920  7008  7008 I Task15  : instance1 appIdentity=165966824 resourcesIdentity=215489232
+09-23 15:59:00.920  7008  7008 I Task15  : instance1 constructorCount=1 applicationContextIsOwn=true onCreateCalled=false
+09-23 15:59:00.920  7008  7008 I Task15  : instance1 data=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-1 files=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-1/files cache=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-1/cache codeCache=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-1/code_cache preferences=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-1/shared_prefs/multi.xml database=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-1/databases/multi.db
+09-23 15:59:00.920  7008  7008 I Task15  : instance2 appIdentity=152645798 resourcesIdentity=204333274
+09-23 15:59:00.920  7008  7008 I Task15  : instance2 constructorCount=1 applicationContextIsOwn=true onCreateCalled=false
+09-23 15:59:00.920  7008  7008 I Task15  : instance2 data=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-2 files=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-2/files cache=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-2/cache codeCache=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-2/code_cache preferences=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-2/shared_prefs/multi.xml database=/data/user/0/com.example.appsandbox/files/task15-instances/M-B-instance-2/databases/multi.db
+09-23 15:59:00.920  7008  7008 I Task15  : instance1.preferencesReadback=true
+09-23 15:59:00.920  7008  7008 I Task15  : instance1.databaseReadback=true
+09-23 15:59:00.920  7008  7008 I Task15  : instance2.preferencesSeesMarker=false instance2.databaseSeesMarker=false
+09-23 15:59:00.920  7008  7008 I Task15  : host.preferencesAbsent=true host.databaseAbsent=true
+09-23 15:59:00.920  7008  7008 I Task15  : scope=JAVA_STATIC_AND_CONTEXT_STORAGE_ONLY; CALLBACK_DISPATCH_NOT_TESTED; NO_ONCREATE
+09-23 15:59:00.920  7008  7008 I Task15  : END hostSurvived=true

@@ -1,0 +1,14 @@
+mode=oncreate-read PID=6798 runCount=1 API=36
+imported=/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/60056a67-3cdf-441e-9586-e0b337b6f7c7/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494 readOnly=true
+gates={c1=true, layout=true}
+persisted={preferences=GUEST_ONCREATE_PREF, database=GUEST_ONCREATE_DB}
+onCreateCalled=false
+host.files.absent=true
+host.preferences.absent=true
+host.database.absent=true
+guest.files=/data/user/0/com.example.appsandbox/files/task15-instances/oncreate/files/guest-oncreate.txt exists=true
+guest.preferences=/data/user/0/com.example.appsandbox/files/task15-instances/oncreate/shared_prefs/guest_prefs.xml exists=true
+guest.database=/data/user/0/com.example.appsandbox/files/task15-instances/oncreate/databases/guest-oncreate.db exists=true
+services=[]
+END hostSurvived=true

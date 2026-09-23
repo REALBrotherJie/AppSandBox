@@ -1,0 +1,12 @@
+--------- beginning of main
+09-23 15:58:40.936  6482  6482 I Task15  : mode=layout PID=6482 runCount=1 API=36
+09-23 15:58:41.048  6482  6482 I Task15  : imported=/data/user/0/com.example.appsandbox/files/guests/934ad563-d21e-40ac-8be7-88bf5b1d7cfd/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+09-23 15:58:41.059  6482  6482 I Task15  : experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/72e9193c-7189-4a34-a02a-641c2b5a8cd9/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494 readOnly=true
+09-23 15:58:41.284  6482  6482 I Task15  : exp002_test_layout root=android.widget.LinearLayout child=android.widget.TextView text=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10 contextIsC1=true color=ff757780
+09-23 15:58:41.284  6482  6482 I Task15  : exp002_test_layout=PASS
+09-23 15:58:41.284  6482  6482 I Task15  : exp003_themed_layout root=android.widget.LinearLayout child=android.widget.TextView text=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10 contextIsC1=true color=ff12ab34
+09-23 15:58:41.284  6482  6482 I Task15  : exp003_themed_layout=PASS
+09-23 15:58:41.284  6482  6482 I Task15  : landscape=EXP002_LANDSCAPE contextIsDerived=true
+09-23 15:58:41.284  6482  6482 I Task15  : hostInflater=android.view.InflateException:Binary XML file line #17 in com.example.appsandbox:color/abc_background_cache_hint_selector_material_dark: Binary XML file line #17 in com.example.appsandbox:color/abc_background_cache_hint_selector_material_dark: Error inflating class selector
+09-23 15:58:41.284  6482  6482 I Task15  : gate.layout=true
+09-23 15:58:41.284  6482  6482 I Task15  : END hostSurvived=true

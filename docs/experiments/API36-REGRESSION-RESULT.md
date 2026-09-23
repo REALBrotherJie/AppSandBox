@@ -31,3 +31,18 @@ B0 Activity comparison uses debug ExperimentActivity, not MainActivity;
 the original task-14 MainActivity experiment remains a historical result.
 Historical fixed SHA labels in old runners are now explicitly reference hashes;
 current build/import verification is performed by the harness.
+
+## New experiment regression (WS-6)
+
+| Experiment | API31 | API36 | Difference |
+|---|---|---|---|
+| C1 full matrix + persistence + Host negatives | PASS | PASS | None in tested assertions |
+| Ordinary/themed/landscape layout | PASS | PASS | Default ordinary text color differs; Guest themed color agrees |
+| onCreate-min eight steps | PASS | PASS | None in tested assertions |
+| onCreate restart / exception | PASS | PASS | Same persistence and RuntimeException containment |
+| M-A shared loader | Counts 2/2, files separate | Same | None observed |
+| M-B separate loaders | Counts 1/1, files separate | Same | None observed |
+
+All new experiments ran in fresh processes, with runCount=1. pm path was empty
+before/after on both devices. No code changes were made to align new experiments
+after observing API36. C0, GuestStore and ADR-0006/7/8 statuses are unchanged.

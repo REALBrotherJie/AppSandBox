@@ -1,10 +1,11 @@
 # EXP-003C1 Controlled Context
 
-Status: API31 PASS (debug only); API36 pending. No production runtime is claimed.
+Status: API31 and API36 PASS (debug only). No production runtime is claimed.
 
 Evidence: [write matrix](evidence/task15/7b670025/c1.txt),
 [fresh-process read matrix](evidence/task15/7b670025/c1-read.txt).
-PID 4993 and 5995 respectively; runCount=1 each. Guest uninstalled before/after.
+Initial PID 4993/5995, final APK rerun PID 25750/26799; runCount=1 each.
+Guest uninstalled before/after. Earlier reports remain in Git history.
 
 | Item | C0 | C1 API31 | Classification |
 |---|---|---|---|
@@ -40,3 +41,22 @@ not a supported scenario. External secondary volumes are deferred.
 Reproduce: scripts/task15-run.ps1 -Serial 7b670025 -Install -Modes c1,c1-read.
 Evidence -> all assertions PASS -> public C1 facade covers this limited matrix.
 This does not establish arbitrary application or component compatibility.
+
+## API36 regression (WS-6)
+
+Evidence: evidence/task15/emulator-5554/c1.txt and c1-read.txt.
+PID=6074/6204; runCount=1. Same final Guest SHA as API31.
+
+| Matrix group | API31 | API36 |
+|---|---|---|
+| Base/configuration/DP/attribution: package, loader, resources, assets, info | PASS | PASS |
+| All internal/external paths | PASS | PASS |
+| Preferences types/cache/listener/delete and fresh-process persistence | PASS | PASS |
+| SQLiteOpenHelper and fresh-process readback | PASS | PASS |
+| Unbound self, bound Guest Application, inflater identity and theme | PASS | PASS |
+| Host negative controls | PASS | PASS |
+| Harmless Host-package broadcast | PASS | PASS |
+
+No C1 implementation changes were needed for API36. Attribution tag task15
+is retained on both devices, with Host package/UID. C0 Host prefs leakage was
+reproduced on both. These are getter/file-routing observations, not OS isolation.
