@@ -1,0 +1,1984 @@
+你现在继续负责我们已经创建好的 AppSandbox 项目。
+
+上一阶段已经完成：
+
+* Clean-room 全新项目创建
+* APK 导入
+* APK 基础解析
+* GuestPackageRecord 初步数据模型
+* 基础文档
+* assembleDebug
+* 尚未实现任何 Hook
+* 尚未实现 Guest Runtime
+
+现在停止功能开发。
+
+本轮的目标不是写代码，而是：
+
+# 对整个 Android 应用虚拟化框架进行完整技术研究、架构设计、方案设计和实施规划
+
+要求最终形成一套可以指导未来几个月开发工作的设计文档。
+
+本轮：
+
+**禁止实现新的 Runtime 功能。**
+
+不要因为某个方案看起来可行就马上编码验证。
+
+先把：
+
+* Android 原理
+* 问题
+* 约束
+* 方案
+* 模块
+* 数据流
+* 生命周期
+* 实施步骤
+* 风险
+* 验证方法
+
+全部理清楚。
+
+---
+
+# 一、最重要的 Clean-room 原则
+
+本项目必须继续保持完全独立设计。
+
+禁止查看、搜索、下载、引用或研究以下项目的源码、架构实现或类结构：
+
+* VirtualApp
+* BlackBox
+* DroidPlugin
+* VirtualXposed
+* sandbox
+* RePlugin
+* Shadow
+* VirtualAPK
+* 其他 Android 应用虚拟化 / 双开框架
+
+即使它们是开源项目，本阶段也不能把这些项目当作架构参考。
+
+我们的技术依据只能来自：
+
+1. Android 官方 Developers 文档
+2. Android SDK
+3. AOSP
+4. Linux
+5. Binder
+6. ART
+7. JNI
+8. ELF
+9. Java/Kotlin 官方机制
+10. 我们自己编写的实验程序
+11. Android 设备上的实际实验
+
+所有架构都必须能够回答：
+
+> 如果世界上从来没有 VirtualApp，我们从 Android 系统本身出发，会如何设计这个方案？
+
+不要设计成某个现有框架的翻版。
+
+---
+
+# 二、本轮禁止修改功能代码
+
+本轮允许：
+
+* 阅读当前工程
+* 阅读现有 docs
+* 阅读 Android 官方资料
+* 阅读 AOSP
+* 分析 Android Framework
+* 创建 Markdown 文档
+* 创建 Mermaid / ASCII 架构图
+* 创建 ADR
+* 修订已有设计文档
+
+本轮禁止：
+
+* 新增 Runtime 代码
+* 新增 Hook
+* 新增 Stub Activity
+* 新增 Binder Proxy
+* 修改 APK Runtime
+* 修改 ClassLoader
+* 修改 ActivityThread
+* 修改 Instrumentation
+* 编写 JNI Hook
+* 编写 IO Redirect
+* 编写 hidden API bypass
+* 编写 native hook
+* 修改 Manifest 增加大量占位组件
+* 为验证架构而提前实现功能
+
+除 docs 目录外，原则上不要修改任何生产代码。
+
+如果发现现有 Phase 1 代码存在明显设计问题：
+
+只记录问题。
+
+不要修复。
+
+---
+
+# 三、首先建立一个核心认知
+
+不要从：
+
+“Virtual App 应该有哪些模块？”
+
+开始。
+
+而是从：
+
+> 一个没有安装到 Android 系统中的 APK，为什么不能像正常 App 一样运行？
+
+开始分析。
+
+完整拆解：
+
+正常 Android App：
+
+APK
+↓
+PackageManager 安装
+↓
+PackageManagerService 建立 package 信息
+↓
+data/app
+↓
+data/user
+↓
+UID
+↓
+SELinux
+↓
+进程创建
+↓
+ActivityThread
+↓
+LoadedApk
+↓
+ClassLoader
+↓
+Resources
+↓
+Application
+↓
+Activity / Service / Provider / Receiver
+↓
+Binder System Services
+
+然后分析：
+
+如果 APK **没有真正安装**：
+
+到底缺少了什么？
+
+每一项都要写出来。
+
+---
+
+# 四、建立 Android 原生应用运行模型
+
+创建：
+
+docs/design/01_ANDROID_APP_RUNTIME_MODEL.md
+
+这份文档必须完整解释：
+
+## 1. APK 安装阶段
+
+Android 安装 APK 后，系统进行了哪些关键工作？
+
+重点研究：
+
+* PackageManagerService
+* PackageParser / ParsingPackage
+* PackageSetting
+* Settings
+* PackageManager
+* installd
+* PackageInstaller
+* PackageInstallerSession
+* data/app
+* data/user
+* UID 分配
+* native library
+* dex/oat
+* permissions
+* SELinux context
+
+不是要求把 AOSP 所有细节写一遍。
+
+而是回答：
+
+**哪些结果是 Guest App 正常运行所依赖的？**
+
+---
+
+## 2. App 进程启动
+
+研究：
+
+Launcher / startActivity
+
+最终如何：
+
+ActivityTaskManagerService
+↓
+ActivityManagerService
+↓
+ProcessList
+↓
+Zygote
+↓
+ActivityThread.main()
+↓
+bindApplication()
+↓
+LoadedApk
+↓
+Application
+
+把完整链路画出来。
+
+---
+
+## 3. Component
+
+分别说明：
+
+Activity
+
+Service
+
+BroadcastReceiver
+
+ContentProvider
+
+在正常 Android 中：
+
+* 谁保存注册信息
+* 谁负责调度
+* 谁负责创建实例
+* 谁管理生命周期
+* 谁决定 processName
+* 谁提供 Context
+* 谁进行权限验证
+
+---
+
+## 4. System Service
+
+Guest App 调：
+
+PackageManager
+
+ActivityManager
+
+ActivityTaskManager
+
+AppOpsManager
+
+NotificationManager
+
+ClipboardManager
+
+AccountManager
+
+LocationManager
+
+ConnectivityManager
+
+StorageManager
+
+等 API 时：
+
+最终经过什么 Binder 接口进入 system_server？
+
+建立：
+
+Android Framework Java API
+↓
+Manager
+↓
+Binder Proxy
+↓
+Binder Driver
+↓
+system_server
+↓
+Service
+
+的统一模型。
+
+---
+
+# 五、建立“未安装 APK 运行障碍矩阵”
+
+创建：
+
+docs/design/02_GUEST_RUNTIME_GAP_ANALYSIS.md
+
+建立一张非常重要的表。
+
+至少包括：
+
+| Android 原生能力   | 正常安装 App       | 未安装 Guest     | 问题            | 我们是否必须虚拟化 |
+| -------------- | -------------- | ------------- | ------------- | --------- |
+| Package 信息     | PMS            | 无             | package 不存在   | 是         |
+| UID            | 系统分配           | Host UID      | 身份不同          | 视情况       |
+| dataDir        | data/user      | 无             | 路径不存在         | 是         |
+| Activity 注册    | PMS            | 不存在           | ATMS 无法解析     | 是         |
+| Service 注册     | PMS            | 不存在           | AMS 无法解析      | 是         |
+| Provider       | PMS            | 不存在           | authority 不存在 | 是         |
+| Resources      | LoadedApk      | 无             | 无 Resources   | 是         |
+| ClassLoader    | LoadedApk      | 无             | 无法加载 dex      | 是         |
+| Application    | ActivityThread | 不存在           | 无生命周期         | 是         |
+| PackageManager | 系统             | 看不到 Guest     | 返回错误          | 是         |
+| Notification   | UID/pkg 校验     | Guest pkg 不存在 | 失败            | 可能        |
+| Native library | 系统路径           | 无             | .so 加载问题      | 是         |
+| permission     | PMS            | Guest 无 grant | 权限模型冲突        | 是         |
+
+继续扩展。
+
+这张表将成为整个架构设计的来源。
+
+---
+
+# 六、设计我们的总体架构
+
+创建：
+
+docs/design/03_SYSTEM_ARCHITECTURE.md
+
+不要照任何开源框架。
+
+从 Gap Analysis 自己推导模块。
+
+暂定可以讨论以下概念：
+
+AppSandbox Host
+Guest Package Registry
+Guest Storage
+Guest Runtime
+Guest Process Runtime
+Guest Component Runtime
+System Compatibility Layer
+Guest Identity
+IPC Layer
+Lifecycle Controller
+
+但：
+
+如果你认为名称或划分不合理，可以重新设计。
+
+最终必须画出：
+
+```text
+                     Android System
+                           │
+              ┌────────────┴─────────────┐
+              │                          │
+       AppSandbox Host            System Services
+              │
+              │
+        Sandbox Runtime
+              │
+     ┌────────┼─────────┐
+     │        │         │
+Package   Component   System
+Runtime   Runtime     Bridge
+     │        │         │
+     └────────┼─────────┘
+              │
+         Guest Runtime
+              │
+          Guest APK
+```
+
+这只是示意。
+
+必须设计我们自己的正式架构。
+
+解释：
+
+* 每个模块负责什么
+* 不负责什么
+* 模块之间如何通信
+* 哪些模块运行在 Host 进程
+* 将来是否需要独立 Sandbox Process
+* 哪些状态需要持久化
+* 哪些状态只在内存
+* system_server 能看到什么
+* Guest 能看到什么
+
+---
+
+# 七、设计 Guest Package 系统
+
+创建：
+
+docs/design/04_PACKAGE_RUNTIME.md
+
+重点设计：
+
+我们不能把 Guest 安装到 PMS。
+
+所以需要回答：
+
+## Guest Package Registry 是什么？
+
+需要保存：
+
+* package
+* version
+* component
+* permission
+* process
+* metadata
+* intent-filter
+* provider authority
+* native libs
+* ABI
+* application info
+
+研究 Android 原生：
+
+PackageInfo
+ApplicationInfo
+ActivityInfo
+ServiceInfo
+ProviderInfo
+ResolveInfo
+
+然后决定：
+
+我们的内部数据模型：
+
+直接保存 Android 类型？
+
+还是：
+
+建立自己的 immutable domain model？
+
+分别分析优缺点。
+
+---
+
+## Intent Resolution
+
+以后 Guest：
+
+startActivity(Intent)
+
+sendBroadcast(Intent)
+
+startService(Intent)
+
+都涉及：
+
+Intent → Component
+
+所以必须提前设计：
+
+Guest Intent Resolver。
+
+需要考虑：
+
+* explicit intent
+* implicit intent
+* action
+* category
+* data
+* MIME
+* priority
+* exported
+* enabled
+* permission
+
+本轮只设计。
+
+不要实现。
+
+---
+
+# 八、设计 Guest Storage
+
+创建：
+
+docs/design/05_STORAGE_MODEL.md
+
+需要定义：
+
+```text
+filesDir/
+  guests/
+    <guest-id>/
+      package/
+      data/
+      cache/
+      code/
+      native/
+      state/
+```
+
+这里只是示意。
+
+你需要根据 Android：
+
+data/user/0/package
+data/user_de
+data/app
+code_cache
+cache
+files
+databases
+shared_prefs
+
+重新设计我们的虚拟目录。
+
+重点回答：
+
+packageName 和 guest instance ID 是否应该分离。
+
+例如：
+
+微信：
+
+packageName:
+com.tencent.mm
+
+instance A:
+uuid-A
+
+instance B:
+uuid-B
+
+应该如何布局？
+
+为未来：
+
+Multi Instance
+
+提前规划。
+
+---
+
+# 九、设计 Class / Dex Runtime
+
+创建：
+
+docs/design/06_CODE_LOADING.md
+
+研究：
+
+* BaseDexClassLoader
+* PathClassLoader
+* DexClassLoader
+* DexPathList
+* class loader hierarchy
+* parent delegation
+* boot classpath
+* native library search path
+
+然后回答：
+
+Guest ClassLoader 应该是什么关系：
+
+Boot
+↓
+Host
+↓
+Guest
+
+还是：
+
+Boot
+↓
+Guest
+↓
+Host
+
+还是其他结构？
+
+必须分析：
+
+* Host class 泄漏
+* Guest dependency
+* AndroidX
+* duplicate classes
+* JNI
+* Class.forName
+* context ClassLoader
+* reflection
+
+不要实现。
+
+---
+
+# 十、设计 Resources Runtime
+
+创建：
+
+docs/design/07_RESOURCE_LOADING.md
+
+研究：
+
+* AssetManager
+* Resources
+* ResourcesManager
+* ResourcesImpl
+* Configuration
+* DisplayMetrics
+* ApkAssets
+* LoadedApk
+
+回答：
+
+如何让 Guest：
+
+getResources()
+
+getAssets()
+
+R.drawable
+
+R.layout
+
+theme
+
+configuration
+
+locale
+
+density
+
+正常工作。
+
+还要考虑：
+
+Host Resources
+
+与：
+
+Guest Resources
+
+不能互相污染。
+
+---
+
+# 十一、设计 Application Runtime
+
+创建：
+
+docs/design/08_APPLICATION_RUNTIME.md
+
+研究：
+
+ActivityThread 如何创建 Application。
+
+研究：
+
+LoadedApk.makeApplication
+
+Instrumentation.newApplication
+
+ContextImpl
+
+Application.attach
+
+Application.onCreate
+
+然后设计：
+
+Guest Application 的完整生命周期。
+
+回答：
+
+Guest Application：
+
+* 使用什么 ClassLoader
+* 使用什么 Resources
+* 使用什么 packageName
+* 使用什么 filesDir
+* 使用什么 PackageManager
+* 使用什么 ContentResolver
+* 使用什么 Context
+
+---
+
+# 十二、重点设计 Activity Virtualization
+
+创建：
+
+docs/design/09_ACTIVITY_RUNTIME.md
+
+这是后续最复杂模块之一。
+
+本轮必须深入研究，但不要编码。
+
+从正常流程：
+
+```text
+Activity.startActivity()
+→ Instrumentation
+→ ActivityTaskManager
+→ system_server
+→ Task
+→ Process
+→ ActivityThread
+→ ActivityClientRecord
+→ performLaunchActivity
+→ Activity
+```
+
+开始。
+
+然后提出核心问题：
+
+Guest Activity 没有注册在 Host Manifest。
+
+ATMS 不认识它。
+
+那么：
+
+我们如何：
+
+1. 请求启动 Guest Activity
+2. 让 Android System 接受启动请求
+3. 保留 Android Task/Window 管理
+4. 最终运行真正的 Guest Activity
+
+至少提出：
+
+方案 A
+方案 B
+方案 C
+
+分别分析。
+
+不要直接宣布某一种就是最终答案。
+
+需要分析：
+
+* Android 版本兼容
+* task
+* launchMode
+* affinity
+* Intent
+* result
+* flags
+* saved state
+* orientation
+* theme
+* window
+* lifecycle
+
+最终给出推荐设计和理由。
+
+---
+
+# 十三、设计 Service Runtime
+
+创建：
+
+docs/design/10_SERVICE_RUNTIME.md
+
+研究：
+
+startService
+bindService
+stopService
+
+Android 原生：
+
+AMS
+ActiveServices
+ActivityThread
+Service
+
+设计 Guest Service：
+
+* start
+* stop
+* bind
+* unbind
+* ServiceConnection
+* binder
+* foreground service
+
+尤其考虑：
+
+Android 8+
+Android 12+
+Android 14+
+
+后台启动限制。
+
+---
+
+# 十四、设计 Broadcast Runtime
+
+创建：
+
+docs/design/11_BROADCAST_RUNTIME.md
+
+区分：
+
+static receiver
+
+dynamic receiver
+
+system broadcast
+
+guest internal broadcast
+
+host broadcast
+
+设计：
+
+哪些可以由系统真实处理。
+
+哪些需要 Runtime 内部处理。
+
+---
+
+# 十五、设计 Provider Runtime
+
+创建：
+
+docs/design/12_PROVIDER_RUNTIME.md
+
+ContentProvider 是重要难点。
+
+研究：
+
+ActivityThread.installProvider
+
+AMS Provider
+
+ContentResolver
+
+IContentProvider
+
+authority
+
+设计：
+
+Guest authority 如何避免冲突。
+
+多个 Guest 实例如何隔离。
+
+---
+
+# 十六、设计 System Service Compatibility Layer
+
+创建：
+
+docs/design/13_SYSTEM_SERVICE_COMPATIBILITY.md
+
+这是整个框架核心之一。
+
+不要现在实现所谓：
+
+Hook Framework。
+
+先从问题本身设计。
+
+例如：
+
+Guest 调：
+
+PackageManager.getPackageInfo(guestPkg)
+
+真实 PMS：
+
+“package not found”
+
+所以必须存在某种：
+
+Guest compatibility mechanism。
+
+继续分析：
+
+ActivityManager
+ActivityTaskManager
+PackageManager
+AppOps
+Notification
+Clipboard
+Storage
+Account
+Location
+Connectivity
+
+将 Service 分成：
+
+Level 0
+
+无需处理。
+
+Level 1
+
+只需要参数转换。
+
+Level 2
+
+需要返回值转换。
+
+Level 3
+
+需要完整虚拟实现。
+
+Level 4
+
+暂不支持。
+
+建立 System Service 支持矩阵。
+
+---
+
+# 十七、设计身份模型
+
+创建：
+
+docs/design/14_IDENTITY_MODEL.md
+
+这是非常重要的一份文档。
+
+区分：
+
+Host Identity
+
+Guest Logical Identity
+
+Android Kernel Identity
+
+包括：
+
+* UID
+* PID
+* packageName
+* processName
+* attributionSource
+* userId
+* appId
+* signingInfo
+* install source
+* package path
+
+回答：
+
+哪些身份：
+
+可以真正隔离。
+
+哪些：
+
+只能逻辑虚拟化。
+
+哪些：
+
+绝对不能伪装。
+
+这份文档还必须明确：
+
+项目不用于规避第三方 App 安全检测。
+
+---
+
+# 十八、设计 Process Model
+
+创建：
+
+docs/design/15_PROCESS_MODEL.md
+
+讨论：
+
+方案 A：
+
+所有 Guest 在 Host 主进程。
+
+方案 B：
+
+Guest 共用 Sandbox Process。
+
+方案 C：
+
+每个 Guest instance 独立 Sandbox Process。
+
+方案 D：
+
+固定 Process Slot Pool。
+
+分别分析：
+
+* memory
+* isolation
+* lifecycle
+* crash
+* processName
+* Binder
+* Android manifest
+* scalability
+* multi instance
+
+最终给出阶段性推荐。
+
+---
+
+# 十九、设计 Native Library 支持
+
+创建：
+
+docs/design/16_NATIVE_RUNTIME.md
+
+很多 App 包含：
+
+lib/arm64-v8a/*.so
+
+需要研究：
+
+System.loadLibrary
+Runtime.nativeLoad
+ClassLoader native path
+JNI_OnLoad
+dlopen
+
+设计：
+
+Guest native library：
+
+* 如何提取
+* 放在哪里
+* ABI 如何选
+* ClassLoader 如何找到
+* 多 Guest 同名 .so 怎么处理
+
+本轮不要实现 native hook。
+
+---
+
+# 二十、权限模型
+
+创建：
+
+docs/design/17_PERMISSION_MODEL.md
+
+这是虚拟化产品必须提前设计的。
+
+例如：
+
+Guest 声明：
+
+CAMERA
+LOCATION
+CONTACTS
+
+但 Android 实际运行身份：
+
+Host。
+
+那么：
+
+谁申请 runtime permission？
+
+Host？
+
+Guest？
+
+需要建立：
+
+Guest permission state
+
+与：
+
+Host Android permission state
+
+之间关系。
+
+分析：
+
+* dangerous permission
+* normal permission
+* signature permission
+* appops
+* special permission
+
+明确哪些能力无法安全虚拟化。
+
+---
+
+# 二十一、多实例设计
+
+创建：
+
+docs/design/18_MULTI_INSTANCE.md
+
+正式定义：
+
+Package
+
+与：
+
+Instance
+
+必须分离。
+
+例如：
+
+GuestPackage:
+
+com.example.app
+
+GuestInstance:
+
+instance-A
+instance-B
+instance-C
+
+每个 Instance：
+
+独立：
+
+* data
+* SharedPreferences
+* DB
+* cache
+* files
+* runtime state
+
+但共享：
+
+* APK
+* Resources
+* Dex
+
+或者是否共享，需要分析。
+
+---
+
+# 二十二、Android Version Compatibility
+
+创建：
+
+docs/design/19_ANDROID_VERSION_MATRIX.md
+
+至少覆盖：
+
+Android 9
+Android 10
+Android 11
+Android 12
+Android 13
+Android 14
+Android 15
+Android 16
+
+建立表：
+
+| 模块 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 |
+| -- | - | -- | -- | -- | -- | -- | -- | -- |
+
+包括：
+
+Activity launch
+
+Package parsing
+
+hidden APIs
+
+foreground service
+
+notification
+
+storage
+
+provider
+
+permission
+
+class loading
+
+Binder
+
+版本变化。
+
+如果当前无法确认 Android 16：
+
+明确标为：
+
+Research Needed
+
+不要猜。
+
+---
+
+# 二十三、Hidden API 问题
+
+创建：
+
+docs/design/20_HIDDEN_API_STRATEGY.md
+
+不要直接采用 hidden API bypass。
+
+首先统计：
+
+按照当前设计：
+
+哪些地方必须访问 hidden API？
+
+对于每一个 hidden API：
+
+问：
+
+是否存在：
+
+Public API
+
+替代方案
+
+JNI
+
+Binder public path
+
+architecture redesign
+
+只有完全无法替代的才保留。
+
+目标是：
+
+尽量减少对 hidden API 的依赖。
+
+---
+
+# 二十四、安全与隔离
+
+创建：
+
+docs/design/21_SECURITY_MODEL.md
+
+必须明确：
+
+AppSandbox 不是 Android OS 级真正沙箱。
+
+因为多个 Guest 最终可能运行在相同 Linux UID 下。
+
+分析：
+
+我们能够提供的：
+
+Logical isolation
+
+与真正 Kernel Isolation
+
+的区别。
+
+防止产品宣传：
+
+“完全安全沙箱”
+
+这种不准确表述。
+
+同时设计：
+
+* path traversal
+* malicious APK
+* zip bomb
+* native library
+* exported component
+* Intent injection
+* provider exposure
+* arbitrary file access
+
+风险。
+
+---
+
+# 二十五、Google Play 与产品约束
+
+创建：
+
+docs/design/22_PRODUCT_AND_PLAY_CONSTRAINTS.md
+
+这里只研究产品设计影响。
+
+包括：
+
+* QUERY_ALL_PACKAGES
+* SAF
+* APK 获取来源
+* 动态代码
+* 用户主动选择 APK
+* 第三方 App 兼容
+* 权限
+* 后台运行
+* Accessibility 禁止成为必要依赖
+* 不提供作弊/绕过功能
+
+不要把文档写成法律意见。
+
+只记录：
+
+哪些技术设计会影响 Play 发布。
+
+---
+
+# 二十六、建立最终模块依赖图
+
+创建：
+
+docs/design/23_MODULE_DEPENDENCY_GRAPH.md
+
+画出所有模块：
+
+Package
+Storage
+Code
+Resources
+Application
+Activity
+Service
+Receiver
+Provider
+System Bridge
+Identity
+Process
+Permission
+Native
+Multi Instance
+
+依赖关系。
+
+明确：
+
+哪些模块必须先完成。
+
+例如不能出现：
+
+Activity Runtime
+依赖 Package Runtime
+
+但 Roadmap 却先实现 Activity。
+
+---
+
+# 二十七、重新设计完整 Roadmap
+
+创建：
+
+docs/design/24_IMPLEMENTATION_ROADMAP.md
+
+这次不要只是：
+
+Phase 1
+Phase 2
+Phase 3
+
+需要拆成：
+
+Milestone
+
+→ Goal
+
+→ Dependencies
+
+→ Deliverables
+
+→ Experiments
+
+→ Exit Criteria
+
+→ Risks
+
+例如：
+
+M2 Guest Package Runtime
+
+目标：
+
+Guest Package 可以完全由我们自己的 Registry 表示。
+
+前置：
+
+APK parser
+
+完成条件：
+
+* package
+* application
+* activities
+* services
+* receiver
+* provider
+* intent-filter
+
+全部进入 Registry。
+
+验证：
+
+可以不依赖系统安装状态完成 Intent Resolution。
+
+但：
+
+不启动 Activity。
+
+然后才进入下一阶段。
+
+---
+
+# 二十八、建立实验计划
+
+创建：
+
+docs/design/25_EXPERIMENT_PLAN.md
+
+未来不要直接在主项目里尝试 Framework Hack。
+
+每个未知机制先建立：
+
+实验。
+
+例如：
+
+Experiment 001
+
+Package Archive Parsing
+
+Experiment 002
+
+DexClassLoader
+
+Experiment 003
+
+External Resources
+
+Experiment 004
+
+Application attach
+
+Experiment 005
+
+Activity launch
+
+每个 Experiment 包含：
+
+Question
+
+Hypothesis
+
+Setup
+
+Expected
+
+Observed
+
+Conclusion
+
+Impact on architecture
+
+---
+
+# 二十九、建立 Architecture Decision Record
+
+创建：
+
+docs/adr/
+
+格式：
+
+ADR-0001-xxx.md
+
+至少创建 ADR 模板：
+
+docs/adr/ADR_TEMPLATE.md
+
+格式：
+
+Title
+
+Status
+
+Context
+
+Options
+
+Decision
+
+Reason
+
+Consequences
+
+Risks
+
+References
+
+以后所有重要架构决定：
+
+必须留下 ADR。
+
+---
+
+# 三十、创建术语表
+
+创建：
+
+docs/design/26_GLOSSARY.md
+
+明确：
+
+Host
+Guest
+Guest Package
+Guest Instance
+Guest Runtime
+Sandbox Process
+Logical Identity
+Android Identity
+Component
+Registry
+Bridge
+
+避免以后概念混乱。
+
+---
+
+# 三十一、建立“不做什么”
+
+创建：
+
+docs/design/27_NON_GOALS.md
+
+明确当前框架不追求：
+
+* 完整 Android OS 虚拟机
+* Kernel namespace sandbox
+* root
+* Magisk
+* Xposed
+* 游戏外挂
+* 反检测
+* DRM bypass
+* 自动化控制其他 App
+* 第三方 App 网络协议破解
+* 模拟不同设备身份
+* 修改第三方 App 服务器请求
+
+这样以后架构不会失控。
+
+---
+
+# 三十二、需要进行技术方案比较
+
+对于这些关键问题：
+
+不要直接选一个方案。
+
+至少给出：
+
+Option A
+Option B
+Option C
+
+然后比较：
+
+Complexity
+Compatibility
+Maintainability
+Android version sensitivity
+Security
+Performance
+Testing difficulty
+
+特别包括：
+
+1. Guest Process Model
+2. Activity Launch Strategy
+3. Guest Package Model
+4. Intent Resolution
+5. Storage Layout
+6. ClassLoader hierarchy
+7. Resources loading
+8. System Service compatibility
+9. Multi-instance model
+10. Native library loading
+
+最终可以推荐一个方案。
+
+但必须写：
+
+为什么。
+
+---
+
+# 三十三、源码/AOSP引用要求
+
+所有 Android Framework 关键结论尽量记录：
+
+AOSP class
+
+method
+
+module
+
+例如：
+
+ActivityThread
+frameworks/base/core/java/android/app/ActivityThread.java
+
+而不是只写：
+
+“Android 会这么做”。
+
+如果不同 Android 版本实现变化：
+
+注明版本。
+
+不要机械复制大量 AOSP 源码。
+
+我们需要理解：
+
+机制。
+
+不是复制实现。
+
+---
+
+# 三十四、最终创建 MASTER DESIGN
+
+创建：
+
+docs/APP_SANDBOX_MASTER_DESIGN.md
+
+这是最终入口。
+
+不要把所有内容重复一遍。
+
+它应该：
+
+介绍目标
+
+↓
+
+核心 Android 问题
+
+↓
+
+总体架构
+
+↓
+
+模块列表
+
+↓
+
+模块依赖
+
+↓
+
+关键设计
+
+↓
+
+Roadmap
+
+↓
+
+风险
+
+然后链接：
+
+design/01
+design/02
+...
+
+以后开发人员首先阅读：
+
+MASTER DESIGN。
+
+---
+
+# 三十五、本轮最重要的要求
+
+不要为了让文档“看起来完整”而假装所有问题已经解决。
+
+请将所有问题分成：
+
+CONFIRMED
+
+PROPOSED
+
+RESEARCH NEEDED
+
+BLOCKED
+
+例如：
+
+Android 9 行为已通过 AOSP 验证：
+
+CONFIRMED
+
+我们认为 Process Slot 可行但未实验：
+
+PROPOSED
+
+Android 16 Activity launch 尚未研究：
+
+RESEARCH NEEDED
+
+不要把猜测写成事实。
+
+---
+
+# 三十六、禁止过度设计
+
+虽然本轮要完整规划：
+
+但不要设计：
+
+100 个 Interface
+
+50 个 Manager
+
+复杂 DI Framework
+
+复杂 Event Bus
+
+微服务式 Android 架构
+
+我们首先需要：
+
+正确理解 Android。
+
+然后才决定抽象。
+
+架构应该：
+
+简单
+可验证
+逐层构建
+
+---
+
+# 三十七、请检查现有工程
+
+先阅读：
+
+当前代码
+
+现有：
+
+docs/CLEAN_ROOM.md
+docs/ARCHITECTURE.md
+docs/ANDROID_RESEARCH.md
+docs/ROADMAP.md
+
+不要删除历史内容。
+
+如果新的设计替代旧设计：
+
+标记：
+
+Superseded
+
+或者：
+
+更新旧文档。
+
+---
+
+# 三十八、本轮结束后不要实施
+
+完成所有文档后：
+
+停止。
+
+不要进入：
+
+Package Registry 编码。
+
+不要创建：
+
+Activity Stub。
+
+不要创建：
+
+Binder Hook。
+
+不要修改：
+
+Manifest。
+
+我们下一轮会单独选择：
+
+第一个 Milestone。
+
+---
+
+# 三十九、最终回传格式
+
+完成后返回：
+
+## 1. 文档列表
+
+完整列出：
+
+docs/
+
+目录树。
+
+---
+
+## 2. 总体架构摘要
+
+不超过 1000 字。
+
+说明：
+
+最终设计出的核心模块。
+
+---
+
+## 3. 最关键的 10 个技术问题
+
+例如：
+
+Guest Package
+
+Activity Launch
+
+Identity
+
+System Service
+
+等等。
+
+每个说明当前状态：
+
+CONFIRMED
+
+PROPOSED
+
+RESEARCH NEEDED
+
+---
+
+## 4. 最关键的架构决策
+
+列出所有已经确定的 ADR。
+
+---
+
+## 5. 尚未确定的问题
+
+明确列出：
+
+Open Questions。
+
+不要隐藏。
+
+---
+
+## 6. 推荐实施顺序
+
+输出最终：
+
+Milestone 0
+Milestone 1
+...
+
+每个只写：
+
+名称
+目标
+依赖
+
+---
+
+## 7. 风险最高的五个模块
+
+说明为什么。
+
+---
+
+## 8. Android Framework 调研
+
+列出本轮实际查看的：
+
+AOSP class
+method
+source path
+Android version
+
+---
+
+## 9. Clean-room 检查
+
+明确回答：
+
+是否查看 VirtualApp 源码：否
+
+是否查看 BlackBox 源码：否
+
+是否查看其他应用虚拟化实现源码：否
+
+是否复制相关代码：否
+
+技术依据来自：
+
+Android/AOSP/官方资料/自行推导
+
+---
+
+## 10. Git 状态
+
+返回：
+
+git status --short
+
+git diff --stat
+
+本轮正常情况下：
+
+应该只有 docs 文件发生变化。
+
+如果修改了生产代码：
+
+必须逐项说明原因。
+
+---
+
+## 11. 下一阶段建议
+
+只推荐：
+
+下一阶段应该先验证哪个最基础的架构假设。
+
+不要实施。
+
+特别注意：
+
+下一阶段不一定马上开始写完整模块。
+
+如果存在关键 Android 原理尚未确认：
+
+应该先做最小实验。
+
+我们的开发规则以后固定为：
+
+Research
+→ Design
+→ Experiment
+→ ADR
+→ Implementation
+→ Verification
+
+而不是：
+
+先写代码
+→ 出问题
+→ 再猜 Android 原理。

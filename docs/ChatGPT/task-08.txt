@@ -1,0 +1,1694 @@
+继续负责当前 AppSandbox 项目。
+
+这轮不是进入 EXP-003。
+
+上一轮 EXP-002 的执行已经经过独立审计，发现一个根本性的实验设计错误：
+
+当前 `Exp002Runner.kt` 中 Guest Resources 的创建逻辑类似：
+
+```kotlin
+Resources(
+    activity.resources.assets,
+    ...,
+    ...
+).apply {
+    addLoaders(loader)
+}
+```
+
+这意味着：
+
+```text
+Host AssetManager
+        ↓
+Host Resources Table
+        +
+Guest ResourcesLoader
+        ↓
+Merged / Overlaid Resource Space
+```
+
+而不是：
+
+```text
+Framework Resources
+        +
+Guest APK
+        ↓
+Isolated Guest Resource Space
+```
+
+因此上一轮以下结论全部需要重新验证：
+
+* Layout XML 为什么失败
+* getIdentifier() 为什么返回 0
+* Host/Guest resource collision 是否真正隔离
+* AssetManager 是否独立
+* Guest 是否能够看到 Host private resources
+
+当前：
+
+# EXP-002 必须退回重新验证。
+
+不要基于上一轮结果进入 EXP-003。
+
+---
+
+# 一、本轮最终目标
+
+重新回答最核心的问题：
+
+> 在 Guest APK 没有安装到 PMS 的情况下，能否建立一个“不包含 Host App 私有资源”的 Guest Resources 环境，并正确解析 Guest APK 的完整资源，包括 compiled layout XML？
+
+重点不是：
+
+“能读取 Guest string”。
+
+而是：
+
+# Guest Resource Namespace 是否真正独立。
+
+本轮要比较至少两种完全基于 Android 官方 API 的实现路线。
+
+最终选出：
+
+* 可工作的 API 30+ baseline
+* 可能适用于 API 28/29 的候选路线
+
+但暂时不要把任何实验方案升级成最终生产架构。
+
+---
+
+# 二、首先纠正上一轮结果文档
+
+阅读：
+
+```text
+docs/experiments/EXP-002-RESULT.md
+```
+
+不要删除历史结果。
+
+增加：
+
+```text
+Post-experiment audit
+```
+
+明确记录：
+
+上一轮 Guest Resources 是建立在：
+
+```text
+activity.resources.assets
+```
+
+之上的。
+
+因此：
+
+```text
+Host resource table was part of the base Resources.
+```
+
+上一轮以下结论：
+
+```text
+Resource namespace isolation = confirmed
+```
+
+撤销。
+
+改为：
+
+```text
+INVALIDATED BY EXPERIMENT DESIGN
+```
+
+上一轮：
+
+```text
+Layout failure is Xiaomi/API31 ResourcesProvider limitation
+```
+
+也撤销。
+
+改成：
+
+```text
+ROOT CAUSE NOT CONFIRMED
+```
+
+不要继续保留错误归因。
+
+---
+
+# 三、先复现并证明旧方案为什么错
+
+不要直接删除旧实现。
+
+把旧 Resources 创建方式临时命名为：
+
+```text
+LEGACY_HOST_BASED
+```
+
+只用于 diagnostic comparison。
+
+不要用于最终实验结论。
+
+使用：
+
+```text
+aapt2 dump resources
+```
+
+分别检查：
+
+Host APK
+
+和：
+
+Guest APK。
+
+确认审计发现的 ID collision。
+
+至少记录：
+
+```text
+Guest ID
+Guest type/name
+
+Host same numeric ID
+Host type/name
+```
+
+例如上一轮审计观察：
+
+```text
+Guest 0x7f040000
+= layout/exp002_test_layout
+
+Host 0x7f040000
+= bool/...
+```
+
+必须基于当前最新 APK 实际重新读取。
+
+不要使用过时的 ID。
+
+---
+
+# 四、在旧方案上重新执行 Layout 失败
+
+只为了证明根因。
+
+用：
+
+```text
+LEGACY_HOST_BASED Resources
+```
+
+访问 Guest：
+
+```text
+0x7f040000
+```
+
+然后记录：
+
+```text
+getResourcePackageName
+getResourceTypeName
+getResourceEntryName
+```
+
+再执行：
+
+```text
+getLayout()
+getXml()
+```
+
+重点验证：
+
+失败时，该 ID 是否实际上被解释为 Host resource type。
+
+如果：
+
+```text
+Guest expected:
+layout
+
+Runtime sees:
+bool
+```
+
+那么可以确认：
+
+# Layout failure came from Host/Guest package-ID collision in the merged resource space.
+
+只有拿到运行证据后才能写这个结论。
+
+不要根据审计文字直接写死。
+
+---
+
+# 五、建立真正的双向 Resource Leakage Test
+
+上一轮 collision test 不够。
+
+现在必须增加两个方向。
+
+## Guest → Host
+
+Host Resources 使用：
+
+```text
+Guest numeric resource ID
+```
+
+尝试读取 Guest unique string。
+
+预期：
+
+不能得到 Guest marker。
+
+记录：
+
+```text
+HOST_CAN_READ_GUEST_PRIVATE_RESOURCE =
+```
+
+理想：
+
+false。
+
+---
+
+## Host → Guest
+
+在 Host Debug source set 添加一个：
+
+```text
+exp002_host_only
+```
+
+唯一 string。
+
+例如：
+
+```text
+EXP002_HOST_ONLY_<FULL_UUID>
+```
+
+必须放在：
+
+```text
+app/src/debug/res/values/
+```
+
+禁止放：
+
+```text
+app/src/main/res/
+```
+
+然后获取 Host numeric ID。
+
+使用真正候选 Guest Resources 读取这个 Host ID。
+
+预期：
+
+```text
+Resources.NotFoundException
+```
+
+或者其他明确的不存在结果。
+
+记录：
+
+```text
+GUEST_CAN_READ_HOST_PRIVATE_RESOURCE =
+```
+
+理想：
+
+false。
+
+只有：
+
+```text
+Host cannot see Guest
+AND
+Guest cannot see Host
+```
+
+才能讨论：
+
+resource namespace isolation。
+
+---
+
+# 六、再增加 Asset Leakage Test
+
+Host debug assets 增加：
+
+```text
+exp002_host_only_asset.txt
+```
+
+内容：
+
+完整 UUID marker。
+
+Guest assets 保持：
+
+```text
+exp002_asset.txt
+```
+
+然后验证：
+
+Guest AssetManager：
+
+应该能够：
+
+```text
+open guest asset
+```
+
+但不能：
+
+```text
+open host-only asset
+```
+
+同时 Host AssetManager：
+
+不能读取 Guest-only asset。
+
+记录：
+
+```text
+Guest AssetManager sees Guest asset =
+Guest AssetManager sees Host-only asset =
+
+Host AssetManager sees Host asset =
+Host AssetManager sees Guest-only asset =
+```
+
+这是判断 AssetManager 是否真正隔离的重要证据。
+
+---
+
+# 七、检查 AssetManager identity
+
+每一种 Resources 创建方案必须记录：
+
+```text
+activity.resources.assets
+Resources.getSystem().assets
+guestResources.assets
+```
+
+比较：
+
+```text
+guestAssets === activity.resources.assets
+guestAssets === Resources.getSystem().assets
+```
+
+还要记录：
+
+```text
+guestAssets.toString()
+hostAssets.toString()
+systemAssets.toString()
+```
+
+如果能通过公开 API得到更多安全信息：
+
+可以记录。
+
+不要使用 hidden reflection 来检查内部 native pointer。
+
+---
+
+# 八、方案 A：API 30+ ResourcesLoader + System-only base
+
+这是本轮第一个正式候选实验。
+
+目标：
+
+让 base Resources：
+
+只包含 framework/system resources。
+
+不要包含：
+
+Host package resources。
+
+---
+
+## 方案 A 的实验模型
+
+概念：
+
+```text
+Resources.getSystem().assets
+        ↓
+system/framework resources only
+        +
+ResourcesProvider(Guest APK)
+        ↓
+ResourcesLoader
+        ↓
+Experimental Guest Resources
+```
+
+可以实验：
+
+```kotlin
+Resources(
+    Resources.getSystem().assets,
+    displayMetrics,
+    configuration
+)
+```
+
+然后：
+
+```kotlin
+addLoaders(guestLoader)
+```
+
+但是必须明确：
+
+# Resources(AssetManager, DisplayMetrics, Configuration) 是 deprecated public constructor。
+
+因此：
+
+它只用于：
+
+```text
+EXP-002 isolation experiment
+```
+
+不能因为实验成功就直接确定为最终 production architecture。
+
+---
+
+# 九、严禁污染 Resources.getSystem()
+
+不要：
+
+```kotlin
+Resources.getSystem().addLoaders(...)
+```
+
+因为：
+
+```text
+Resources.getSystem()
+```
+
+是全局共享 system Resources。
+
+我们只允许：
+
+读取：
+
+```text
+Resources.getSystem().assets
+```
+
+作为实验 base。
+
+然后构造独立测试 Resources。
+
+绝不能直接修改 global system Resources。
+
+---
+
+# 十、方案 A 必须验证完整资源
+
+重新验证：
+
+```text
+String
+Raw
+Assets
+Color
+Drawable
+Layout XML
+Configuration
+Collision
+Missing
+Wrong Type
+Corrupt APK
+```
+
+尤其：
+
+# Layout XML 是核心。
+
+使用：
+
+```text
+guestResources.getLayout(guestLayoutId)
+```
+
+和：
+
+```text
+guestResources.getXml(guestLayoutId)
+```
+
+必须获得：
+
+```text
+XmlResourceParser
+```
+
+至少读取：
+
+```text
+root tag
+child tag
+```
+
+不需要 LayoutInflater。
+
+不要进入 Context。
+
+---
+
+# 十一、方案 A 必须重新验证 metadata
+
+使用：
+
+```text
+guestResources.getResourcePackageName(id)
+guestResources.getResourceTypeName(id)
+guestResources.getResourceEntryName(id)
+```
+
+对于：
+
+```text
+guestLayoutId
+```
+
+必须返回：
+
+```text
+package =
+com.example.appsandbox.testguest
+
+type =
+layout
+
+entry =
+exp002_test_layout
+```
+
+如果还返回 Host：
+
+bool/dimen/string
+
+则方案仍存在污染。
+
+---
+
+# 十二、方案 A 重新验证 getIdentifier
+
+只有在 Resources 真正隔离后，重新测试：
+
+```text
+Form 1
+Form 2
+Form 3
+```
+
+如果：
+
+```text
+numeric ID works
+metadata works
+layout works
+getIdentifier still returns 0
+```
+
+那么才能把：
+
+```text
+getIdentifier limitation
+```
+
+作为独立现象记录。
+
+上一轮不能这么下结论。
+
+---
+
+# 十三、方案 B：PackageManager archive ApplicationInfo resources
+
+这是第二个候选实验。
+
+目标：
+
+研究 Android PackageManager 自身是否可以利用：
+
+```text
+ApplicationInfo
+```
+
+和 archive APK path
+
+建立资源环境。
+
+---
+
+# 十四、构造 Archive ApplicationInfo
+
+使用当前已经验证的：
+
+```text
+PackageManager.getPackageArchiveInfo(...)
+```
+
+读取最新 Guest APK。
+
+获取：
+
+```text
+ApplicationInfo
+```
+
+建立实验副本。
+
+设置至少：
+
+```text
+sourceDir = guestApkPath
+publicSourceDir = guestApkPath
+```
+
+不要修改原始对象后影响 Guest Store metadata。
+
+根据 Android public API 能力进行。
+
+不要使用 hidden fields。
+
+---
+
+# 十五、测试 getResourcesForApplication(ApplicationInfo)
+
+调用公开 API：
+
+```text
+packageManager.getResourcesForApplication(applicationInfo)
+```
+
+在 API 31 设备上实际执行。
+
+注意：
+
+# 不要预设它一定支持未安装 APK。
+
+这是实验问题。
+
+结果只允许：
+
+```text
+WORKS
+FAILS
+PARTIAL
+```
+
+如果：
+
+```text
+NameNotFoundException
+```
+
+记录。
+
+如果成功：
+
+继续完整 Resources 测试。
+
+---
+
+# 十六、方案 B 如果成功，需要重点观察
+
+记录：
+
+```text
+guestResources.assets === activity.resources.assets
+```
+
+必须检查。
+
+再验证：
+
+```text
+Guest resources see Host private resources?
+Host resources see Guest?
+```
+
+以及：
+
+```text
+getLayout
+getXml
+getIdentifier
+configuration
+assets
+```
+
+全部测试。
+
+---
+
+# 十七、方案 B 与 Android 9/10
+
+`getResourcesForApplication(ApplicationInfo)` 是早期 Android 就存在的公开 API。
+
+因此它有潜力成为：
+
+```text
+API 28/29 candidate
+```
+
+但：
+
+# 在 Android 12 成功不代表 Android 9/10 已确认。
+
+本轮只能写：
+
+```text
+API 28/29 candidate path
+```
+
+除非你真的在：
+
+Android 9/API 28
+
+以及：
+
+Android 10/API 29
+
+设备或官方 emulator 上实际执行。
+
+---
+
+# 十八、如果当前开发环境可以方便启动 Emulator
+
+允许额外执行：
+
+```text
+API 28 emulator
+API 29 emulator
+```
+
+但仅针对：
+
+方案 B。
+
+不要为了兼容测试重构项目。
+
+如果 emulator 当前不可用：
+
+标：
+
+```text
+API28/29 = RESEARCH NEEDED
+```
+
+不要阻塞当前 API31 baseline 的根因修复。
+
+---
+
+# 十九、方案比较文档
+
+之前 task-06 要求：
+
+Option A / B comparison
+
+但没有真正落地。
+
+现在创建：
+
+```text
+docs/experiments/EXP-002-RESOURCE-STRATEGY-COMPARISON.md
+```
+
+内容至少比较：
+
+```text
+Legacy Host-based Resources
+Option A: System-base + ResourcesLoader
+Option B: PackageManager archive resources
+```
+
+维度：
+
+```text
+Host resource isolation
+Guest resource isolation
+Layout XML
+Assets
+Configuration
+getIdentifier
+API level
+Public/Deprecated API
+Android version sensitivity
+Lifecycle
+Maintainability
+Production suitability
+```
+
+注意：
+
+Legacy 只作为错误基线。
+
+---
+
+# 二十、修正 marker 验证
+
+上一轮：
+
+```text
+marker.startsWith("EXP002_STRING_")
+```
+
+不够严格。
+
+现在所有 marker：
+
+必须保存完整 expected value。
+
+例如：
+
+```text
+EXP002_STRING_<UUID>
+```
+
+判断：
+
+```text
+expected == actual
+```
+
+完整字符串相等。
+
+Raw / Asset：
+
+同样如此。
+
+禁止只比前缀。
+
+---
+
+# 二十一、修正 Missing Resource Test
+
+不要再使用：
+
+```text
+resource ID = 0
+```
+
+因为：
+
+0 本来就是 Android 定义的 invalid/null resource ID。
+
+首先通过：
+
+```text
+aapt2 dump resources
+```
+
+确认某个测试 ID 不存在。
+
+例如候选：
+
+```text
+0x7f06ffff
+```
+
+只有确认 APK resources table 中确实不存在后：
+
+才用作 missing-resource test。
+
+记录：
+
+```text
+TEST_ID_ABSENT_FROM_APK_TABLE = true
+```
+
+然后调用：
+
+Guest Resources。
+
+---
+
+# 二十二、修正 Debug Host Resource
+
+把：
+
+```text
+app/src/main/res/values/exp002_collision.xml
+```
+
+移出 main source set。
+
+改成：
+
+```text
+app/src/debug/res/values/exp002_collision.xml
+```
+
+所有 EXP-002 Host-only resource：
+
+必须：
+
+debug-only。
+
+检查 Release build：
+
+不包含 EXP-002 实验 Host marker。
+
+---
+
+# 二十三、修正硬编码实验结论
+
+检查：
+
+```text
+Exp002Runner.kt
+```
+
+删除任何：
+
+```text
+conclusion=CONFIRMED
+```
+
+硬编码。
+
+实验代码只应该输出：
+
+各测试项实际结果。
+
+最终：
+
+```text
+CONFIRMED
+PARTIALLY CONFIRMED
+REJECTED
+```
+
+必须由实际测试结果计算或由结果文档根据严格 exit criteria 记录。
+
+不能提前写死。
+
+---
+
+# 二十四、重新定义 EXP-002 成功标准
+
+EXP-002 API31 baseline 只有以下全部成立才允许：
+
+```text
+CONFIRMED
+```
+
+条件：
+
+1. Guest APK 未安装
+2. Imported SHA 与 build SHA 一致
+3. Host 不包含 Guest marker
+4. Guest resource ID 与 APK table ID 一致
+5. Guest Resources metadata 正确指向 Guest package/type/name
+6. String 完整 marker 正确
+7. Raw 完整 marker 正确
+8. Asset 完整 marker 正确
+9. Color 正确
+10. Drawable 正确
+11. Layout `getLayout/getXml` 成功
+12. Configuration qualifier 正确
+13. Guest Resources 无法读取 Host private resource
+14. Guest AssetManager 无法读取 Host private asset
+15. Host Resources 无法读取 Guest private resource
+16. Host AssetManager 无法读取 Guest private asset
+17. Missing resource 可控失败
+18. Wrong type 可控失败
+19. Corrupt APK 可控失败
+20. Host Resources 在实验前后没有被污染
+
+注意：
+
+# getIdentifier() 不再作为硬性 exit criterion。
+
+但是必须调查并记录。
+
+---
+
+# 二十五、Host Resources 污染检测
+
+这是本轮新增加的重要验证。
+
+在执行 Guest loader 前：
+
+记录：
+
+```text
+hostResources.getIdentifier(...)
+host collision value
+host-only asset state
+```
+
+执行 Guest Resources 实验以后：
+
+重新执行同样查询。
+
+必须确认：
+
+Host Resources 行为没有改变。
+
+记录：
+
+```text
+HOST_RESOURCES_CHANGED_AFTER_GUEST_LOAD =
+```
+
+预期：
+
+false。
+
+---
+
+# 二十六、ResourcesLoader / Provider 生命周期
+
+上一轮没有清理 ResourcesProvider。
+
+这一轮必须明确实验对象生命周期。
+
+`ResourcesProvider.loadFromApk()` 会复制传入 file descriptor，因此原 PFD 可按 API 约定关闭。
+
+但：
+
+ResourcesProvider 在仍被 ResourcesLoader 使用时不能直接关闭。
+
+因此设计明确 cleanup 顺序。
+
+例如实验完成后：
+
+```text
+Resources remove loader / detach if API allows
+↓
+ResourcesLoader removeProvider / clearProviders
+↓
+ResourcesProvider.close()
+↓
+close other experiment-owned resources where appropriate
+```
+
+必须根据公开 API 实际能力实现。
+
+不要关闭：
+
+Host AssetManager
+
+或：
+
+Resources.getSystem().assets。
+
+它们不是实验所有。
+
+记录 cleanup 是否成功。
+
+---
+
+# 二十七、不要为了“纯 AssetManager”引入 hidden API
+
+本轮仍然坚持：
+
+# Public API first.
+
+禁止为了制造一个空 AssetManager：
+
+反射隐藏构造函数
+
+或者：
+
+调用 hidden `addAssetPath`
+
+除非：
+
+Option A/B 都失败，
+
+并且本轮最终只是提出下一轮研究方案。
+
+本轮不要直接越级。
+
+---
+
+# 二十八、如果 Option A 成功
+
+记录：
+
+```text
+Option A EXPERIMENTALLY WORKS
+```
+
+但由于：
+
+`Resources(AssetManager, DisplayMetrics, Configuration)`
+
+是 deprecated public constructor，
+
+不要直接把它确定成 production architecture。
+
+ADR 必须标：
+
+```text
+Experimental baseline only
+```
+
+---
+
+# 二十九、如果 Option B 成功
+
+如果：
+
+```text
+PackageManager.getResourcesForApplication(ApplicationInfo)
+```
+
+能够在 Guest 未安装情况下：
+
+建立正确独立 Resources，
+
+则它可能成为更有价值的 production candidate。
+
+但是仍然需要以后：
+
+Android 9
+10
+11
+12
+13
+14
+15
+16
+
+分别验证。
+
+本轮只确认实际测试版本。
+
+---
+
+# 三十、如果 A/B 都成功
+
+不要凭感觉选。
+
+基于：
+
+```text
+public API stability
+deprecated usage
+resource isolation
+layout
+configuration
+API coverage
+lifecycle
+```
+
+给出：
+
+```text
+Preferred candidate
+Secondary candidate
+```
+
+但仍然标：
+
+```text
+PROPOSED
+```
+
+不是最终 production ADR。
+
+---
+
+# 三十一、如果 A 成功、B 失败
+
+可以将：
+
+```text
+API30+ ResourcesLoader path
+```
+
+确认作为：
+
+当前 API30+ baseline。
+
+Android 9/10 单独进入未来：
+
+```text
+EXP-002B
+```
+
+兼容实验。
+
+不要因为 API28/29 尚未解决：
+
+否定 API31 已经被正确验证的事实。
+
+---
+
+# 三十二、如果 B 成功且 A 也成功
+
+优先评估：
+
+B 是否：
+
+* 不依赖 deprecated Resources constructor
+* 能获得独立 AssetManager
+* 支持 compiled layout
+* package name lookup 正确
+* configuration 正确
+
+如果这些更好：
+
+记录。
+
+不要因为 A 是最小修复就自动选 A。
+
+---
+
+# 三十三、Clean-room 继续保持
+
+本轮仍然不能查：
+
+* VirtualApp
+* BlackBox
+* DroidPlugin
+* VirtualXposed
+* sandbox
+* 其他虚拟化框架源码
+
+所有判断来自：
+
+Android SDK
+Android Developers
+AOSP
+实际设备实验
+
+---
+
+# 三十四、不要进入 EXP-003
+
+无论结果如何：
+
+停止在 EXP-002。
+
+本轮禁止：
+
+* Guest Context
+* Guest Application
+* Activity
+* System Service Hook
+* Binder Hook
+* Xposed
+* Native Hook
+
+这些未来允许研究。
+
+但要等：
+
+Resources 基础模型正确。
+
+---
+
+# 三十五、如果 API31 真正隔离版本通过
+
+创建：
+
+```text
+ADR-0006-GUEST-RESOURCE-LOADING-API30PLUS.md
+```
+
+只确认实际证据。
+
+例如：
+
+> 在 Android 12 / API31 上，AppSandbox 能够从未安装 Guest APK 建立不包含 Host private resources 的 Guest Resources 环境，并使用 Guest numeric resource IDs 正确访问 compiled Android resources，包括 binary layout XML。
+
+必须注明具体实现路径。
+
+---
+
+# 三十六、ADR 不允许写的内容
+
+不要声称：
+
+```text
+Android 9/10 supported
+all Android versions supported
+Guest Context solved
+Activity resources solved
+LayoutInflater solved
+Theme solved
+```
+
+除非对应实验实际完成。
+
+---
+
+# 三十七、最终回传格式
+
+完成后返回：
+
+## A. Audit Correction
+
+说明旧实验具体错在哪里。
+
+必须基于实际重现实验，而不是只转述审计意见。
+
+---
+
+## B. Current APK IDs
+
+返回当前最新：
+
+Host / Guest
+
+发生碰撞的 resource ID 对照表。
+
+---
+
+## C. Legacy Reproduction
+
+```text
+Legacy base AssetManager =
+Guest layout ID =
+Runtime metadata type =
+getLayout result =
+```
+
+回答：
+
+旧 layout failure 是否确认由 Host resource collision 导致。
+
+---
+
+## D. Option A
+
+返回：
+
+```text
+Base AssetManager =
+Guest AssetManager == Host AssetManager =
+Guest AssetManager == System AssetManager =
+
+String =
+Raw =
+Asset =
+Color =
+Drawable =
+Layout =
+Configuration =
+
+Guest sees Host resource =
+Guest sees Host asset =
+Host sees Guest resource =
+Host sees Guest asset =
+
+getIdentifier =
+```
+
+---
+
+## E. Option B
+
+返回：
+
+```text
+getPackageArchiveInfo =
+ApplicationInfo sourceDir =
+publicSourceDir =
+
+getResourcesForApplication result =
+
+Guest AssetManager == Host AssetManager =
+
+String =
+Raw =
+Asset =
+Color =
+Drawable =
+Layout =
+Configuration =
+
+Guest sees Host resource =
+Guest sees Host asset =
+Host sees Guest resource =
+Host sees Guest asset =
+
+getIdentifier =
+```
+
+如果失败：
+
+完整 exception。
+
+---
+
+## F. Marker Validation
+
+每个 marker：
+
+```text
+expected full string
+actual full string
+exact match
+```
+
+---
+
+## G. Layout
+
+必须详细：
+
+```text
+resource ID =
+package =
+type =
+entry =
+getLayout =
+getXml =
+root tag =
+```
+
+---
+
+## H. Isolation Matrix
+
+输出：
+
+| Test                          | Legacy | Option A | Option B |
+| ----------------------------- | ------ | -------- | -------- |
+| Guest sees Host private res   |        |          |          |
+| Guest sees Host private asset |        |          |          |
+| Host sees Guest private res   |        |          |          |
+| Host sees Guest private asset |        |          |          |
+| Layout works                  |        |          |          |
+
+---
+
+## I. AssetManager Identity
+
+返回三种方案实际 identity 比较。
+
+---
+
+## J. Host Pollution
+
+```text
+Before guest load =
+After guest load =
+HOST_RESOURCES_CHANGED =
+```
+
+---
+
+## K. Missing / Wrong / Corrupt
+
+返回真实测试结果。
+
+Missing ID 必须：
+
+确认在 APK table 中不存在。
+
+---
+
+## L. getIdentifier
+
+返回三种 form 在：
+
+Legacy
+Option A
+Option B
+
+分别结果。
+
+不要提前解释。
+
+---
+
+## M. Provider Cleanup
+
+说明：
+
+PFD
+ResourcesProvider
+ResourcesLoader
+
+生命周期如何处理。
+
+是否有异常。
+
+---
+
+## N. API Classification
+
+每个核心 API 标：
+
+```text
+PUBLIC
+PUBLIC-DEPRECATED
+HIDDEN
+REFLECTION
+```
+
+本轮目标：
+
+无 HIDDEN / REFLECTION。
+
+---
+
+## O. API 28/29
+
+只能根据实际证据回答：
+
+```text
+CONFIRMED
+RESEARCH NEEDED
+FAILED
+```
+
+如果没有在 API28/29 真机/模拟器执行：
+
+必须：
+
+RESEARCH NEEDED。
+
+---
+
+## P. EXP-002 Final Status
+
+将 API30+ baseline 与 API28/29 compatibility 分开写：
+
+```text
+EXP-002 API30+ =
+CONFIRMED / PARTIALLY CONFIRMED / REJECTED
+
+API28/29 =
+CONFIRMED / RESEARCH NEEDED / REJECTED
+```
+
+不要再用一个状态把两件事混在一起。
+
+---
+
+## Q. Preferred Resource Strategy
+
+只能给：
+
+```text
+PROPOSED
+```
+
+方案。
+
+解释为什么。
+
+不要称 FINAL。
+
+---
+
+## R. ADR
+
+说明：
+
+是否创建 ADR-0006。
+
+如果创建：
+
+给摘要。
+
+---
+
+## S. Modified Files
+
+完整列出。
+
+特别说明：
+
+是否已将 EXP-002 Host resource 从：
+
+```text
+src/main
+```
+
+移至：
+
+```text
+src/debug
+```
+
+---
+
+## T. Git
+
+输出：
+
+```bash
+git status --short
+git diff --stat
+```
+
+---
+
+## U. Next Step
+
+只回答：
+
+```text
+Ready to design EXP-003: YES / NO
+```
+
+注意措辞：
+
+是“design EXP-003”。
+
+不是：
+
+直接执行 EXP-003。
+
+最多给 5 条理由。
+
+完成后停止。

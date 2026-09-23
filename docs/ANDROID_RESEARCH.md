@@ -1,5 +1,7 @@
 # Android research
 
+This file records the initial Phase 1 research. The expanded, status-labeled research baseline is [design/01_ANDROID_APP_RUNTIME_MODEL.md](design/01_ANDROID_APP_RUNTIME_MODEL.md) and [design/25_EXPERIMENT_PLAN.md](design/25_EXPERIMENT_PLAN.md).
+
 ## Parse an uninstalled APK
 
 Problem: obtain package metadata without installing a guest package.

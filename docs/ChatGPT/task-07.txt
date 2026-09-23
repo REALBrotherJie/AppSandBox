@@ -1,0 +1,1420 @@
+继续负责当前 AppSandbox 项目。
+
+当前状态：
+
+# EXP-002 = PARTIALLY CONFIRMED
+
+已经完成：
+
+* GuestTestApp EXP-002 资源设计
+* ResourcesLoader + ResourcesProvider
+* API 31 真实设备运行
+* Guest APK 未安装
+* AppSandbox 私有 APK 路径
+* 独立 Resources / AssetManager
+* Host resource negative control
+* Guest Runtime Resource ID bridge
+* Missing Resource / Wrong Type / Corrupt APK 测试逻辑
+* Guest record 启动恢复
+
+当前真正缺少的只有：
+
+> 使用“重新构建后的、确实包含 EXP-002 resources 的 Guest APK”，重新导入并完成完整资源 marker 验证。
+
+另外目前观察到：
+
+```text
+GuestResources.getIdentifier(...)
+→ 0
+```
+
+但通过 Guest 自己的编译期 Resource ID 可以访问资源。
+
+本轮必须把这件事研究清楚。
+
+---
+
+# 一、本轮目标
+
+完成 EXP-002 最终验证。
+
+本轮要回答两个独立问题：
+
+## Question 1
+
+Guest APK 编译后的 numeric Resource ID：
+
+```text
+R.string.xxx
+R.color.xxx
+R.drawable.xxx
+R.layout.xxx
+R.raw.xxx
+```
+
+是否能够被 AppSandbox 建立的 Guest Resources 正确解析？
+
+## Question 2
+
+为什么：
+
+```text
+Resources.getIdentifier(...)
+```
+
+对 ResourcesProvider 加载的 Guest package 返回 0？
+
+这是否只是：
+
+name → ID lookup
+
+的问题，而不是：
+
+ID → resource value
+
+的问题？
+
+不要把这两个问题混为一谈。
+
+---
+
+# 二、本轮不要进入 EXP-003
+
+禁止：
+
+* Guest Application
+* Guest Context Runtime
+* Activity
+* Service
+* Provider
+* Receiver
+* Binder interception
+* Xposed
+* Method Hook
+* Instrumentation
+* Native Hook
+* JNI
+* Multi-instance
+
+未来允许研究这些技术。
+
+但当前只完成：
+
+# Resources。
+
+---
+
+# 三、首先重新构建 GuestTestApp
+
+确认当前 GuestTestApp 源码已经包含所有 EXP-002 resources。
+
+执行：
+
+```bash
+./gradlew :test-guests:GuestTestApp:clean
+./gradlew :test-guests:GuestTestApp:assembleDebug
+```
+
+记录：
+
+```text
+APK absolute path
+file size
+SHA-256
+build timestamp
+versionCode
+```
+
+本轮尤其重要：
+
+# 不允许继续使用旧的 7285-byte Guest APK，如果它没有包含最新 EXP-002 resources。
+
+重新构建之后必须重新计算 SHA-256。
+
+---
+
+# 四、检查 APK 中确实包含最新资源
+
+在安装/导入之前先做静态确认。
+
+允许使用 Android SDK build-tools，例如：
+
+```text
+aapt2
+apkanalyzer
+```
+
+优先使用当前 SDK 已安装的官方工具。
+
+检查：
+
+* packageName
+* resources table
+* exp002_string
+* exp002_color
+* exp002_drawable
+* exp002_layout
+* exp002_payload
+* configuration variant
+
+记录实际 resource IDs。
+
+例如：
+
+```text
+exp002_string = 0x........
+exp002_color = 0x........
+...
+```
+
+实际值是什么就记录什么。
+
+不要预设一定是 `0x7f...`。
+
+---
+
+# 五、明确 Resource ID 来源
+
+当前已经实现 Guest 内部 Resource ID accessor。
+
+请检查它到底是什么。
+
+理想模型：
+
+```text
+GuestResourceIds
+↓
+在 GuestTestApp 编译
+↓
+引用 Guest 自己的 R.xxx
+↓
+返回编译后的 int
+```
+
+例如概念上：
+
+```text
+stringId()
+colorId()
+layoutId()
+```
+
+Host 不得：
+
+```text
+import Guest R
+```
+
+Host 只能：
+
+```text
+通过 Guest DexClassLoader
+↓
+反射调用 GuestResourceIds
+↓
+获得 numeric ID
+```
+
+这条链必须明确记录。
+
+---
+
+# 六、这是一个非常重要的验证
+
+我们需要证明：
+
+```text
+Guest Code Space
+        │
+        │ Guest R.xxx
+        ↓
+numeric resource ID
+        │
+        ↓
+Guest Resources
+        │
+        ↓
+Guest APK resources.arsc
+        │
+        ↓
+正确 resource value
+```
+
+如果这条链成立：
+
+它非常接近未来 Guest App 真正运行时的行为。
+
+因为正常 Android App 的：
+
+```java
+getString(R.string.foo)
+```
+
+本质也是：
+
+编译期 numeric ID
+
+而不是运行时调用：
+
+```text
+getIdentifier("foo")
+```
+
+---
+
+# 七、重新导入最新 Guest APK
+
+当前 Guest Store 中可能存在旧版本：
+
+```text
+com.example.appsandbox.testguest
+```
+
+不要让旧 APK 污染实验。
+
+先检查当前 Guest Record。
+
+然后采用当前 Guest Store 支持的正常逻辑：
+
+* 删除旧测试 Guest
+* 或导入为新的 Guest record
+* 或执行已经设计好的 revision replacement
+
+选择现有架构最合理的方式。
+
+不要偷偷覆盖文件但保留错误 metadata。
+
+最终必须明确：
+
+```text
+Guest private base.apk SHA256
+```
+
+必须与：
+
+```text
+刚刚重新构建 Guest APK SHA256
+```
+
+完全一致。
+
+记录：
+
+```text
+BUILD_APK_SHA256 =
+IMPORTED_APK_SHA256 =
+SHA_MATCH = true
+```
+
+这是本轮必要证据。
+
+---
+
+# 八、再次确认 Guest 没有安装
+
+执行：
+
+```bash
+adb shell pm path com.example.appsandbox.testguest
+```
+
+必须无输出。
+
+---
+
+# 九、执行 Host Resource Negative Control
+
+继续验证：
+
+Host Resources 不知道 Guest EXP-002 resource。
+
+例如：
+
+```text
+hostResources.getIdentifier(
+    "exp002_string",
+    "string",
+    "com.example.appsandbox.testguest"
+)
+```
+
+记录结果。
+
+预期仍然：
+
+```text
+0
+```
+
+同时确保：
+
+Guest unique marker 不存在 Host APK。
+
+---
+
+# 十、重新建立 Guest Resource Environment
+
+继续使用当前已经验证可工作的：
+
+```text
+ResourcesLoader
++
+ResourcesProvider.loadFromApk(...)
+```
+
+这是 Android 11 / API 30 起公开提供的资源加载机制。
+
+不要切换到 hidden AssetManager API。
+
+不要重写方案。
+
+记录：
+
+```text
+ResourcesProvider class =
+ResourcesLoader class =
+Guest Resources class =
+Guest AssetManager class =
+Guest APK FD source =
+```
+
+---
+
+# 十一、API 使用状态必须明确
+
+确认本轮核心路径：
+
+```text
+ResourcesProvider.loadFromApk
+ResourcesLoader
+Resources.addLoaders
+```
+
+均属于：
+
+```text
+PUBLIC API
+API 30+
+```
+
+如果还使用其他 API：
+
+全部列出。
+
+---
+
+# 十二、首先验证 Guest numeric Resource ID
+
+通过 EXP-001 已确认的 Guest ClassLoader：
+
+加载 Guest Resource ID accessor。
+
+例如：
+
+```text
+GuestResourceIds
+```
+
+实际类名以当前项目为准。
+
+通过 reflection 获取：
+
+```text
+string ID
+color ID
+drawable ID
+layout ID
+raw ID
+config string ID
+collision ID
+```
+
+记录：
+
+```text
+guestStringId =
+guestColorId =
+guestDrawableId =
+guestLayoutId =
+guestRawId =
+guestConfigId =
+guestCollisionId =
+```
+
+---
+
+# 十三、验证 Resource ID metadata
+
+对每个 numeric ID：
+
+使用 Guest Resources：
+
+```text
+getResourcePackageName(id)
+getResourceTypeName(id)
+getResourceEntryName(id)
+```
+
+记录。
+
+例如：
+
+```text
+ID =
+packageName =
+typeName =
+entryName =
+```
+
+这是本轮非常重要的证据。
+
+如果这些 API 能够正确返回：
+
+```text
+com.example.appsandbox.testguest
+string
+exp002_string
+```
+
+说明 Guest Resources 确实理解这个 Resource ID。
+
+---
+
+# 十四、String Marker
+
+使用：
+
+```text
+guestResources.getString(guestStringId)
+```
+
+验证。
+
+返回必须等于：
+
+Guest APK 中定义的 unique marker。
+
+记录：
+
+```text
+expected =
+actual =
+match =
+```
+
+---
+
+# 十五、Raw Marker
+
+使用：
+
+```text
+guestResources.openRawResource(guestRawId)
+```
+
+读取。
+
+记录：
+
+```text
+expected =
+actual =
+match =
+```
+
+---
+
+# 十六、Asset Marker
+
+继续使用：
+
+```text
+guestResources.assets.open(...)
+```
+
+读取：
+
+```text
+exp002_asset.txt
+```
+
+验证 unique marker。
+
+注意：
+
+Asset 没有 `R` resource ID。
+
+它独立于 resources.arsc ID lookup。
+
+记录：
+
+```text
+expected
+actual
+match
+```
+
+---
+
+# 十七、Color
+
+通过 Guest numeric color ID：
+
+读取。
+
+记录：
+
+```text
+ID
+expected ARGB
+actual ARGB
+match
+```
+
+---
+
+# 十八、Drawable
+
+通过 Guest numeric drawable ID：
+
+加载。
+
+记录：
+
+```text
+ID
+Drawable implementation class
+loaded
+```
+
+如果 XML shape drawable 正常实例化：
+
+PASS。
+
+---
+
+# 十九、Layout XML
+
+使用 Guest numeric layout ID：
+
+```text
+guestResources.getLayout(id)
+```
+
+确认可以拿到：
+
+```text
+XmlResourceParser
+```
+
+至少读取：
+
+* 根 tag
+* Guest TextView 节点
+* attribute
+
+不要求进行完整：
+
+```text
+LayoutInflater.inflate()
+```
+
+因为这会引入 Context。
+
+本轮只证明：
+
+# compiled Guest layout XML 可以通过 Guest Resources 读取。
+
+---
+
+# 二十、Configuration
+
+继续当前选定的 qualifier。
+
+例如：
+
+```text
+default
+vs
+land
+```
+
+或者：
+
+```text
+day
+vs
+night
+```
+
+不要临时换方案。
+
+通过相同：
+
+```text
+guestConfigId
+```
+
+在两个 Resources/Configuration 下读取。
+
+记录：
+
+```text
+default value =
+alternate value =
+match =
+```
+
+必须确认：
+
+同一个 numeric Resource ID
+
+根据 Configuration
+
+解析成不同值。
+
+---
+
+# 二十一、Collision
+
+Host 和 Guest 都有：
+
+```text
+exp002_collision
+```
+
+但内容不同。
+
+通过：
+
+Host Resources + Host ID
+
+读取：
+
+```text
+HOST_COLLISION
+```
+
+通过：
+
+Guest Resources + Guest numeric ID
+
+读取：
+
+```text
+GUEST_COLLISION
+```
+
+记录两个 numeric IDs：
+
+```text
+hostCollisionId
+guestCollisionId
+```
+
+即使两个 ID 数值恰好相同：
+
+也不要惊讶。
+
+重要的是：
+
+```text
+Resources object
++
+numeric ID
+```
+
+最终解析空间不同。
+
+记录真实结果。
+
+---
+
+# 二十二、重点调查 getIdentifier() == 0
+
+现在单独调查。
+
+不要修改主资源加载方案。
+
+对 Guest Resources 测试至少以下形式：
+
+### Form 1
+
+```text
+getIdentifier(
+    "exp002_string",
+    "string",
+    "com.example.appsandbox.testguest"
+)
+```
+
+### Form 2
+
+```text
+getIdentifier(
+    "com.example.appsandbox.testguest:string/exp002_string",
+    null,
+    null
+)
+```
+
+### Form 3
+
+如果允许：
+
+```text
+getIdentifier(
+    "string/exp002_string",
+    null,
+    "com.example.appsandbox.testguest"
+)
+```
+
+根据 API 参数实际合法形式执行。
+
+记录每种结果。
+
+---
+
+# 二十三、再与 numeric ID metadata 对照
+
+如果：
+
+```text
+getIdentifier(...) == 0
+```
+
+但：
+
+```text
+getResourcePackageName(guestStringId)
+getResourceTypeName(guestStringId)
+getResourceEntryName(guestStringId)
+getString(guestStringId)
+```
+
+全部成功，
+
+则明确记录：
+
+# Resource value resolution works, while name-to-ID lookup does not work through this loaded provider configuration.
+
+不要因此把整个 Resources Loading 判定为失败。
+
+---
+
+# 二十四、检查 resources table
+
+使用官方 Android SDK 工具检查 Guest APK：
+
+例如：
+
+```text
+aapt2 dump resources
+```
+
+确认：
+
+```text
+package name
+package ID
+resource entry
+numeric ID
+```
+
+与运行时 GuestResourceIds 返回结果对应。
+
+制作表：
+
+| Resource | APK table ID | Guest bridge ID | Runtime metadata | Value |
+| -------- | -----------: | --------------: | ---------------- | ----- |
+
+要求：
+
+APK table ID
+
+和：
+
+Guest bridge ID
+
+应该一致。
+
+---
+
+# 二十五、不要为了 getIdentifier() 强行引入 hidden API
+
+如果：
+
+```text
+getIdentifier == 0
+```
+
+但 numeric ID 完整工作：
+
+本轮不要：
+
+* 反射 AssetManager internals
+* 修改 package groups
+* hidden addAssetPath
+* Hook Resources
+* 修改 resources.arsc
+* 重写 package ID
+* 重新打包 APK
+
+记录限制即可。
+
+未来如果实际 Runtime 需要 name lookup：
+
+再单独研究。
+
+---
+
+# 二十六、为什么 numeric ID 是核心路径
+
+结果文档中明确记录：
+
+正常编译后的 Guest Java/Kotlin 代码访问资源时：
+
+```text
+R.string.foo
+```
+
+已经在编译期转为资源 ID。
+
+因此未来：
+
+```text
+Guest code
+↓
+R ID
+↓
+Guest Resources
+```
+
+是比：
+
+```text
+resource name
+↓
+getIdentifier()
+```
+
+更重要的主路径。
+
+不要把 `getIdentifier()` 当成 EXP-002 的硬性成功条件。
+
+---
+
+# 二十七、Missing Resource Test
+
+必须实际执行。
+
+使用：
+
+* 无效 ID
+* 或当前设计的 missing resource case
+
+捕获实际：
+
+```text
+Resources.NotFoundException
+```
+
+或真实异常。
+
+AppSandbox 必须不 crash。
+
+---
+
+# 二十八、Wrong Type Test
+
+例如：
+
+将：
+
+string resource ID
+
+传给：
+
+drawable getter
+
+或当前已有测试。
+
+记录：
+
+```text
+exception class
+message
+App survived
+```
+
+不要预设异常类型。
+
+---
+
+# 二十九、Corrupt APK Resource Test
+
+使用独立损坏 APK。
+
+尝试：
+
+```text
+ResourcesProvider.loadFromApk(...)
+```
+
+或者实际失败阶段。
+
+记录：
+
+```text
+failure stage
+exception class
+message
+App survived
+```
+
+不要修改正常 Guest。
+
+---
+
+# 三十、Two Resources Test
+
+从同一个 Guest APK：
+
+建立：
+
+```text
+ResourcesA
+ResourcesB
+```
+
+记录：
+
+```text
+resourcesA == resourcesB
+assetManagerA == assetManagerB
+```
+
+然后同一个：
+
+```text
+guestStringId
+```
+
+分别读取。
+
+要求：
+
+都返回 Guest marker。
+
+---
+
+# 三十一、补齐 EXP-002 RESULT
+
+更新：
+
+```text
+docs/experiments/EXP-002-RESULT.md
+```
+
+最终需要清楚区分：
+
+## Confirmed
+
+### APK Resources table loading
+
+### Numeric Resource ID resolution
+
+### Assets loading
+
+### Configuration selection
+
+### Resource namespace isolation
+
+## Limitation / Observation
+
+### getIdentifier name lookup behavior
+
+不要把 limitation 混成 failure。
+
+---
+
+# 三十二、EXP-002 CONFIRMED 的最终条件
+
+本轮满足以下条件即可判定：
+
+```text
+EXP-002 = CONFIRMED
+```
+
+1. Guest 未安装
+2. 最新 Guest APK SHA 与私有 APK SHA 一致
+3. ResourcesProvider 成功从 Guest APK 加载
+4. Guest numeric R IDs 与 APK resources table IDs 一致
+5. getResourcePackageName/typeName/entryName 工作
+6. Guest string marker 正确
+7. raw marker 正确
+8. asset marker 正确
+9. color 正确
+10. drawable 加载成功
+11. layout XML 可访问
+12. configuration qualifier 正确
+13. Host/Guest collision 正确隔离
+14. Missing resource 可控失败
+15. Wrong type 可控失败
+16. Corrupt APK 可控失败
+17. Two Resources 都能解析资源
+
+# `getIdentifier()` 成功不是 CONFIRMED 的必要条件。
+
+但其行为必须记录。
+
+---
+
+# 三十三、如果 numeric Resource ID 仍然无法读取
+
+如果出现：
+
+```text
+Guest bridge 返回合法 R ID
+```
+
+但：
+
+```text
+guestResources.getString(R.string.xxx)
+```
+
+失败，
+
+则 EXP-002 不能确认。
+
+状态保持：
+
+```text
+PARTIALLY CONFIRMED
+```
+
+并停止。
+
+不要进入 EXP-003。
+
+---
+
+# 三十四、如果 EXP-002 CONFIRMED
+
+创建：
+
+```text
+docs/adr/ADR-0006-GUEST-RESOURCE-LOADING.md
+```
+
+编号按仓库实际情况。
+
+ADR 应确认：
+
+> Android 11+ Public ResourcesLoader / ResourcesProvider API 能够从 AppSandbox 私有目录中的未安装 Guest APK 加载其资源表和 assets；Guest 编译期 numeric Resource IDs 能够通过独立 Guest Resources 正确解析。
+
+同时明确：
+
+没有确认：
+
+* Guest Context
+* Theme 完整语义
+* LayoutInflater + Guest Context
+* Activity Resources
+* Configuration 自动传播
+* Android 9/10 兼容路径
+
+---
+
+# 三十五、Android 9/10 特别记录
+
+当前 ResourcesLoader / ResourcesProvider：
+
+API 30 才引入。Android 官方说明 Android 11 新增这一套动态 Resource Loader API。
+
+因此如果项目目标仍包含：
+
+```text
+minSdk 28
+Android 9
+Android 10
+```
+
+则 ADR 中必须标：
+
+```text
+API 30+ path: CONFIRMED
+API 28-29 path: RESEARCH NEEDED
+```
+
+不要本轮顺手解决 Android 9/10。
+
+后面单独建立 compatibility experiment。
+
+---
+
+# 三十六、不要进入 EXP-003
+
+即使最终：
+
+```text
+EXP-002 = CONFIRMED
+```
+
+停止。
+
+不要实现：
+
+* Controlled Guest Context
+* Application attach
+* Application.onCreate
+
+等待负责人先审查 Resources 结果。
+
+---
+
+# 三十七、最终回传格式
+
+完成后严格返回：
+
+## A. EXP-002 Final Status
+
+```text
+CONFIRMED
+PARTIALLY CONFIRMED
+REJECTED
+```
+
+---
+
+## B. Latest Guest APK
+
+```text
+Build APK path =
+Build SHA256 =
+Imported APK path =
+Imported SHA256 =
+SHA match =
+```
+
+---
+
+## C. Guest Package State
+
+```bash
+adb shell pm path com.example.appsandbox.testguest
+```
+
+真实结果。
+
+---
+
+## D. Resource API
+
+```text
+ResourcesProvider =
+ResourcesLoader =
+Resources =
+AssetManager =
+```
+
+注明：
+
+PUBLIC / HIDDEN。
+
+---
+
+## E. Resource IDs
+
+表格：
+
+| Resource | APK table ID | Guest bridge ID | Match |
+| -------- | -----------: | --------------: | ----- |
+
+---
+
+## F. Resource Metadata
+
+至少返回 string：
+
+```text
+ID =
+getResourcePackageName =
+getResourceTypeName =
+getResourceEntryName =
+```
+
+---
+
+## G. String
+
+```text
+expected =
+actual =
+match =
+```
+
+---
+
+## H. Raw
+
+```text
+expected =
+actual =
+match =
+```
+
+---
+
+## I. Asset
+
+```text
+expected =
+actual =
+match =
+```
+
+---
+
+## J. Color
+
+```text
+expected =
+actual =
+match =
+```
+
+---
+
+## K. Drawable
+
+```text
+class =
+loaded =
+```
+
+---
+
+## L. Layout
+
+```text
+resource ID =
+XML parser obtained =
+root tag =
+```
+
+---
+
+## M. Configuration
+
+```text
+same ID =
+default value =
+alternate value =
+qualifier matched =
+```
+
+---
+
+## N. Collision
+
+```text
+Host ID =
+Guest ID =
+Host value =
+Guest value =
+isolated =
+```
+
+---
+
+## O. getIdentifier Investigation
+
+分别返回：
+
+```text
+Form 1 =
+Form 2 =
+Form 3 =
+```
+
+然后说明：
+
+```text
+Numeric ID access works = YES / NO
+Name-to-ID lookup works = YES / NO
+```
+
+不要把两者混淆。
+
+---
+
+## P. Error Tests
+
+```text
+Missing =
+Wrong type =
+Corrupt APK =
+App survived =
+```
+
+---
+
+## Q. Two Resources
+
+```text
+resourcesA == resourcesB =
+assetManagerA == assetManagerB =
+A value =
+B value =
+```
+
+---
+
+## R. API 28/29 Status
+
+明确：
+
+```text
+Android 9/10 compatibility path =
+CONFIRMED / RESEARCH NEEDED
+```
+
+---
+
+## S. ADR
+
+如果确认：
+
+返回 ADR-0006 摘要。
+
+---
+
+## T. Modified Files
+
+完整列出。
+
+---
+
+## U. Git
+
+```bash
+git status --short
+git diff --stat
+```
+
+---
+
+## V. Next Step
+
+只能回答：
+
+```text
+Ready for EXP-003: YES / NO
+```
+
+最多 5 条理由。
+
+不要执行 EXP-003。

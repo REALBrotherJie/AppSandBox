@@ -1,0 +1,1666 @@
+继续负责当前 AppSandbox 项目。
+
+当前已经确认：
+
+# EXP-001 = CONFIRMED
+
+真实 Android 设备已经证明：
+
+```text
+未安装 Guest APK
+↓
+AppSandbox 私有 base.apk
+↓
+独立 DexClassLoader
+↓
+GuestProbe
+↓
+GuestHelper
+↓
+对象实例化
+↓
+普通方法调用
+```
+
+可以成立。
+
+并且已经确认：
+
+```text
+两个独立 DexClassLoader
+加载同一个 APK 中的同名 Class
+
+↓
+
+classA != classB
+
+classA.isAssignableFrom(classB) == false
+```
+
+ADR：
+
+* ADR-0004-GUEST-DEX-CLASS-LOADING
+* ADR-0005-SAF-APK-SELECTION-VALIDATION
+
+已经建立。
+
+现在进入：
+
+# EXP-002 — Uninstalled APK Resources Loading
+
+本轮只验证：
+
+> 一个没有安装到 Android PackageManager 的 APK，是否可以从 AppSandbox 私有 APK 路径建立独立资源访问环境，并正确读取该 Guest APK 自己的 resources。
+
+本轮不是实现正式 Guest Resource Runtime。
+
+本轮只验证 Android 平台能力。
+
+---
+
+# 一、本轮核心问题
+
+需要回答：
+
+给定：
+
+```text
+/data/user/0/com.example.appsandbox/files/guests/<id>/base.apk
+```
+
+且：
+
+```text
+adb shell pm path com.example.appsandbox.testguest
+```
+
+没有任何输出。
+
+AppSandbox 是否可以：
+
+```text
+base.apk
+↓
+AssetManager / ApkAssets / Resources
+↓
+访问 Guest resources
+```
+
+并正确读取：
+
+* string
+* color
+* drawable
+* layout
+* raw asset
+* configuration-dependent resource
+
+至少完成资源访问基础验证。
+
+---
+
+# 二、本轮严格禁止扩展
+
+本轮不要实现：
+
+* Guest Application
+* Guest Context
+* Guest Activity
+* Service
+* Receiver
+* Provider
+* PackageManager virtualization
+* Binder interception
+* System Service Bridge
+* ActivityThread modification
+* Instrumentation modification
+* Window
+* Task
+* Stub Activity
+* Native Runtime
+* JNI
+* Multi-instance Runtime
+
+也不要为了实验成功引入：
+
+* VirtualApp
+* BlackBox
+* 其他应用虚拟化框架代码
+
+本轮原则：
+
+```text
+APK
+↓
+Resources
+```
+
+到此为止。
+
+---
+
+# 三、Hook 技术不再作为永久禁区
+
+项目后续允许正常评估：
+
+* Java method interception
+* Binder interception
+* Instrumentation interception
+* Framework client-side interception
+* Xposed-style method interception
+* JNI/native hook
+* PLT/GOT hook
+* inline hook
+* hidden API related mechanism
+
+但：
+
+# EXP-002 不应使用这些技术。
+
+如果连基础 Resources Loading 都必须依赖复杂 Hook 才能成立：
+
+需要先停止并重新分析架构。
+
+---
+
+# 四、继续使用现有 GuestTestApp
+
+不要创建第二个 Guest APK。
+
+继续扩充：
+
+```text
+test-guests/GuestTestApp
+```
+
+Host 仍然不能依赖 Guest module。
+
+Host 不得编译期引用：
+
+```text
+com.example.appsandbox.testguest.R
+```
+
+特别重要：
+
+# Host 禁止 import Guest R
+
+例如禁止：
+
+```java
+import com.example.appsandbox.testguest.R;
+```
+
+否则实验失去意义。
+
+所有 Guest Resource ID 必须：
+
+通过运行时解析获得
+
+或者通过 Guest APK 内部测试代码间接提供。
+
+---
+
+# 五、为 GuestTestApp 增加 EXP-002 专用资源
+
+添加一些具有非常明显唯一性的资源。
+
+建议至少包括：
+
+## string
+
+例如：
+
+```text
+exp002_string
+```
+
+内容：
+
+使用一个随机唯一 marker，例如：
+
+```text
+EXP002_STRING_<UUID>
+```
+
+---
+
+## color
+
+定义一个固定测试颜色。
+
+不要只测试系统颜色。
+
+---
+
+## drawable
+
+创建一个非常简单的 XML drawable。
+
+不要使用复杂图片。
+
+例如：
+
+shape drawable。
+
+---
+
+## layout
+
+创建：
+
+```text
+exp002_test_layout.xml
+```
+
+包含：
+
+* 一个根布局
+* 一个 TextView
+* 一个固定 id
+
+TextView 文本来自：
+
+Guest 自己的 string resource。
+
+---
+
+## raw
+
+创建：
+
+```text
+res/raw/exp002_payload.txt
+```
+
+内容：
+
+```text
+EXP002_RAW_<另一个UUID>
+```
+
+---
+
+## asset
+
+创建：
+
+```text
+src/main/assets/exp002_asset.txt
+```
+
+内容：
+
+另一个唯一 marker。
+
+注意：
+
+`res/raw`
+
+和：
+
+`assets/`
+
+必须分别测试。
+
+---
+
+# 六、增加 Configuration Resource
+
+为了验证资源系统确实参与 configuration resolution，
+
+增加：
+
+```text
+values/strings.xml
+```
+
+例如：
+
+```text
+exp002_config_value = default
+```
+
+再增加：
+
+```text
+values-land/strings.xml
+```
+
+或者：
+
+```text
+values-night/
+```
+
+选择一个比较容易在实验中控制的 qualifier。
+
+推荐优先：
+
+orientation
+
+或者：
+
+night mode。
+
+不要一次测试十种 Configuration。
+
+只选一种。
+
+---
+
+# 七、不要依赖 Guest R.class 作为 Host API
+
+虽然 APK 内部会存在：
+
+```text
+R$string
+R$layout
+```
+
+但 Host 不能：
+
+编译期依赖 Guest R。
+
+实验需要研究：
+
+如何通过 Android Resources 机制获取 resource ID。
+
+优先测试：
+
+```text
+Resources.getIdentifier(
+    name,
+    type,
+    guestPackageName
+)
+```
+
+例如：
+
+```text
+name = "exp002_string"
+type = "string"
+package = "com.example.appsandbox.testguest"
+```
+
+如果这种方式在未安装 APK Resources 中有效：
+
+记录。
+
+如果无效：
+
+不要立刻采用 hidden API。
+
+先研究原因。
+
+---
+
+# 八、首先研究公开 Android API 路径
+
+本轮必须优先寻找：
+
+# Public API
+
+方案。
+
+重点研究当前 API 31：
+
+* AssetManager
+* Resources
+* Configuration
+* DisplayMetrics
+
+注意：
+
+Android 不同 API 上：
+
+`AssetManager.addAssetPath()`
+
+的 API 可见性和使用方式可能存在差异。
+
+不要预设某种旧 Android 示例代码一定可以直接使用。
+
+必须根据：
+
+当前 compileSdk 36
+
+和：
+
+设备 Android 12 / API 31
+
+实际确认。
+
+---
+
+# 九、如果基础 Public API 不够
+
+可以研究：
+
+* `ResourcesLoader`
+* `ResourcesProvider`
+* `ApkAssets`
+
+等较新 Android resource API。
+
+但是必须确认：
+
+* introduced API level
+* public / hidden status
+* 是否能够从 APK file descriptor 或 path 加载
+* 是否适合 Android 12
+
+优先寻找 Android 官方公开方式。
+
+本轮目标之一就是：
+
+明确现代 Android 中加载外部 APK resources 的可维护路径。
+
+---
+
+# 十、至少提出两种 Resources 创建方案
+
+在编码前先记录：
+
+## Option A
+
+基于传统：
+
+```text
+AssetManager
++
+APK asset path
++
+Resources
+```
+
+## Option B
+
+基于较新的：
+
+```text
+ResourcesLoader
+/
+ResourcesProvider
+```
+
+如果 API 31 支持。
+
+如果还有合理的 Public API 方案：
+
+加入。
+
+比较：
+
+* API level
+* public API
+* Android future compatibility
+* implementation complexity
+* configuration support
+
+然后选择一个：
+
+# EXPERIMENT PATH
+
+注意：
+
+这只是 EXP-002 实验选择。
+
+不是永久生产架构 ADR。
+
+---
+
+# 十一、不要偷用 Host Resources
+
+这是核心 Negative Control。
+
+实验必须证明：
+
+读取到的资源：
+
+确实来自 Guest APK。
+
+所以 Guest marker：
+
+绝对不能存在于 Host resources。
+
+例如：
+
+```text
+EXP002_STRING_<UUID>
+```
+
+Host APK 中不得出现。
+
+可以对 Host APK 做：
+
+字符串扫描。
+
+或者通过其他方式确认。
+
+---
+
+# 十二、首先进行 Negative Control
+
+使用：
+
+Host 自己的：
+
+```text
+resources
+```
+
+尝试获取：
+
+Guest：
+
+```text
+exp002_string
+```
+
+使用：
+
+Guest packageName。
+
+预期：
+
+找不到。
+
+例如：
+
+```text
+getIdentifier(...) == 0
+```
+
+或者实际 API 返回等价“not found”。
+
+记录：
+
+```text
+HOST_RESOURCE_NEGATIVE_CONTROL = PASS
+```
+
+如果 Host Resources 可以直接找到 Guest marker：
+
+实验设计有污染。
+
+必须停止。
+
+---
+
+# 十三、建立 Guest Resources
+
+使用选定的 Android 官方机制：
+
+```text
+Guest base.apk
+↓
+Guest Asset environment
+↓
+Guest Resources
+```
+
+记录：
+
+```text
+Guest APK path
+Resources implementation class
+AssetManager implementation class
+Configuration
+DisplayMetrics
+```
+
+不要修改全局 Host Resources。
+
+特别注意：
+
+# EXP-002 应优先创建独立 Resources 对象。
+
+不要为了省事：
+
+把 Guest APK 添加到 Host 全局 AssetManager
+
+导致 Host 和 Guest 资源空间永久混合。
+
+如果某个实验方案会污染 Host resources：
+
+必须明确记录风险。
+
+优先寻找隔离对象。
+
+---
+
+# 十四、测试 Guest String
+
+通过：
+
+```text
+getIdentifier(...)
+```
+
+获取：
+
+```text
+exp002_string
+```
+
+记录：
+
+```text
+resourceId =
+```
+
+然后：
+
+```text
+Resources.getString(resourceId)
+```
+
+记录实际：
+
+```text
+EXP002_STRING_<UUID>
+```
+
+验证：
+
+```text
+STRING_MARKER_MATCH = true
+```
+
+---
+
+# 十五、测试 raw resource
+
+运行时获取：
+
+```text
+exp002_payload
+```
+
+类型：
+
+```text
+raw
+```
+
+使用：
+
+```text
+openRawResource
+```
+
+读取内容。
+
+必须返回：
+
+Guest raw marker。
+
+记录：
+
+```text
+RAW_MARKER_MATCH
+```
+
+---
+
+# 十六、测试 assets
+
+使用：
+
+```text
+Guest AssetManager
+```
+
+访问：
+
+```text
+exp002_asset.txt
+```
+
+读取完整测试 marker。
+
+记录：
+
+```text
+ASSET_MARKER_MATCH
+```
+
+这一步和：
+
+`res/raw`
+
+不是同一个机制。
+
+必须分别验证。
+
+---
+
+# 十七、测试 color
+
+获取：
+
+```text
+exp002_color
+```
+
+然后读取颜色值。
+
+记录：
+
+```text
+resourceId
+resolved color value
+expected value
+match
+```
+
+根据 API level 使用合理 public API。
+
+---
+
+# 十八、测试 drawable
+
+加载：
+
+```text
+exp002_drawable
+```
+
+记录：
+
+* resource ID
+* Drawable actual class
+* 是否加载成功
+
+不需要显示。
+
+只证明：
+
+Guest Resources 可以实例化 drawable。
+
+---
+
+# 十九、测试 layout inflate
+
+这是 EXP-002 中风险最高的一项之一。
+
+目标：
+
+从 Guest Resources 中加载：
+
+```text
+exp002_test_layout
+```
+
+并构建：
+
+View hierarchy。
+
+但这里要非常谨慎。
+
+因为：
+
+```text
+LayoutInflater
+```
+
+需要：
+
+Context。
+
+本轮还没有正式 Guest Context。
+
+所以不要把：
+
+layout inflation
+
+和：
+
+Guest Context
+
+混成一个实验。
+
+---
+
+# 二十、Layout Test 分两级
+
+## EXP-002 Level A
+
+只确认：
+
+Guest Resources 中：
+
+```text
+layout resource ID
+```
+
+存在。
+
+并且：
+
+资源 XML 可以被访问。
+
+如果 Public API 能获取 XML parser：
+
+记录成功。
+
+---
+
+## EXP-002 Level B
+
+可以尝试：
+
+使用 Host Context 的 LayoutInflater
+
+配合 Guest Resources wrapper / controlled context
+
+进行最简单 XML inflate。
+
+但：
+
+如果这里需要大量 Context virtualization：
+
+立即停止。
+
+把：
+
+真正 Guest layout inflation
+
+移动到：
+
+EXP-003 / Context 实验。
+
+本轮不要为了一个 layout：
+
+提前开发 Guest Context。
+
+所以：
+
+# Layout Inflate 不是 EXP-002 CONFIRMED 的硬性成功条件。
+
+资源 XML 可读取即可。
+
+---
+
+# 二十一、Configuration Test
+
+选择上一阶段准备的：
+
+例如：
+
+```text
+default
+vs
+land
+```
+
+验证：
+
+默认 Configuration 下：
+
+返回默认值。
+
+然后创建一个：
+
+# 独立测试 Configuration
+
+不要修改设备全局设置。
+
+使用：
+
+Resources / Configuration 支持的方法
+
+构造：
+
+landscape configuration
+
+或选定 qualifier。
+
+再创建相应 Guest Resources。
+
+验证：
+
+```text
+exp002_config_value
+```
+
+发生预期变化。
+
+目的：
+
+证明 Guest Resources：
+
+不是简单 ZIP reader。
+
+而是真的使用 Android resource resolution。
+
+---
+
+# 二十二、不要把 ZIP 解压当成 Resources Loading
+
+禁止把：
+
+```text
+base.apk
+```
+
+当 ZIP：
+
+然后直接读取：
+
+```text
+res/values/strings.xml
+```
+
+来宣称资源加载成功。
+
+因为 APK 编译以后：
+
+resources 使用：
+
+```text
+resources.arsc
+binary XML
+```
+
+EXP-002 要验证的是：
+
+# Android Resources Runtime
+
+不是 ZIP 文件读取。
+
+assets 测试例外：
+
+assets 本身可以通过 AssetManager 访问。
+
+---
+
+# 二十三、Resource ID Namespace
+
+必须观察：
+
+Guest resource ID。
+
+记录例如：
+
+```text
+0x7fxxxxxx
+```
+
+但不要假设一定是：
+
+`0x7f`。
+
+记录实际结果。
+
+并分析：
+
+Host Resource ID
+
+和：
+
+Guest Resource ID
+
+是否可能相同数值。
+
+尤其注意：
+
+# 相同整数 resource ID 不代表相同资源空间。
+
+这个结果以后对：
+
+Guest/Host Resources 隔离
+
+非常重要。
+
+---
+
+# 二十四、加入一个 Resource Collision Test
+
+建议 Guest：
+
+和 Host：
+
+都定义同名资源：
+
+```text
+exp002_collision
+```
+
+但内容不同。
+
+例如：
+
+Host：
+
+```text
+HOST_COLLISION
+```
+
+Guest：
+
+```text
+GUEST_COLLISION
+```
+
+然后分别使用：
+
+Host Resources
+
+和：
+
+Guest Resources
+
+读取。
+
+验证：
+
+```text
+Host Resources → HOST_COLLISION
+Guest Resources → GUEST_COLLISION
+```
+
+如果这一点成立：
+
+它将为资源隔离提供重要证据。
+
+但是：
+
+不要故意让 Host 和 Guest 的 numeric resource ID 相同。
+
+只观察。
+
+---
+
+# 二十五、Two Resources Instances Test
+
+类似 EXP-001 的 Two ClassLoader。
+
+从同一个 Guest APK 创建：
+
+```text
+GuestResourcesA
+GuestResourcesB
+```
+
+观察：
+
+```text
+resourcesA == resourcesB
+assetManagerA == assetManagerB
+```
+
+以及：
+
+二者读取 Guest string 是否一致。
+
+本轮只是观察。
+
+不要因此设计多实例 Resource Runtime。
+
+---
+
+# 二十六、APK 未安装状态必须再次确认
+
+实验开始前和结束后都确认：
+
+```bash
+adb shell pm path com.example.appsandbox.testguest
+```
+
+必须无输出。
+
+这样可以证明：
+
+Guest Resources 并非来自系统安装状态。
+
+---
+
+# 二十七、实验日志
+
+统一：
+
+```text
+AppSandbox.Exp002
+```
+
+至少记录：
+
+```text
+Guest APK path
+Guest packageName
+
+Host Resources class
+Guest Resources class
+
+Host AssetManager
+Guest AssetManager
+
+Negative control
+
+Guest string ID/value
+Guest raw ID/value
+Guest asset value
+Guest color
+Guest drawable
+
+Guest layout XML access
+
+Configuration default value
+Configuration alternate value
+
+Collision test
+
+Two Resources instances
+```
+
+---
+
+# 二十八、实验代码继续隔离
+
+使用：
+
+```text
+app/src/debug/java/
+```
+
+例如：
+
+```text
+com.example.appsandbox.experiments.exp002
+```
+
+不要直接建立正式：
+
+```text
+GuestResourceManager
+VirtualResources
+ResourceBridge
+```
+
+等生产架构。
+
+我们现在还只是实验。
+
+---
+
+# 二十九、允许修改 GuestTestApp
+
+可以增加 EXP-002 所需：
+
+```text
+res/
+assets/
+```
+
+这是测试 Guest。
+
+但是：
+
+Host 与 Guest 仍必须：
+
+# 没有 Gradle dependency。
+
+---
+
+# 三十、异常测试
+
+至少测试：
+
+## Missing resource
+
+请求：
+
+```text
+does_not_exist
+```
+
+预期：
+
+不会 crash AppSandbox。
+
+---
+
+## Wrong type
+
+例如：
+
+把 string resource ID 当 drawable 读取。
+
+捕获：
+
+实际 Android exception。
+
+不要预设具体异常。
+
+---
+
+## Invalid APK
+
+使用损坏 APK：
+
+尝试 Resources 初始化。
+
+必须失败：
+
+但 AppSandbox 不 crash。
+
+记录实际 failure stage。
+
+---
+
+# 三十一、成功标准
+
+EXP-002 判定：
+
+```text
+CONFIRMED
+```
+
+至少必须满足：
+
+1. Guest APK 未安装
+2. Guest APK 来自 AppSandbox 私有目录
+3. Host Resources 无法读取 Guest unique resource
+4. 成功创建 Guest Resources/Asset environment
+5. Guest string 正确
+6. Guest raw resource 正确
+7. Guest asset 正确
+8. Guest color 正确
+9. Guest drawable 成功加载
+10. Guest layout XML resource 可访问
+11. 至少一种 Configuration qualifier 正确解析
+12. Host/Guest collision resource 能分别返回正确内容
+13. Missing resource 不导致 App crash
+14. Invalid APK 不导致 App crash
+
+注意：
+
+# 完整 LayoutInflater + Guest Context 不属于必要条件。
+
+---
+
+# 三十二、如果 Resource Loading 只能部分成立
+
+例如：
+
+string/raw/assets 成功，
+
+但：
+
+configuration 或 drawable 失败，
+
+结论：
+
+```text
+PARTIALLY CONFIRMED
+```
+
+不要为了变成 CONFIRMED：
+
+提前开发 Application/Context Runtime。
+
+---
+
+# 三十三、如果 EXP-002 成功
+
+创建：
+
+```text
+ADR-0006-GUEST-RESOURCE-LOADING.md
+```
+
+实际编号按照仓库。
+
+ADR 只确认：
+
+> 未安装 Guest APK 的 Android resources 可以从 AppSandbox 私有 APK 路径建立独立资源访问环境并解析基础资源。
+
+不要确认：
+
+* Guest Context 已解决
+* Theme 已解决
+* Activity resources 已解决
+* Configuration propagation 已解决
+* Runtime resource replacement 已解决
+
+---
+
+# 三十四、不要急着确认 Theme
+
+Theme 需要：
+
+```text
+Resources.Theme
+Context
+Activity
+```
+
+等更复杂语义。
+
+本轮可以进行一个非常有限的：
+
+```text
+resources.newTheme()
+```
+
+观察实验。
+
+但：
+
+Theme 完整兼容不是 EXP-002 必需项。
+
+后面单独处理。
+
+---
+
+# 三十五、EXP-002 完成后不要进入 EXP-003
+
+即使全部成功：
+
+停止。
+
+负责人需要先审查：
+
+* Resources 建立方式
+* Public/Hidden API 依赖
+* Configuration
+* Resource ID
+* Host/Guest collision
+* Layout XML
+* Android version sensitivity
+
+然后才决定：
+
+EXP-003 Guest Application + Controlled Context
+
+怎么设计。
+
+---
+
+# 三十六、特别检查 API 稳定性
+
+完成实验后必须明确：
+
+本轮使用的每一个 Android Resources API：
+
+属于：
+
+```text
+PUBLIC
+HIDDEN
+REFLECTION
+```
+
+哪一种。
+
+生成：
+
+```text
+API Usage Table
+```
+
+目标：
+
+优先：
+
+PUBLIC。
+
+如果实验用了 hidden API：
+
+必须明确原因。
+
+但不要隐瞒。
+
+未来项目允许研究 hidden API 和 Hook。
+
+只是我们必须清楚知道：
+
+架构依赖了什么。
+
+---
+
+# 三十七、最终回传格式
+
+完成后严格返回：
+
+## A. EXP-002 Final Status
+
+只能：
+
+```text
+CONFIRMED
+PARTIALLY CONFIRMED
+REJECTED
+```
+
+---
+
+## B. Resource Loading Strategy
+
+说明：
+
+最终实验使用：
+
+Option A / B / C
+
+并解释为什么。
+
+---
+
+## C. API Usage
+
+表格列出：
+
+```text
+API
+API Level
+Public / Hidden
+Purpose
+```
+
+---
+
+## D. Guest State
+
+真实：
+
+```bash
+adb shell pm path com.example.appsandbox.testguest
+```
+
+---
+
+## E. Guest Resource Environment
+
+返回：
+
+```text
+Guest APK path =
+Guest packageName =
+
+Guest Resources class =
+Guest AssetManager class =
+Configuration =
+DisplayMetrics =
+```
+
+---
+
+## F. Negative Control
+
+```text
+Host getIdentifier(exp002_string) =
+HOST_RESOURCE_NEGATIVE_CONTROL =
+```
+
+---
+
+## G. String Test
+
+```text
+resourceId =
+expected =
+actual =
+match =
+```
+
+---
+
+## H. Raw Test
+
+```text
+resourceId =
+expected marker =
+actual marker =
+match =
+```
+
+---
+
+## I. Asset Test
+
+```text
+expected =
+actual =
+match =
+```
+
+---
+
+## J. Color Test
+
+```text
+resourceId =
+expected =
+actual =
+match =
+```
+
+---
+
+## K. Drawable Test
+
+```text
+resourceId =
+Drawable class =
+loaded =
+```
+
+---
+
+## L. Layout Resource Test
+
+```text
+layout resourceId =
+XML accessible =
+inflate attempted =
+inflate result =
+```
+
+如果没有执行 inflate：
+
+明确：
+
+未执行，因为属于 Context boundary。
+
+---
+
+## M. Configuration Test
+
+```text
+default config =
+default value =
+
+alternate config =
+alternate value =
+
+qualifier resolution match =
+```
+
+---
+
+## N. Collision Test
+
+```text
+Host value =
+Guest value =
+correctly isolated =
+```
+
+---
+
+## O. Two Resources Test
+
+```text
+resourcesA == resourcesB =
+assetManagerA == assetManagerB =
+A string result =
+B string result =
+```
+
+---
+
+## P. Error Tests
+
+```text
+Missing Resource =
+Wrong Type =
+Invalid APK =
+App survived =
+```
+
+---
+
+## Q. Architecture Interpretation
+
+只分析：
+
+这些结果意味着：
+
+* Guest Resources 是否可以独立存在
+* Resource namespace
+* Configuration
+* Host/Guest isolation
+
+不要进入 Activity 架构。
+
+---
+
+## R. ADR
+
+如果成功：
+
+返回新 ADR 摘要。
+
+---
+
+## S. Modified Files
+
+完整列出。
+
+---
+
+## T. Git
+
+返回：
+
+```bash
+git status --short
+git diff --stat
+```
+
+---
+
+## U. Next Step
+
+只回答：
+
+```text
+Ready for EXP-003: YES / NO
+```
+
+并给出最多 5 条理由。
+
+不要执行 EXP-003。

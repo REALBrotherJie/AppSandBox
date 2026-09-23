@@ -9,6 +9,22 @@ import com.example.appsandbox.model.GuestPackageRecord
 import java.io.File
 
 class GuestPackageReader(private val context: Context) {
+    fun validate(apkPath: String): PackageInfo {
+        val packageManager = context.packageManager
+        val info = if (Build.VERSION.SDK_INT >= 33) {
+            packageManager.getPackageArchiveInfo(
+                apkPath,
+                android.content.pm.PackageManager.PackageInfoFlags.of(0)
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getPackageArchiveInfo(apkPath, 0)
+        } ?: error("Selected file is not a readable APK")
+        require(!info.packageName.isNullOrBlank()) { "Selected APK has no package name" }
+        Log.i(tag, "Validated APK package=${info.packageName} path=$apkPath")
+        return info
+    }
+
     private val tag = "AppSandbox.Package"
     fun readApplicationInfo(apkPath: String): android.content.pm.ApplicationInfo {
         val packageManager = context.packageManager

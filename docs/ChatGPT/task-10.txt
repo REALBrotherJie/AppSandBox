@@ -1,0 +1,2770 @@
+继续负责当前 AppSandbox 项目。
+
+当前已经确认：
+
+# EXP-001 = CONFIRMED
+
+在 Guest APK 未安装到 PMS 的情况下：
+
+```text
+Guest APK
+↓
+DexClassLoader
+↓
+Guest Class
+↓
+Guest dependency
+↓
+实例化
+↓
+普通方法调用
+```
+
+成立。
+
+---
+
+# EXP-002 API30+ = CONFIRMED
+
+已经确认两条独立 Resources 路径：
+
+## Option A
+
+```text
+System-only base Resources
++
+ResourcesLoader / ResourcesProvider
+```
+
+能够建立无 Host private resource 泄漏的 Guest Resources。
+
+但使用：
+
+```text
+Resources(AssetManager, ...)
+```
+
+PUBLIC-DEPRECATED constructor。
+
+所以只作为实验 baseline。
+
+## Option B
+
+```text
+getPackageArchiveInfo()
+↓
+ApplicationInfo
+sourceDir/publicSourceDir = Guest APK
+↓
+PackageManager.getResourcesForApplication(ApplicationInfo)
+```
+
+已经在：
+
+```text
+Xiaomi Mi 10
+Android 12
+API 31
+```
+
+真实设备验证成功。
+
+它能够：
+
+* 加载 Guest string
+* raw
+* assets
+* color
+* drawable
+* binary layout XML
+* configuration variant
+* getIdentifier
+* resource metadata
+
+并且：
+
+* Guest 看不到 Host private resources
+* Guest 看不到 Host private assets
+* Host 看不到 Guest private resources
+* Host 看不到 Guest private assets
+* Host Resources 没有受到污染
+
+当前：
+
+```text
+Preferred Resources candidate = PROPOSED Option B
+```
+
+API28/29：
+
+```text
+RESEARCH NEEDED
+```
+
+ADR 已建立：
+
+```text
+ADR-0006-GUEST-RESOURCE-LOADING-API30PLUS.md
+```
+
+---
+
+# 本轮任务
+
+现在只：
+
+# 设计 EXP-003
+
+不要执行。
+
+不要写正式 Runtime。
+
+不要新增 Guest Application 实现代码。
+
+不要创建 GuestContext 生产类。
+
+不要调用 `Application.onCreate()`。
+
+不要进入 Activity。
+
+本轮目标：
+
+> 把“Guest Context + Guest Application”问题拆成一组可以逐级验证、可以单独失败、可以回滚的实验。
+
+最终形成：
+
+```text
+EXP-003A
+Controlled Guest Context
+
+↓
+
+EXP-003B
+Guest Application Instantiation
+
+↓
+
+EXP-003C
+Guest Application.onCreate Minimal Runtime
+
+↓
+
+EXP-003D
+Application Compatibility Surface
+```
+
+具体分法可以调整，但必须保持：
+
+从简单到复杂。
+
+---
+
+# 一、核心原则
+
+不要把：
+
+```text
+创建一个 Application 对象
+```
+
+和：
+
+```text
+运行一个真正具备 Android App 环境的 Guest Application
+```
+
+混为一谈。
+
+这是 EXP-003 最大风险。
+
+一个：
+
+```java
+new MyApplication()
+```
+
+成功，
+
+几乎不能证明 Guest Runtime 成立。
+
+真正的问题是：
+
+```text
+Application
+    │
+    ├── Context
+    │
+    ├── ClassLoader
+    │
+    ├── Resources
+    │
+    ├── Assets
+    │
+    ├── packageName
+    │
+    ├── ApplicationInfo
+    │
+    ├── File directories
+    │
+    ├── SharedPreferences
+    │
+    ├── PackageManager
+    │
+    ├── ContentResolver
+    │
+    ├── System Services
+    │
+    └── Android identity
+    │
+    ↓
+onCreate()
+```
+
+这些能力哪些是真正 Guest 语义？
+
+哪些仍然是 Host？
+
+哪些暂时不应该提供？
+
+必须先定义。
+
+---
+
+# 二、首先研究 Android 原生 Application 创建链
+
+创建：
+
+```text
+docs/experiments/EXP-003-ANDROID-APPLICATION-MODEL.md
+```
+
+基于：
+
+Android SDK
+Android Developers
+AOSP
+
+研究正常 App 的：
+
+```text
+ActivityThread
+↓
+LoadedApk
+↓
+ContextImpl
+↓
+Instrumentation
+↓
+Application
+↓
+attachBaseContext
+↓
+Application.onCreate
+```
+
+重点研究：
+
+* ActivityThread
+* LoadedApk
+* ContextImpl
+* Instrumentation
+* Application
+* ContextWrapper
+
+但：
+
+不要复制 AOSP 实现。
+
+只记录：
+
+职责和依赖。
+
+---
+
+# 三、必须回答一个问题
+
+正常 Application 创建过程中：
+
+哪些状态来自：
+
+```text
+system_server / PMS
+```
+
+哪些来自：
+
+```text
+client process
+```
+
+建立表：
+
+| Capability              | Client Process | system_server/PMS | Both |
+| ----------------------- | -------------- | ----------------- | ---- |
+| Application Java object |                |                   |      |
+| ClassLoader             |                |                   |      |
+| Resources               |                |                   |      |
+| packageName             |                |                   |      |
+| dataDir                 |                |                   |      |
+| UID                     |                |                   |      |
+| ApplicationInfo         |                |                   |      |
+| PackageManager queries  |                |                   |      |
+| ContentProvider install |                |                   |      |
+| system service identity |                |                   |      |
+
+不要假设。
+
+必须根据 Android 机制填写。
+
+---
+
+# 四、记录公开 Application 创建入口
+
+重点研究公开 API：
+
+```text
+Instrumentation.newApplication(
+    ClassLoader,
+    String className,
+    Context
+)
+```
+
+确认：
+
+* API level
+* PUBLIC / HIDDEN
+* 它负责什么
+* 它不负责什么
+
+特别研究：
+
+它是否：
+
+* 创建 Guest Application class
+* 使用提供的 ClassLoader
+* attach 给定 Context
+* 自动调用 onCreate
+
+不要猜。
+
+如果官方文档不能确认：
+
+标：
+
+```text
+RESEARCH NEEDED
+```
+
+后续实验验证。
+
+---
+
+# 五、提出至少三种 Application 创建方案
+
+创建：
+
+```text
+docs/experiments/EXP-003-APPLICATION-STRATEGY.md
+```
+
+---
+
+## Option A — Public Instrumentation Path
+
+概念：
+
+```text
+Guest ClassLoader
++
+Controlled Guest Context
++
+Guest Application className
+↓
+Instrumentation.newApplication()
+```
+
+优点：
+
+* Public API
+* Android 原生提供
+* 明确接受 ClassLoader
+* 明确接受 Context
+
+需要验证：
+
+* attach 状态
+* BaseContext
+* Application context
+* lifecycle
+* callbacks
+
+---
+
+## Option B — Direct Object Construction
+
+例如：
+
+```text
+GuestClassLoader
+↓
+load Application class
+↓
+constructor
+```
+
+但必须分析：
+
+Application 是 ContextWrapper。
+
+只调用 constructor 是否实际上没有可用 base Context。
+
+这个方案主要作为：
+
+negative/control comparison。
+
+不一定作为候选生产路线。
+
+---
+
+## Option C — Framework Internal Application Creation
+
+概念上涉及：
+
+```text
+ActivityThread
+LoadedApk
+ContextImpl
+```
+
+这一类 Android 内部机制。
+
+本轮只研究：
+
+它们正常负责什么。
+
+不要调用。
+
+不要反射。
+
+不要进入 hidden API。
+
+把它作为：
+
+```text
+Future compatibility candidate
+```
+
+只有 Public API 方案不足时才进一步研究。
+
+---
+
+# 六、暂时不要把 Hook 排除
+
+项目整体技术边界已经更新。
+
+未来可以正常评估：
+
+* Java method hook
+* Instrumentation interception
+* ActivityThread interception
+* Binder interception
+* Xposed-style method replacement
+* JNI/native hook
+* inline hook
+* PLT/GOT hook
+* hidden API
+
+但：
+
+# EXP-003 第一阶段必须先验证 Public API 能做到什么。
+
+原则：
+
+```text
+Public API
+↓
+Controlled Context
+↓
+Framework-compatible path
+↓
+必要时才进入 interception / hidden / native
+```
+
+不是：
+
+```text
+一遇到差异
+↓
+立即 Hook
+```
+
+---
+
+# 七、核心任务：定义 Controlled Guest Context
+
+创建：
+
+```text
+docs/experiments/EXP-003-CONTEXT-CONTRACT.md
+```
+
+不要马上实现类。
+
+先定义：
+
+> EXP-003 中的 Guest Context 到底承诺什么？
+
+这是整个实验最重要的设计文档。
+
+---
+
+# 八、把 Context API 分级
+
+至少分为：
+
+## Tier C0 — 必须正确
+
+EXP-003 最基础能力。
+
+例如：
+
+```text
+getPackageName()
+getClassLoader()
+getResources()
+getAssets()
+getApplicationInfo()
+getFilesDir()
+getCacheDir()
+getCodeCacheDir()
+getDataDir()
+```
+
+---
+
+## Tier C1 — 应该可用，但可以由 Host 底层实现
+
+例如：
+
+```text
+getMainLooper()
+getApplicationContext()
+getSystemService(...)
+```
+
+但必须明确：
+
+返回对象是否带 Host identity。
+
+---
+
+## Tier C2 — 需要 virtualization
+
+例如：
+
+```text
+getPackageManager()
+getSharedPreferences()
+getDatabasePath()
+openOrCreateDatabase()
+getContentResolver()
+```
+
+先分析。
+
+不要全部本轮实现。
+
+---
+
+## Tier C3 — identity-sensitive
+
+例如可能涉及：
+
+```text
+AppOps
+AttributionSource
+PackageManager Binder
+Notification
+AccountManager
+permission checks
+```
+
+这些可能把：
+
+Guest logical packageName
+
+发送给：
+
+system_server
+
+而调用者实际 UID：
+
+仍然是 Host UID。
+
+必须单独标注。
+
+---
+
+## Tier C4 — 暂不支持
+
+任何当前无法给出安全、正确 Guest 语义的能力。
+
+不要通过“返回 Host 结果”假装 Guest 兼容。
+
+---
+
+# 九、建立 Context Capability Matrix
+
+至少覆盖：
+
+```text
+getPackageName
+getOpPackageName
+getAttributionSource
+getApplicationInfo
+getClassLoader
+getResources
+getAssets
+getTheme
+getFilesDir
+getCacheDir
+getCodeCacheDir
+getDataDir
+getNoBackupFilesDir
+getDatabasePath
+getSharedPreferences
+getPackageManager
+getContentResolver
+getSystemService
+checkPermission
+startActivity
+startService
+bindService
+registerReceiver
+sendBroadcast
+```
+
+每项列：
+
+| API | Desired Guest Semantics | Can delegate Host? | Needs override? | Identity sensitive? | EXP-003 scope |
+| --- | ----------------------- | ------------------ | --------------- | ------------------- | ------------- |
+
+---
+
+# 十、严格区分 Logical Identity 与 Android Identity
+
+ADR-0002 已经确认：
+
+不伪造真实 Linux UID。
+
+所以 EXP-003 必须始终区分：
+
+```text
+Guest Logical Identity
+```
+
+和：
+
+```text
+Android Kernel/System Identity
+```
+
+例如：
+
+Guest Context 可以合理返回：
+
+```text
+getPackageName()
+=
+com.example.appsandbox.testguest
+```
+
+但是：
+
+Binder caller UID
+
+仍然是：
+
+```text
+AppSandbox Host UID
+```
+
+不能把：
+
+```text
+Java getPackageName()
+```
+
+修改成功
+
+误认为：
+
+```text
+Guest 已经获得真实 Android package identity。
+```
+
+---
+
+# 十一、AttributionSource 特别标记
+
+设备当前：
+
+```text
+Android 12 / API31
+```
+
+存在：
+
+```text
+AttributionSource
+```
+
+所以设计文档必须单独研究：
+
+```text
+Context.getAttributionSource()
+```
+
+它和：
+
+* UID
+* packageName
+* permission attribution
+
+之间是什么关系。
+
+本轮不要伪造。
+
+只分析：
+
+如果 Controlled Guest Context 返回 Guest packageName，
+
+但 attribution 仍然是 Host，
+
+会有哪些不一致。
+
+标：
+
+```text
+IDENTITY-SENSITIVE
+```
+
+---
+
+# 十二、ContextWrapper 方案
+
+优先研究：
+
+```text
+ContextWrapper
+```
+
+是否适合作为：
+
+Experimental Controlled Context。
+
+概念：
+
+```text
+Host Context
+↓
+ContextWrapper
+↓
+override selected APIs
+↓
+Guest-facing Context
+```
+
+但一定要明确：
+
+ContextWrapper 默认所有未覆盖 API：
+
+都会 delegate base Context。
+
+所以：
+
+# 每一个没有 override 的 API 都可能泄漏 Host semantics。
+
+必须建立：
+
+```text
+Delegation Risk Register
+```
+
+---
+
+# 十三、不要追求“完整 Context”
+
+EXP-003 不需要一开始实现：
+
+Android 所有 Context API。
+
+更合理：
+
+```text
+Minimal Controlled Context
+```
+
+只支持测试 Guest Application 所需的能力。
+
+以后真实 App 使用更多 API：
+
+再逐项扩展。
+
+---
+
+# 十四、Storage Model 纳入 EXP-003 设计
+
+当前已经有：
+
+```text
+GuestPackage
+GuestInstance
+```
+
+概念。
+
+所以 Controlled Context 的 storage 不能直接返回：
+
+```text
+Host filesDir
+```
+
+必须设计类似：
+
+```text
+filesDir/
+  guests/
+    <guest-id>/
+      instances/
+        <instance-id>/
+          data/
+            files/
+            cache/
+            code_cache/
+            databases/
+            shared_prefs/
+```
+
+具体结构根据现有 ADR/Storage 文档协调。
+
+不要随意创建第二套结构。
+
+---
+
+# 十五、Package 与 Instance 必须分离
+
+EXP-003 的 Context 设计必须符合：
+
+ADR-0003。
+
+例如：
+
+```text
+GuestPackageRevision
+    ↓
+shared:
+APK
+DEX
+Resources
+
+GuestInstance
+    ↓
+private:
+files
+cache
+shared_prefs
+database
+runtime state
+```
+
+不要把：
+
+packageName
+
+直接当成：
+
+instance directory key。
+
+---
+
+# 十六、ClassLoader 与 Resources 直接复用已经确认的结果
+
+不要重新设计。
+
+Controlled Context：
+
+```text
+getClassLoader()
+```
+
+应该使用 EXP-001 确认的：
+
+Guest ClassLoader。
+
+```text
+getResources()
+getAssets()
+```
+
+应该使用 EXP-002 Preferred Candidate：
+
+Option B resources
+
+作为 EXP-003 API31 设计 baseline。
+
+不要重新创造第三种 Resource Loader。
+
+---
+
+# 十七、ApplicationInfo 设计
+
+这是 EXP-003 很关键的一点。
+
+我们已经从：
+
+```text
+getPackageArchiveInfo()
+```
+
+得到：
+
+Guest `ApplicationInfo`。
+
+但是 archive ApplicationInfo：
+
+不等于系统真正安装后的 ApplicationInfo。
+
+因此设计：
+
+```text
+GuestApplicationInfoView
+```
+
+或者其他合适概念。
+
+不要急着创建生产类。
+
+需要列出 ApplicationInfo 中：
+
+哪些字段可以真实来源于 APK：
+
+* packageName
+* className
+* sourceDir
+* publicSourceDir
+* nativeLibraryDir
+* targetSdkVersion
+* theme
+* flags 部分
+
+哪些字段系统未真正分配：
+
+* uid
+* dataDir
+* credentialProtectedDataDir
+* deviceProtectedDataDir
+* seInfo
+* install state
+
+对于后者：
+
+必须设计语义。
+
+不能复制 Host 值然后宣称 Guest identity。
+
+---
+
+# 十八、重点研究 dataDir
+
+Guest Application 很可能调用：
+
+```text
+applicationInfo.dataDir
+```
+
+但 APK archive ApplicationInfo 可能：
+
+为空
+
+或者：
+
+不适合作为 Guest path。
+
+需要设计：
+
+Logical Guest ApplicationInfo
+
+是否应该：
+
+```text
+dataDir = Guest Instance data root
+```
+
+同时明确：
+
+这只是：
+
+Guest-facing logical metadata。
+
+system_server 不知道这个 dataDir。
+
+---
+
+# 十九、PackageManager 不要在 EXP-003A 解决
+
+真实 Guest Application 常见：
+
+```text
+getPackageManager()
+```
+
+但这是大问题。
+
+不要让 EXP-003 第一阶段卡死在：
+
+PackageManager virtualization。
+
+设计一个分层方案：
+
+### Level PM0
+
+Guest Application 不调用 PackageManager。
+
+### Level PM1
+
+Controlled wrapper 对自己的 Guest package 提供最小查询。
+
+### Level PM2
+
+Guest Registry-backed PackageManager subset。
+
+### Level PM3
+
+System + Guest merged package view。
+
+先设计。
+
+不要实现。
+
+---
+
+# 二十、SystemService 同样分层
+
+Guest Application 常见：
+
+```text
+getSystemService(...)
+```
+
+不要试图一次虚拟：
+
+100 个 Service。
+
+分类：
+
+## Safe Delegation
+
+可能可以直接返回 Host service。
+
+但需要证明。
+
+## Identity-sensitive
+
+例如：
+
+服务调用可能发送：
+
+packageName
+UID
+AttributionSource
+
+给 system_server。
+
+## Needs Translation
+
+## Unsupported
+
+建立：
+
+```text
+EXP-003 System Service Matrix
+```
+
+但第一阶段实验：
+
+尽量避免调用这些服务。
+
+---
+
+# 二十一、ContentResolver 单独处理
+
+Application 常见：
+
+```text
+getContentResolver()
+```
+
+这最终涉及：
+
+ContentProvider / authority / ActivityManager 等。
+
+所以：
+
+EXP-003A/B：
+
+不要要求完整 ContentResolver Guest 语义。
+
+设计状态：
+
+```text
+DEFERRED
+```
+
+后续 Provider Runtime 再解决。
+
+---
+
+# 二十二、SharedPreferences 是否放进 EXP-003？
+
+需要设计，但不要直接决定。
+
+提出：
+
+## Option SP-A
+
+EXP-003C 就验证：
+
+```text
+getSharedPreferences()
+```
+
+因为它主要是文件存储。
+
+## Option SP-B
+
+先只验证：
+
+getFilesDir / file IO
+
+SharedPreferences 单独 EXP-003D。
+
+比较：
+
+复杂度
+依赖
+价值
+
+给推荐。
+
+---
+
+# 二十三、Database 同理
+
+不要 EXP-003 第一轮就测试 SQLite。
+
+设计未来 capability。
+
+但第一阶段 Application：
+
+最多：
+
+file I/O。
+
+---
+
+# 二十四、创建专用 Guest Application 规格
+
+更新：
+
+```text
+docs/review/14_TEST_GUEST_SPEC.md
+```
+
+或者创建：
+
+```text
+docs/experiments/EXP-003-GUEST-APP-SPEC.md
+```
+
+设计一个：
+
+```text
+Exp003GuestApplication
+extends Application
+```
+
+注意：
+
+本轮只写规格。
+
+不要创建代码。
+
+---
+
+# 二十五、Guest Application 第一版必须极简
+
+其 `onCreate()` 第一阶段只做：
+
+读取：
+
+```text
+getPackageName()
+getClassLoader()
+getResources()
+getAssets()
+getFilesDir()
+getCacheDir()
+getApplicationInfo()
+```
+
+生成一个：
+
+```text
+Exp003Report
+```
+
+或者通过 static probe 保存结果。
+
+不要：
+
+* 网络请求
+* Service
+* Receiver
+* Provider
+* WorkManager
+* Firebase
+* WebView
+* JNI
+* PackageManager query
+* Notification
+* Location
+
+目标是：
+
+验证 Runtime。
+
+不是验证复杂 SDK。
+
+---
+
+# 二十六、onCreate 必须有 Unique Marker
+
+Guest Application：
+
+产生：
+
+```text
+EXP003_APPLICATION_<FULL_UUID>
+```
+
+必须来自：
+
+Guest APK。
+
+Host 不包含。
+
+最终通过 Guest ClassLoader 读取。
+
+---
+
+# 二十七、EXP-003 必须拆成至少三个 Gate
+
+不要一个按钮全部执行。
+
+建议：
+
+# EXP-003A — Controlled Context Only
+
+不创建 Application。
+
+直接通过 Context API 测：
+
+```text
+packageName
+ClassLoader
+Resources
+Assets
+filesDir
+cacheDir
+ApplicationInfo
+```
+
+如果 A 失败：
+
+不进入 B。
+
+---
+
+# EXP-003B — Application Instantiation
+
+使用：
+
+```text
+Instrumentation.newApplication(...)
+```
+
+创建：
+
+Guest Application。
+
+但是：
+
+# 不主动调用 onCreate。
+
+验证：
+
+```text
+application.javaClass.classLoader
+application.baseContext
+application.getPackageName()
+application.getClassLoader()
+application.getResources()
+```
+
+---
+
+# EXP-003C — Application.onCreate
+
+在：
+
+A + B
+
+都 CONFIRMED 后：
+
+才调用：
+
+```text
+GuestApplication.onCreate()
+```
+
+验证极简能力。
+
+---
+
+如果认为还需要：
+
+EXP-003D
+
+可以设计。
+
+---
+
+# 二十八、这三个 Gate 必须独立判定
+
+例如：
+
+```text
+EXP-003A = CONFIRMED
+EXP-003B = CONFIRMED
+EXP-003C = PARTIALLY CONFIRMED
+```
+
+不要只给：
+
+```text
+EXP-003 failed
+```
+
+这样我们才能知道问题在哪层。
+
+---
+
+# 二十九、EXP-003A 成功标准设计
+
+至少设计：
+
+```text
+guestContext.getPackageName
+→ Guest package
+
+guestContext.getClassLoader
+→ Guest ClassLoader
+
+guestContext.getResources
+→ Guest Resources
+
+guestContext.getAssets
+→ Guest AssetManager
+
+guestContext.getFilesDir
+→ Guest instance files
+
+guestContext.getCacheDir
+→ Guest instance cache
+
+guestContext.getApplicationInfo
+→ Guest logical metadata
+```
+
+并增加：
+
+Host isolation。
+
+---
+
+# 三十、Storage Isolation Negative Tests
+
+必须设计：
+
+Guest Context：
+
+不能默认返回：
+
+```text
+Host filesDir
+Host cacheDir
+```
+
+所以以后测试：
+
+```text
+guestFilesDir != hostFilesDir
+guestCacheDir != hostCacheDir
+```
+
+并验证：
+
+Guest 创建：
+
+```text
+exp003_guest_file.txt
+```
+
+Host 默认 filesDir：
+
+看不到。
+
+反向也一样。
+
+---
+
+# 三十一、ClassLoader Negative Control
+
+Host：
+
+不能加载：
+
+```text
+Exp003GuestApplication
+```
+
+Guest：
+
+可以加载。
+
+必须和 EXP-001 同样保留。
+
+---
+
+# 三十二、Resources Negative Control
+
+Guest Application 的：
+
+```text
+getResources()
+```
+
+必须与 EXP-002 Guest Resources 一致。
+
+不能悄悄变成：
+
+Host Resources。
+
+设计：
+
+```text
+application.resources === guestContext.resources
+```
+
+以及 unique resource marker 验证。
+
+---
+
+# 三十三、Application BaseContext
+
+EXP-003B 最重要观察之一：
+
+```text
+application.baseContext
+```
+
+必须记录：
+
+真实 class。
+
+以及：
+
+```text
+application.baseContext === controlledGuestContext
+```
+
+结果。
+
+如果 `Instrumentation.newApplication` 没有按预期 attach：
+
+立即停止。
+
+不要使用 hidden API 强行修。
+
+先分析。
+
+---
+
+# 三十四、Application ClassLoader
+
+验证：
+
+```text
+application.javaClass.classLoader
+```
+
+必须：
+
+Guest ClassLoader。
+
+同时：
+
+```text
+application.classLoader
+```
+
+如果 Context API 存在：
+
+也应该返回 Guest ClassLoader。
+
+不要把：
+
+Application class defining loader
+
+和：
+
+Context.getClassLoader
+
+混为一谈。
+
+两者都记录。
+
+---
+
+# 三十五、getApplicationContext 特别设计
+
+Controlled Context：
+
+```text
+getApplicationContext()
+```
+
+在 Application 创建之前：
+
+返回什么？
+
+这是一个循环问题。
+
+必须提前设计。
+
+可能方案：
+
+## Phase before Application
+
+返回：
+
+Controlled Context self
+
+或者 null / Host？
+
+## Phase after Application created
+
+返回：
+
+Guest Application
+
+需要设计生命周期绑定。
+
+不要随意 delegate Host：
+
+```text
+hostContext.applicationContext
+```
+
+否则 Guest 很容易拿到 Host Application。
+
+---
+
+# 三十六、这是一个重要的循环依赖
+
+```text
+Guest Context
+需要 Guest Application
+
+Guest Application
+又需要 Guest Context
+```
+
+必须在设计文档里明确打破。
+
+可以提出：
+
+### Bootstrap Context
+
+Application 创建前使用。
+
+### Bound Guest Context
+
+Application 创建后绑定 Application。
+
+或者其他方案。
+
+比较。
+
+不要实现。
+
+---
+
+# 三十七、Theme 本轮如何处理
+
+Application Context 通常不以 UI Theme 为核心。
+
+所以：
+
+EXP-003A/B/C
+
+不要求完整 Theme。
+
+可以：
+
+delegate / basic resource theme
+
+但必须标：
+
+```text
+NOT VALIDATED FOR ACTIVITY UI
+```
+
+Activity Theme 留到未来 Activity Runtime。
+
+---
+
+# 三十八、Main Thread
+
+Android 正常：
+
+Application.onCreate()
+
+发生在：
+
+主线程。
+
+所以实验设计必须要求：
+
+EXP-003C
+
+在：
+
+Host main looper
+
+执行。
+
+记录：
+
+```text
+Looper.myLooper() == Looper.getMainLooper()
+```
+
+不要在 worker thread 调 Application.onCreate。
+
+---
+
+# 三十九、Application onCreate 调用次数
+
+设计必须保证：
+
+同一个 Guest Instance：
+
+```text
+onCreate
+```
+
+不能无意执行多次。
+
+第一版定义：
+
+```text
+CREATED
+ATTACHED
+ON_CREATE_RUNNING
+RUNNING
+FAILED
+DESTROYED?
+```
+
+不要实现复杂正式状态机。
+
+但实验文档必须记录：
+
+生命周期状态。
+
+---
+
+# 四十、Application 异常处理
+
+如果 Guest：
+
+```text
+onCreate()
+```
+
+抛异常：
+
+Host AppSandbox 不应该直接整个 crash。
+
+设计：
+
+```text
+Guest Application failure
+↓
+捕获
+↓
+Guest Instance Runtime = FAILED
+↓
+记录 exception
+```
+
+但需要讨论：
+
+Java `Error`
+
+RuntimeException
+
+LinkageError
+
+哪些捕获。
+
+不要简单：
+
+```text
+catch(Throwable)
+```
+
+后什么都吞掉。
+
+---
+
+# 四十一、真正系统行为与实验行为必须区分
+
+即使 EXP-003C 成功：
+
+也只能证明：
+
+```text
+Guest Application class
++
+Controlled Context
++
+manual lifecycle call
+```
+
+能够运行。
+
+不能声称：
+
+```text
+Android system 已经真正 bindApplication Guest package。
+```
+
+system_server 仍然只知道 Host。
+
+ADR 必须强调。
+
+---
+
+# 四十二、Application callback
+
+先设计：
+
+```text
+registerActivityLifecycleCallbacks
+registerComponentCallbacks
+```
+
+是否应该支持。
+
+第一阶段可以：
+
+```text
+DEFERRED
+```
+
+因为这些 callback 在 Android 正常环境中有系统生命周期意义。
+
+不要随便 delegate Host Application。
+
+---
+
+# 四十三、Process Name
+
+Guest Application 可能：
+
+读取 process name。
+
+但当前运行在：
+
+Host process。
+
+所以：
+
+```text
+Application.getProcessName()
+```
+
+或等价行为
+
+不能声称是 Guest process。
+
+标：
+
+```text
+HOST PROCESS REALITY
+```
+
+将来 Sandbox Process 再研究。
+
+---
+
+# 四十四、native 本轮仍然排除
+
+Guest Application 如果：
+
+```text
+System.loadLibrary(...)
+```
+
+EXP-003 第一版不支持。
+
+GuestTestApp 不要这么做。
+
+native runtime 单独实验。
+
+---
+
+# 四十五、WebView 也暂时排除
+
+WebView 会涉及：
+
+* package identity
+* data directory suffix
+* process
+* native
+* provider
+* resources
+
+所以 EXP-003 Guest App 禁止初始化 WebView。
+
+---
+
+# 四十六、第三方 SDK 暂时排除
+
+不要用：
+
+Firebase
+WorkManager
+Room
+Glide
+OkHttp
+
+证明 Application Runtime。
+
+第一阶段必须是自己可控的 minimal Guest。
+
+---
+
+# 四十七、设计 Compatibility Levels
+
+创建：
+
+```text
+docs/experiments/EXP-003-APPLICATION-COMPATIBILITY-LEVELS.md
+```
+
+例如：
+
+## A0
+
+Application object instantiated.
+
+## A1
+
+Basic Context getters work.
+
+## A2
+
+File storage works.
+
+## A3
+
+SharedPreferences works.
+
+## A4
+
+PackageManager self-query works.
+
+## A5
+
+selected SystemService works.
+
+## A6
+
+Provider/ContentResolver works.
+
+## A7
+
+third-party SDK initialization.
+
+后面一步一步升级。
+
+不要 EXP-003 一次做完。
+
+---
+
+# 四十八、设计 EXP-003A Plan
+
+创建：
+
+```text
+docs/experiments/EXP-003A-CONTEXT-PLAN.md
+```
+
+包含：
+
+Question
+
+Hypothesis
+
+Dependencies
+
+Context contract
+
+Setup
+
+Tests
+
+Negative controls
+
+Success criteria
+
+Failure criteria
+
+Architecture implications
+
+---
+
+# 四十九、设计 EXP-003B Plan
+
+创建：
+
+```text
+docs/experiments/EXP-003B-APPLICATION-INSTANTIATION-PLAN.md
+```
+
+核心只验证：
+
+```text
+Guest ClassLoader
++
+Controlled Context
++
+Instrumentation.newApplication
+↓
+Guest Application object
+```
+
+不调用 onCreate。
+
+---
+
+# 五十、设计 EXP-003C Plan
+
+创建：
+
+```text
+docs/experiments/EXP-003C-APPLICATION-ONCREATE-PLAN.md
+```
+
+只允许：
+
+极简 onCreate。
+
+定义：
+
+可调用能力。
+
+禁止能力。
+
+成功标准。
+
+---
+
+# 五十一、明确 Public API baseline
+
+建立表：
+
+| API                                       | Status | Purpose                         |
+| ----------------------------------------- | ------ | ------------------------------- |
+| Instrumentation.newApplication            | PUBLIC | Guest Application instantiation |
+| ContextWrapper                            | PUBLIC | Controlled Context candidate    |
+| PackageManager.getPackageArchiveInfo      | PUBLIC | Guest archive metadata          |
+| PackageManager.getResourcesForApplication | PUBLIC | Guest resources candidate       |
+| DexClassLoader                            | PUBLIC | Guest class space               |
+
+然后另列：
+
+可能未来才需要：
+
+```text
+ActivityThread
+LoadedApk
+ContextImpl
+```
+
+这些属于：
+
+framework internal / hidden implementation detail。
+
+本轮：
+
+不调用。
+
+---
+
+# 五十二、不要提前确定 ContextWrapper 就是最终方案
+
+虽然它是最自然的实验候选，
+
+但必须记录：
+
+缺点：
+
+```text
+unoverridden API
+↓
+automatically delegate Host
+```
+
+因此未来如果 API surface 扩大：
+
+可能需要：
+
+更严格的 Context implementation
+
+或者：
+
+interception architecture。
+
+现在只标：
+
+```text
+PROPOSED EXPERIMENTAL CONTEXT
+```
+
+---
+
+# 五十三、考虑 Method Hook 的未来位置
+
+由于项目不再排除方法级 interception，
+
+设计文档里可以增加：
+
+```text
+Future interception points
+```
+
+例如如果第三方 Guest library：
+
+缓存了：
+
+Host Context
+
+或绕过了：
+
+Controlled Context
+
+未来可能需要：
+
+method-level compatibility。
+
+但：
+
+# 不要在 EXP-003A/B/C 中使用 Hook。
+
+先建立纯 Context baseline。
+
+---
+
+# 五十四、设计 Test Guest 行为
+
+未来 `Exp003GuestApplication.onCreate()`：
+
+必须输出一个结构化结果。
+
+例如概念：
+
+```text
+Exp003Report
+{
+    packageName
+    classLoader
+    resourcesMarker
+    assetMarker
+    filesDir
+    cacheDir
+    applicationInfoPackage
+    applicationInfoDataDir
+    mainThread
+    uniqueMarker
+}
+```
+
+不要依赖 Logcat 作为唯一证据。
+
+Host 应该能够通过：
+
+Guest ClassLoader + reflection
+
+读取结果。
+
+---
+
+# 五十五、不能直接共享 Host interface class
+
+注意 EXP-001 已确认：
+
+Class identity 与 ClassLoader 绑定。
+
+如果 Host 定义：
+
+```text
+Exp003ReportInterface
+```
+
+Guest 自己又打包一份同名 interface，
+
+类型身份可能不同。
+
+因此 EXP-003 设计：
+
+优先使用跨 classloader 安全的数据：
+
+* String
+* primitive
+* String Map
+* Bundle（需要注意 classloader）
+* JSON
+
+不要直接 cast Guest custom object 为 Host custom interface。
+
+这是 EXP-001 的直接架构结论。
+
+---
+
+# 五十六、建议结果桥使用基础 Java 类型
+
+例如：
+
+Guest Probe：
+
+返回：
+
+```text
+Map<String, String>
+```
+
+但也要研究：
+
+Guest 是否打包 java.util.Map？
+
+不会，因为 java.* 来自 boot。
+
+所以可作为跨 ClassLoader 边界候选。
+
+或者：
+
+JSON String
+
+更加简单。
+
+给出推荐。
+
+---
+
+# 五十七、Process Model 本轮保持 Host Process
+
+EXP-003 仍然：
+
+在 Host process
+
+进行实验。
+
+原因：
+
+先验证 Application/Context 模型。
+
+不要同时引入：
+
+Sandbox Process。
+
+但是文档必须明确：
+
+```text
+HOST PROCESS ONLY
+```
+
+不是未来最终进程架构。
+
+Per-instance process 仍然是未来高优先级研究方向。
+
+---
+
+# 五十八、不要把 Host Process 的成功过度解释
+
+如果：
+
+Guest Application onCreate
+
+成功，
+
+也不代表：
+
+多 Guest 可安全共享 Host process。
+
+因为：
+
+* static state
+* native globals
+* process-level SDK
+* process name
+* crash isolation
+
+仍未解决。
+
+---
+
+# 五十九、Android 9/10 不阻塞 EXP-003 API31 设计
+
+继续采用：
+
+```text
+API31 baseline
+```
+
+Android 9/10：
+
+独立 compatibility track。
+
+不要一边设计 Context：
+
+一边重新解决 Resources API28/29。
+
+---
+
+# 六十、最终需要输出一个 Context Boundary 图
+
+创建类似：
+
+```text
+               Guest Application
+                      │
+                      ▼
+             Controlled Context
+                      │
+       ┌──────────────┼──────────────┐
+       ▼              ▼              ▼
+ Guest-owned       Delegated      Unsupported
+ semantics         Host-backed
+       │              │
+ ClassLoader       MainLooper
+ Resources         selected APIs
+ Assets
+ Storage
+ packageName
+```
+
+但根据实际研究完善。
+
+---
+
+# 六十一、建立 Host Leakage Threat Model
+
+列出 Guest Application 可能通过哪些 API：
+
+意外发现 Host：
+
+* packageName
+* files
+* resources
+* application
+* PackageManager
+* process
+* classpath
+* system service identity
+
+创建：
+
+```text
+docs/experiments/EXP-003-HOST-LEAKAGE-MATRIX.md
+```
+
+每项标：
+
+```text
+Expected Guest
+Expected Host
+Accepted for EXP-003
+Must Fix
+Deferred
+```
+
+---
+
+# 六十二、设计最重要的 Negative Controls
+
+未来至少：
+
+## N1
+
+Host ClassLoader：
+
+不能加载 Guest Application。
+
+## N2
+
+Guest Application Resources：
+
+不能读取 Host-only marker。
+
+## N3
+
+Guest filesDir：
+
+不能等于 Host filesDir。
+
+## N4
+
+Guest Application.getApplicationContext():
+
+不能返回 Host Application。
+
+## N5
+
+Guest packageName：
+
+不能返回 Host package。
+
+## N6
+
+Guest classloader：
+
+不能等于 Host loader。
+
+---
+
+# 六十三、设计 Failure Injection
+
+未来实验应包含：
+
+Guest Application constructor 抛异常
+
+和：
+
+Guest `onCreate()` 抛异常
+
+分别验证：
+
+Host 是否 survives。
+
+但：
+
+不要本轮创建代码。
+
+---
+
+# 六十四、设计 ADR Gate
+
+不要 EXP-003 一通过就创建一个巨大：
+
+```text
+Guest Application Runtime ADR
+```
+
+应该：
+
+### ADR-0007
+
+Controlled Guest Context baseline
+
+如果 EXP-003A 成功。
+
+### ADR-0008
+
+Guest Application instantiation baseline
+
+如果 B 成功。
+
+### ADR-0009
+
+Guest Application onCreate baseline
+
+如果 C 成功。
+
+编号按实际仓库。
+
+这样以后某一级被推翻：
+
+不用推翻整个 Application Runtime。
+
+---
+
+# 六十五、明确 EXP-003A/B/C 的依赖
+
+应该形成：
+
+```text
+EXP-001 Code
+        │
+        ├─────────┐
+        │         │
+EXP-002 Resources │
+        │         │
+        └────┬────┘
+             ▼
+      EXP-003A Context
+             │
+             ▼
+      EXP-003B Application
+             │
+             ▼
+      EXP-003C onCreate
+```
+
+如果还有 Storage 前置依赖：
+
+明确加入图中。
+
+---
+
+# 六十六、检查现有 Storage Design
+
+阅读：
+
+```text
+docs/design/05_STORAGE_MODEL.md
+docs/design/18_MULTI_INSTANCE.md
+ADR-0003
+```
+
+EXP-003 Context path：
+
+必须与这些保持一致。
+
+如果发现冲突：
+
+只记录。
+
+不要修改生产代码。
+
+---
+
+# 六十七、更新 Master Roadmap
+
+只更新：
+
+设计状态。
+
+不要把 EXP-003 标记为实现中。
+
+应该类似：
+
+```text
+EXP-001 CONFIRMED
+EXP-002 API30+ CONFIRMED
+EXP-003 DESIGN READY / NOT READY
+```
+
+根据本轮最终结果。
+
+---
+
+# 六十八、本轮禁止生产代码变化
+
+原则：
+
+```text
+app/src/
+test-guests/
+```
+
+本轮不要修改。
+
+只允许：
+
+```text
+docs/
+```
+
+如果必须查看代码：
+
+可以。
+
+不要编辑。
+
+---
+
+# 六十九、本轮最终回传
+
+严格返回：
+
+## A. EXP-003 Design Status
+
+```text
+READY
+NOT READY
+```
+
+---
+
+## B. Android Application Creation Model
+
+简要链：
+
+```text
+ActivityThread
+→ ...
+→ Application
+```
+
+并列：
+
+client/system dependencies。
+
+---
+
+## C. Preferred Application Instantiation Candidate
+
+只能：
+
+```text
+PROPOSED
+```
+
+说明：
+
+Option A/B/C。
+
+---
+
+## D. Controlled Context Contract
+
+列出：
+
+### Must virtualize
+
+### Safe delegate
+
+### Identity-sensitive
+
+### Deferred
+
+### Unsupported
+
+---
+
+## E. Context Capability Matrix
+
+至少返回最重要 20 项。
+
+---
+
+## F. ApplicationInfo Strategy
+
+说明：
+
+哪些字段：
+
+APK真实
+
+哪些：
+
+Guest logical
+
+哪些：
+
+Host/system reality
+
+哪些：
+
+unknown。
+
+---
+
+## G. Storage Strategy
+
+返回：
+
+```text
+Guest Package shared paths
+Guest Instance private paths
+```
+
+特别：
+
+files/cache/data。
+
+---
+
+## H. getApplicationContext Bootstrap Problem
+
+说明：
+
+循环依赖怎么计划解决。
+
+只给：
+
+PROPOSED。
+
+---
+
+## I. Application Instantiation
+
+说明：
+
+为什么：
+
+```text
+Instrumentation.newApplication
+```
+
+值得作为第一实验候选。
+
+以及它尚未证明什么。
+
+---
+
+## J. EXP-003A
+
+总结：
+
+Question
+Hypothesis
+Success Criteria
+Negative Controls
+
+---
+
+## K. EXP-003B
+
+同上。
+
+---
+
+## L. EXP-003C
+
+同上。
+
+---
+
+## M. Host Leakage Matrix
+
+列出最危险的 10 个 Host leakage 路径。
+
+---
+
+## N. Identity Model
+
+明确：
+
+```text
+Guest logical package =
+Host real UID =
+Host real process =
+```
+
+这些如何同时存在。
+
+---
+
+## O. System Service Boundary
+
+列出：
+
+第一阶段可以 delegate 的候选
+
+和：
+
+必须 deferred 的 identity-sensitive service。
+
+不要实现。
+
+---
+
+## P. Cross-ClassLoader Result Transport
+
+推荐：
+
+JSON / primitives / Map / Bundle / other
+
+说明原因。
+
+---
+
+## Q. ADR Plan
+
+未来 EXP-003A/B/C 分别成功后：
+
+准备创建哪些 ADR。
+
+---
+
+## R. Open Questions
+
+按：
+
+CRITICAL
+HIGH
+MEDIUM
+
+列出。
+
+---
+
+## S. Modified Files
+
+应该只有：
+
+```text
+docs/
+```
+
+---
+
+## T. Git
+
+```bash
+git status --short
+git diff --stat
+```
+
+---
+
+## U. Next Step
+
+只能回答：
+
+```text
+Ready to execute EXP-003A: YES / NO
+```
+
+如果 YES：
+
+列最多 5 条理由。
+
+# 不要执行 EXP-003A。

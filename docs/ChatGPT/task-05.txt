@@ -1,0 +1,1158 @@
+继续负责当前 AppSandbox 项目。
+
+EXP-001 当前状态：
+
+`PARTIALLY CONFIRMED`
+
+当前唯一阻塞点已经明确：
+
+```text
+GuestTestApp-debug.apk
+已存在：
+/sdcard/Download/GuestTestApp-debug.apk
+
+但：
+
+ACTION_OPEN_DOCUMENT
++
+application/vnd.android.package-archive
+
+在当前 Xiaomi Mi 10 / Android 12 的 DocumentsUI 中没有显示该 APK。
+```
+
+Host 已安装。
+
+GuestTestApp 未安装。
+
+不要再排查：
+
+* APK 构建
+* Host 安装
+* ADB 安装
+* DexClassLoader
+* Android Runtime
+
+当前优先解决：
+
+# SAF APK 选择兼容性
+
+解决后立即继续现有 EXP-001。
+
+---
+
+# 一、本轮目标
+
+只完成两件事：
+
+## Goal 1
+
+让用户能够通过 Android SAF 文件选择器：
+
+选择 `.apk` 文件。
+
+## Goal 2
+
+Guest APK 成功导入 AppSandbox 私有目录后：
+
+完整执行已有 EXP-001：
+
+```text
+Host negative control
+↓
+DexClassLoader
+↓
+GuestProbe
+↓
+GuestHelper
+↓
+reflection
+↓
+marker
+↓
+error tests
+↓
+two ClassLoader identity
+```
+
+完成后停止。
+
+禁止进入 EXP-002。
+
+---
+
+# 二、首先分析当前 SAF 实现
+
+检查当前：
+
+`MainActivity.kt`
+
+或者实际 Import 实现。
+
+找出：
+
+```text
+ACTION_OPEN_DOCUMENT
+```
+
+当前设置的：
+
+```text
+Intent.type
+CATEGORY_OPENABLE
+EXTRA_MIME_TYPES
+```
+
+记录当前行为。
+
+不要立即重构。
+
+---
+
+# 三、不要再只使用 APK MIME 作为系统文件选择过滤条件
+
+当前：
+
+```text
+application/vnd.android.package-archive
+```
+
+在不同：
+
+* DocumentsProvider
+* ROM
+* Download provider
+* File manager
+
+上可能出现：
+
+* MIME 识别差异
+* `application/octet-stream`
+* provider 不按 APK MIME 暴露
+* DocumentsUI 过滤行为差异
+
+因此需要调整：
+
+# “选择阶段宽松，导入阶段严格验证”
+
+而不是：
+
+# “完全依赖 MIME 判断是不是 APK”。
+
+---
+
+# 四、调整 SAF 选择策略
+
+继续使用：
+
+```text
+Intent.ACTION_OPEN_DOCUMENT
+```
+
+继续使用：
+
+```text
+Intent.CATEGORY_OPENABLE
+```
+
+优先采用兼容性更好的选择方式，例如：
+
+```text
+type = "*/*"
+```
+
+必要时可以同时设置：
+
+```text
+EXTRA_MIME_TYPES
+```
+
+包括合理的：
+
+```text
+application/vnd.android.package-archive
+application/octet-stream
+```
+
+但不要假设所有 Provider 都会返回正确 MIME。
+
+核心目标：
+
+**DocumentsUI 必须能够显示 GuestTestApp-debug.apk。**
+
+---
+
+# 五、不能因为使用 `*/*` 就允许任意文件导入
+
+SAF 文件选择范围放宽后：
+
+AppSandbox 自己必须严格验证文件。
+
+建立导入验证顺序。
+
+建议：
+
+```text
+URI selected
+↓
+读取 OpenableColumns.DISPLAY_NAME
+↓
+记录 ContentResolver.getType(uri)
+↓
+检查基础输入可读性
+↓
+复制到临时文件
+↓
+使用 Android PackageManager archive API 验证
+↓
+只有真正可解析为 APK 才进入 Guest Store
+```
+
+不要只依赖：
+
+```text
+filename.endsWith(".apk")
+```
+
+因为扩展名可以伪造。
+
+---
+
+# 六、APK 验证
+
+继续使用当前项目已经采用的 Android 官方 APK archive parsing API。
+
+例如当前已经存在：
+
+`PackageManager.getPackageArchiveInfo(...)`
+
+则优先复用。
+
+验证：
+
+至少能够得到有效：
+
+```text
+PackageInfo
+packageName
+```
+
+如果：
+
+```text
+getPackageArchiveInfo == null
+```
+
+或者解析异常：
+
+判定不是有效 APK。
+
+---
+
+# 七、采用临时文件 → 验证 → 正式入库
+
+如果当前 Import 是：
+
+```text
+URI
+↓
+直接写入
+filesDir/guests/<id>/base.apk
+```
+
+请评估并改成更安全的流程：
+
+```text
+URI
+↓
+temporary import file
+↓
+APK validation
+↓
+成功
+↓
+创建 Guest ID / Guest Record
+↓
+移动或复制为正式 base.apk
+```
+
+验证失败：
+
+```text
+删除 temporary file
+```
+
+不要让损坏文件进入正式 Guest Store。
+
+如果当前架构已经有等价机制：
+
+复用，不要重复设计。
+
+---
+
+# 八、记录 SAF 实际返回信息
+
+新增调试日志。
+
+TAG 可以使用：
+
+```text
+AppSandbox.Import
+```
+
+记录：
+
+```text
+URI =
+DISPLAY_NAME =
+ContentResolver MIME =
+URI scheme =
+URI authority =
+```
+
+不要打印用户文件的敏感内容。
+
+只记录元数据。
+
+这样以后可以确认 Xiaomi DocumentsUI 实际对 APK 返回什么类型。
+
+---
+
+# 九、测试 APK 可见性
+
+重新构建 Host。
+
+如果需要重新安装：
+
+用户可以在手机端确认安装。
+
+不要再次把：
+
+```text
+INSTALL_FAILED_USER_RESTRICTED
+```
+
+当成工程问题。
+
+这是当前设备需要用户点击安装确认。
+
+安装完成后：
+
+启动 AppSandbox。
+
+点击：
+
+```text
+Import APK
+```
+
+确认：
+
+`GuestTestApp-debug.apk`
+
+现在能够在：
+
+Downloads
+
+中显示。
+
+---
+
+# 十、选择 GuestTestApp-debug.apk
+
+选择：
+
+```text
+/sdcard/Download/GuestTestApp-debug.apk
+```
+
+完成 SAF 回调。
+
+记录：
+
+```text
+DISPLAY_NAME
+MIME
+URI
+```
+
+然后执行 APK validation。
+
+必须验证解析出的：
+
+```text
+packageName =
+com.example.appsandbox.testguest
+```
+
+---
+
+# 十一、确认正式 Guest Store
+
+导入成功后记录：
+
+```text
+internalGuestId =
+base.apk absolute path =
+exists =
+readable =
+size =
+SHA256 =
+```
+
+目标必须是：
+
+AppSandbox 私有目录。
+
+不要让 EXP-001 直接从：
+
+```text
+/sdcard/Download/
+```
+
+执行。
+
+必须从：
+
+AppSandbox 导入后的私有 APK 路径
+
+执行 ClassLoader。
+
+---
+
+# 十二、再次确认 Guest 没有安装
+
+导入以后执行：
+
+```bash
+adb shell pm path com.example.appsandbox.testguest
+```
+
+必须仍然无输出。
+
+注意：
+
+“Import APK”
+
+绝对不能变成：
+
+“Install APK”。
+
+---
+
+# 十三、现在才开始执行 EXP-001
+
+在执行前：
+
+```bash
+adb logcat -c
+```
+
+使用现有：
+
+```text
+Exp001Runner
+```
+
+不要重新实现一套。
+
+---
+
+# 十四、Negative Control
+
+首先：
+
+```text
+Host ClassLoader
+↓
+GuestProbe
+```
+
+类名：
+
+```text
+com.example.appsandbox.testguest.runtime.GuestProbe
+```
+
+必须得到：
+
+```text
+ClassNotFoundException
+```
+
+记录：
+
+```text
+NEGATIVE_CONTROL=PASS
+```
+
+如果 Host 能加载：
+
+停止实验。
+
+说明 Guest class 被 Host 打包。
+
+不得继续。
+
+---
+
+# 十五、记录 Host ClassLoader
+
+真实记录：
+
+```text
+Host loader class =
+Host loader toString =
+Host parent class =
+Host parent toString =
+```
+
+---
+
+# 十六、创建 Guest DexClassLoader
+
+使用：
+
+AppSandbox 私有：
+
+```text
+base.apk
+```
+
+创建当前 EXP-001 已经实现的：
+
+```text
+DexClassLoader
+```
+
+不要新增复杂抽象。
+
+记录：
+
+```text
+Guest dexPath =
+optimized/code cache path =
+library search path =
+Guest parent =
+```
+
+---
+
+# 十七、加载 GuestProbe
+
+执行：
+
+```text
+Guest ClassLoader
+↓
+loadClass(GuestProbe)
+```
+
+记录：
+
+```text
+GuestProbe loaded =
+GuestProbe class name =
+GuestProbe defining ClassLoader =
+clazz.classLoader === guestClassLoader =
+```
+
+---
+
+# 十八、Reflection
+
+继续现有实验：
+
+```text
+constructor lookup
+↓
+newInstance
+↓
+ping(String)
+```
+
+记录：
+
+```text
+CONSTRUCTOR_LOOKUP =
+INSTANCE_CREATION =
+METHOD_LOOKUP =
+METHOD_INVOKE =
+```
+
+---
+
+# 十九、GuestHelper
+
+确认：
+
+```text
+GuestProbe
+↓
+GuestHelper
+```
+
+Guest 内部依赖成功解析。
+
+记录：
+
+```text
+GUEST_HELPER_RESOLVED =
+```
+
+---
+
+# 二十、Marker
+
+返回结果必须包含：
+
+GuestTestApp 内独有 marker。
+
+记录：
+
+```text
+markerExpected =
+markerActual =
+markerMatch =
+```
+
+---
+
+# 二十一、观察 Framework Class delegation
+
+使用 Guest ClassLoader 获取：
+
+```text
+java.lang.String
+android.os.Build
+```
+
+只记录：
+
+```text
+java.lang.String classLoader =
+android.os.Build classLoader =
+```
+
+不要 Hook。
+
+不要覆盖。
+
+不要扩展实验。
+
+---
+
+# 二十二、Wrong Class
+
+执行现有：
+
+```text
+DoesNotExist
+```
+
+测试。
+
+要求：
+
+```text
+ClassNotFoundException
+AppSandbox survives
+```
+
+记录实际异常。
+
+---
+
+# 二十三、Corrupt APK
+
+执行当前已有损坏 APK 测试。
+
+要求：
+
+* 使用副本
+* 不修改正常 base.apk
+* App 不 crash
+* 记录真实 exception
+
+---
+
+# 二十四、Two ClassLoader Type Identity
+
+必须实际执行。
+
+同一个：
+
+```text
+base.apk
+```
+
+创建：
+
+```text
+GuestLoaderA
+GuestLoaderB
+```
+
+分别加载：
+
+```text
+GuestProbe
+```
+
+记录：
+
+```text
+loaderA == loaderB =
+classA == classB =
+
+classA.classLoader =
+classB.classLoader =
+
+classA.classLoader == classB.classLoader =
+
+classA.isAssignableFrom(classB) =
+classB.isAssignableFrom(classA) =
+```
+
+这些必须来自真实设备运行。
+
+禁止根据 JVM 理论直接填写。
+
+---
+
+# 二十五、如果 SAF 修改成功，但 EXP-001 失败
+
+不要进入 EXP-002。
+
+不要马上引入：
+
+* Hook
+* Xposed
+* hidden API
+* native
+* Binder
+
+先定位：
+
+```text
+Import
+APK path
+DexClassLoader
+Class lookup
+dependency
+constructor
+reflection
+```
+
+哪一步失败。
+
+然后返回证据。
+
+---
+
+# 二十六、如果 SAF 仍无法显示 APK
+
+如果：
+
+```text
+ACTION_OPEN_DOCUMENT
+type="*/*"
+```
+
+仍然无法看到 APK：
+
+先调查当前 DocumentsProvider 行为。
+
+不要直接换成自制文件浏览器。
+
+可以比较：
+
+```text
+ACTION_OPEN_DOCUMENT
+ACTION_GET_CONTENT
+```
+
+但任何改变都必须记录：
+
+为什么。
+
+目标仍然是：
+
+使用 Android 系统文件选择机制。
+
+如果当前 ROM 的某个 Provider明确隐藏 APK：
+
+可以选择另一支持 SAF 的文件来源进行测试，
+
+但不要通过安装 Guest 来绕过。
+
+---
+
+# 二十七、修复 Import 后需要补测试
+
+因为选择条件从 APK MIME 放宽为：
+
+```text
+*/*
+```
+
+必须测试：
+
+## Test A
+
+正常 APK
+
+应成功。
+
+## Test B
+
+`.txt`
+
+必须拒绝。
+
+## Test C
+
+普通 ZIP 改名 `.apk`
+
+必须拒绝。
+
+## Test D
+
+损坏 APK
+
+必须拒绝正式 Import。
+
+## Test E
+
+正常 APK 但 Provider MIME 返回：
+
+```text
+application/octet-stream
+```
+
+只要 PackageManager 能正确解析：
+
+应该允许。
+
+目标：
+
+**不要信任 MIME，也不要信任扩展名，最终信任 APK 结构解析。**
+
+---
+
+# 二十八、更新文档
+
+需要更新：
+
+```text
+docs/experiments/EXP-001-RESULT.md
+```
+
+增加一节：
+
+```text
+SAF Import Compatibility
+```
+
+记录：
+
+原方案：
+
+```text
+application/vnd.android.package-archive
+```
+
+在 Xiaomi Android 12 DocumentsUI 上：
+
+无法选择测试 APK。
+
+调整方案：
+
+记录实际方案。
+
+同时记录：
+
+实际：
+
+```text
+ContentResolver MIME
+DISPLAY_NAME
+```
+
+---
+
+# 二十九、如果 EXP-001 最终 CONFIRMED
+
+创建：
+
+```text
+docs/adr/ADR-0004-GUEST-DEX-CLASS-LOADING.md
+```
+
+实际编号按照当前仓库。
+
+ADR 只确认：
+
+未安装 Guest APK 中的普通 dex class 可以从 AppSandbox 私有 APK 路径通过独立 ClassLoader 加载、实例化和调用。
+
+不要扩大结论。
+
+---
+
+# 三十、另外记录一个 Import 设计决策
+
+如果最终决定：
+
+```text
+SAF selector = broad MIME
++
+App-side APK structural validation
+```
+
+这是一个值得记录的设计决定。
+
+可以创建一个小型 ADR，例如：
+
+```text
+ADR-0005-SAF-APK-SELECTION-VALIDATION.md
+```
+
+实际编号根据仓库顺序。
+
+核心原则：
+
+> 文件选择阶段不依赖 Provider MIME 正确性；安全边界由 AppSandbox 自己的 APK 解析验证建立。
+
+---
+
+# 三十一、本轮仍然不要进入 EXP-002
+
+即使：
+
+```text
+EXP-001 = CONFIRMED
+```
+
+完成后停止。
+
+不要实现：
+
+```text
+AssetManager
+Resources
+Theme
+Guest Application
+```
+
+等待负责人评审。
+
+---
+
+# 三十二、最终回传格式
+
+严格返回：
+
+## A. SAF 根因
+
+当前 Xiaomi DocumentsUI 为什么之前无法看到 APK。
+
+如果无法完全确定：
+
+写：
+
+`UNKNOWN / likely MIME/provider filtering`
+
+不要猜成事实。
+
+---
+
+## B. SAF 最终方案
+
+返回：
+
+```text
+Intent action =
+Intent type =
+EXTRA_MIME_TYPES =
+CATEGORY_OPENABLE =
+```
+
+以及：
+
+App 内如何验证 APK。
+
+---
+
+## C. Import Validation Test
+
+返回：
+
+```text
+Valid APK =
+TXT =
+Fake APK =
+Corrupt APK =
+octet-stream APK =
+```
+
+实际结果。
+
+---
+
+## D. Guest Import Result
+
+```text
+DISPLAY_NAME =
+Provider MIME =
+internalGuestId =
+private APK path =
+size =
+SHA256 =
+parsed packageName =
+```
+
+---
+
+## E. Package State
+
+真实：
+
+```bash
+adb shell pm path com.example.appsandbox
+adb shell pm path com.example.appsandbox.testguest
+```
+
+---
+
+## F. EXP-001 Final Status
+
+只能：
+
+```text
+CONFIRMED
+PARTIALLY CONFIRMED
+REJECTED
+```
+
+---
+
+## G. Negative Control
+
+```text
+Host loader =
+Host -> GuestProbe =
+NEGATIVE_CONTROL =
+```
+
+---
+
+## H. Positive Result
+
+```text
+Guest loader =
+Guest parent =
+GuestProbe defining loader =
+clazz.classLoader === guestClassLoader =
+
+GuestProbe instantiated =
+GuestHelper resolved =
+
+pingResult =
+markerExpected =
+markerActual =
+markerMatch =
+```
+
+---
+
+## I. Framework Class Observation
+
+```text
+java.lang.String classLoader =
+android.os.Build classLoader =
+```
+
+---
+
+## J. Wrong Class
+
+```text
+result =
+exception =
+app survived =
+```
+
+---
+
+## K. Corrupt APK Runtime Test
+
+```text
+result =
+exception =
+app survived =
+```
+
+注意：
+
+这里是 ClassLoader 实验中的损坏 APK 测试，
+
+不要和 Import 阶段损坏 APK 拒绝测试混淆。
+
+---
+
+## L. Two ClassLoader Test
+
+必须：
+
+```text
+loaderA == loaderB =
+classA == classB =
+classA.classLoader =
+classB.classLoader =
+classA.classLoader == classB.classLoader =
+classA.isAssignableFrom(classB) =
+classB.isAssignableFrom(classA) =
+```
+
+---
+
+## M. ADR
+
+返回：
+
+是否创建：
+
+```text
+Guest Dex Class Loading ADR
+SAF Import ADR
+```
+
+以及摘要。
+
+---
+
+## N. Modified Files
+
+完整列出本轮实际修改。
+
+---
+
+## O. Git
+
+```bash
+git status --short
+git diff --stat
+```
+
+---
+
+## P. Next Step
+
+只回答：
+
+```text
+Ready for EXP-002: YES / NO
+```
+
+最多 5 条理由。
+
+禁止执行 EXP-002。

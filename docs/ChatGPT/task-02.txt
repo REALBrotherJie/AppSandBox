@@ -1,0 +1,1551 @@
+继续负责当前 AppSandbox 项目。
+
+上一轮已经完成完整总体设计，包括：
+
+* `docs/APP_SANDBOX_MASTER_DESIGN.md`
+* `docs/design/01` ~ `27`
+* ADR-0001 ~ ADR-0003
+* Clean-room 约束
+* 未修改生产代码
+* 未实现 Hook / Runtime / Stub / Binder Proxy
+
+当前关键状态：
+
+* Guest Package：PROPOSED
+* Guest Storage：PROPOSED
+* Activity Launch：RESEARCH NEEDED
+* Process Model：PROPOSED
+* ClassLoader：RESEARCH NEEDED
+* Resources：RESEARCH NEEDED
+* System Service Bridge：PROPOSED
+* UID/SELinux 隔离：BLOCKED
+* Multi-instance：PROPOSED
+* Android 16：RESEARCH NEEDED
+
+现在进入下一阶段：
+
+# Architecture Review / Assumption Validation Planning
+
+本轮依然：
+
+**不要实现正式 Runtime 功能。**
+
+本轮不是继续扩写更多大而全的架构文档。
+
+而是：
+
+> 审查现有设计中哪些结论真正成立，哪些只是推测，并把整个项目压缩成一组必须先验证的技术假设。
+
+---
+
+# 一、本轮总目标
+
+完成以下五件事：
+
+1. 审查现有 Master Design 是否存在逻辑漏洞
+2. 找出模块之间隐藏的循环依赖
+3. 找出所有“假设成立才能继续”的关键点
+4. 对这些假设进行优先级排序
+5. 设计最小实验，但暂时不要执行实验
+
+最终我们需要得到：
+
+```text
+我们现在不是“开始实现虚拟化框架”
+
+而是：
+
+Experiment 001
+验证一个最基础的 Android Runtime 假设
+
+成功
+↓
+确认 ADR
+
+失败
+↓
+修改架构
+
+然后才进入 Experiment 002
+```
+
+---
+
+# 二、Clean-room 约束继续保持
+
+禁止查看或研究：
+
+* VirtualApp
+* BlackBox
+* DroidPlugin
+* VirtualXposed
+* sandbox
+* Shadow
+* RePlugin
+* VirtualAPK
+* 其他应用虚拟化项目源码
+
+不得搜索：
+
+“VirtualApp how Activity hook works”
+“BlackBox Activity launch”
+“Android virtual app implementation”
+
+类似内容。
+
+允许：
+
+* Android Developers
+* AOSP
+* Android SDK
+* Linux
+* Binder
+* ART
+* JNI
+* ELF
+* Android CTS
+* Android 官方测试代码
+* 我们自己的实验
+
+目标仍然是：
+
+从 Android 本身推导实现。
+
+---
+
+# 三、首先评审 MASTER DESIGN
+
+完整阅读：
+
+`docs/APP_SANDBOX_MASTER_DESIGN.md`
+
+以及 `docs/design/01` ~ `27`。
+
+创建：
+
+`docs/review/01_MASTER_DESIGN_REVIEW.md`
+
+不要单纯总结。
+
+必须主动寻找问题。
+
+逐项检查：
+
+* 模块职责是否重叠
+* 是否存在循环依赖
+* 是否存在过早抽象
+* 是否把 Android 系统能力错误地假设成可以用户态复制
+* 是否错误混淆 Host identity 与 Guest logical identity
+* 是否对未安装 APK 能力估计过高
+* 是否依赖 hidden API 才能成立
+* 是否依赖 system_server 行为无法控制
+* 是否存在 Android 版本强耦合
+* 是否存在理论上不可完成的目标
+
+每个问题标：
+
+```text
+CRITICAL
+HIGH
+MEDIUM
+LOW
+```
+
+并给出：
+
+问题
+影响
+涉及模块
+建议
+是否需要实验验证
+
+---
+
+# 四、建立“关键假设清单”
+
+创建：
+
+`docs/review/02_CRITICAL_ASSUMPTIONS.md`
+
+不要按模块罗列。
+
+按：
+
+> 如果这个假设错误，多少架构会失效？
+
+进行排序。
+
+至少分析以下假设：
+
+---
+
+## A1：未安装 APK 可以仅依赖 Host 进程完成代码加载
+
+问题：
+
+我们是否能够在不向 PMS 安装 Guest 的情况下：
+
+* 创建 ClassLoader
+* 加载 Guest classes
+* 加载 Guest native libs
+
+状态：
+
+需要证据。
+
+---
+
+## A2：Guest Resources 可以独立于系统安装状态创建
+
+需要确认：
+
+未安装 APK 是否能够构造：
+
+* AssetManager
+* Resources
+* Resources.Theme
+* Configuration
+
+并保证：
+
+Guest `R.xxx` 正确工作。
+
+---
+
+## A3：Guest Application 可以在 Host 进程中被正确创建
+
+需要确认：
+
+是否能够构造：
+
+* Guest ClassLoader
+* Guest Resources
+* Guest Context
+
+然后调用：
+
+Application.attach / onCreate
+
+且不会依赖 PMS 已安装状态。
+
+---
+
+## A4：Guest Activity 可以在系统不知道 Guest package 的情况下运行
+
+这是最关键假设之一。
+
+必须拆开两个问题：
+
+### A4.1
+
+Java Activity 对象能否在 Host 进程中手动创建？
+
+### A4.2
+
+即使可以创建：
+
+能否获得真正 Android Activity 所需要的：
+
+* Window
+* token
+* task
+* lifecycle
+* saved state
+* configuration
+* result delivery
+
+这两个问题不能混为一谈。
+
+---
+
+## A5：Android 系统可以管理 Host Component，而我们映射 Guest Component
+
+这是目前 Activity Runtime 潜在核心方向。
+
+但本轮不能假设成立。
+
+必须明确需要验证：
+
+```text
+System:
+只认识 Host
+
+Runtime:
+认识 Guest
+
+Host system component
+↔
+Guest logical component
+```
+
+这种两层模型是否能够保持：
+
+Activity lifecycle
+
+Task
+
+Result
+
+Configuration
+
+Window
+
+等行为。
+
+---
+
+## A6：Guest Context 可以独立存在
+
+研究：
+
+ContextImpl
+
+ContextWrapper
+
+Application Context
+
+Activity Context
+
+Service Context
+
+Package Context
+
+必须判断：
+
+我们是否能够可靠构造：
+
+Guest Context
+
+还是最终必须依赖某个 Host Context 并做代理。
+
+---
+
+## A7：PackageManager 行为可以由局部 compatibility layer 补齐
+
+需要验证：
+
+Guest App 对 PackageManager 的调用到底有多少种来源。
+
+例如：
+
+```text
+Context.getPackageManager()
+
+直接 Binder
+
+framework internal
+
+library internal
+```
+
+如果只代理 `Context.getPackageManager()`：
+
+是否足够？
+
+大概率不是。
+
+但必须基于 Android 机制分析。
+
+---
+
+## A8：Guest packageName 可以作为逻辑身份存在
+
+需要区分：
+
+Java 层看到的 packageName
+
+Binder caller package
+
+Linux UID
+
+AppOps attribution
+
+system_server package validation
+
+这些不能混在一起。
+
+---
+
+## A9：多实例可以共享 APK/Dex/Resources
+
+但：
+
+Data
+
+Application
+
+Class static state
+
+Native state
+
+是否必须隔离？
+
+尤其：
+
+两个相同 packageName Guest instance
+运行在同一个进程
+
+是否真的能做到强隔离？
+
+需要提前分析。
+
+---
+
+## A10：单进程模型是否可行
+
+如果两个 Guest 同时运行：
+
+* static variables
+* singleton
+* native globals
+* System properties
+* ThreadLocal
+* process-level state
+
+会发生什么？
+
+这可能直接决定：
+
+Multi-instance 是否必须多进程。
+
+---
+
+继续补充其他关键假设。
+
+每项必须包含：
+
+```text
+ID
+Hypothesis
+Why we believe it
+Evidence currently available
+What breaks if false
+How to test
+Priority
+Status
+```
+
+状态只允许：
+
+CONFIRMED
+UNCONFIRMED
+PARTIALLY CONFIRMED
+BLOCKED
+
+不要再使用模糊的“应该可以”。
+
+---
+
+# 五、建立依赖 DAG
+
+创建：
+
+`docs/review/03_ASSUMPTION_DEPENDENCY_GRAPH.md`
+
+不要再只画模块依赖。
+
+这次画：
+
+**假设依赖关系。**
+
+例如：
+
+```text
+APK Parsing
+    ↓
+Package Model
+    ↓
+Code Loading ─────┐
+                  │
+Resource Loading ─┼→ Application Runtime
+                  │
+Storage Model ────┘
+                       ↓
+                 Activity Runtime
+                       ↓
+              System Compatibility
+```
+
+但是必须根据当前设计实际推导。
+
+特别检查：
+
+有没有类似：
+
+```text
+Activity Runtime
+依赖 System Bridge
+
+System Bridge
+又依赖 Activity Runtime
+```
+
+这种循环。
+
+如果存在：
+
+必须指出如何打破。
+
+---
+
+# 六、重新审查“Guest Runtime 最小闭环”
+
+创建：
+
+`docs/review/04_MINIMUM_RUNTIME_LOOP.md`
+
+回答一个非常具体的问题：
+
+> AppSandbox 最早什么时候可以说“我们已经成功运行了 Guest 的一部分代码”？
+
+不要直接把目标定义成：
+
+“启动 Guest Activity”。
+
+这可能太晚。
+
+分别定义：
+
+---
+
+## Level 0
+
+APK imported
+
+已经完成。
+
+---
+
+## Level 1
+
+Guest class successfully loaded
+
+例如：
+
+加载 APK 中一个普通 Kotlin/Java class。
+
+完全不涉及：
+
+Application
+Activity
+Resources
+
+---
+
+## Level 2
+
+Guest resource successfully loaded
+
+例如：
+
+读取：
+
+string
+drawable
+layout
+
+---
+
+## Level 3
+
+Guest Application successfully instantiated
+
+---
+
+## Level 4
+
+Guest Application.onCreate 正常完成
+
+---
+
+## Level 5
+
+Guest 普通逻辑能够：
+
+getPackageName
+getFilesDir
+getResources
+
+---
+
+## Level 6
+
+Guest UI component 可以显示
+
+这里不要立刻定义为 Activity。
+
+可以研究：
+
+是否先使用：
+
+Guest View
++
+Host Activity
+
+作为实验。
+
+---
+
+## Level 7
+
+真正 Guest Activity runtime
+
+---
+
+为每一级定义：
+
+* 目标
+* 必需模块
+* 不需要哪些模块
+* 成功标准
+* 风险
+
+目的是防止：
+
+一上来就挑战整个 Activity 虚拟化。
+
+---
+
+# 七、重点审查 Activity 设计
+
+创建：
+
+`docs/review/05_ACTIVITY_ARCHITECTURE_REVIEW.md`
+
+这是本轮重点。
+
+重新从 Android 系统第一原则分析：
+
+一个 Activity 真正成立需要：
+
+```text
+Activity object
++
+Context
++
+ActivityThread
++
+Instrumentation
++
+token
++
+Window
++
+WindowManager
++
+Task/ActivityRecord system state
+```
+
+检查现有 `09_ACTIVITY_RUNTIME.md` 是否漏掉任何关键依赖。
+
+特别研究：
+
+AOSP：
+
+* Activity
+* ActivityThread
+* Instrumentation
+* ActivityClientRecord
+* ClientTransaction
+* LaunchActivityItem
+* ActivityTaskManagerService
+* ActivityRecord
+* Task
+* WindowManagerService
+
+但不要复制源码。
+
+需要回答：
+
+> Activity 到底有哪些部分必须得到 system_server 的合作？
+
+以及：
+
+> 哪些部分可以纯 Host 进程模拟？
+
+把它们分为：
+
+```text
+Client-side controllable
+
+System-side required
+
+Hybrid
+```
+
+这一步非常重要。
+
+---
+
+# 八、Activity 至少提出三类方案
+
+不要确定最终实现。
+
+建立：
+
+### Strategy A
+
+Host Activity 作为真正 Android Component，
+Guest 只作为 View/UI/logic 被嵌入。
+
+特点：
+
+可能简单。
+
+但兼容性有限。
+
+---
+
+### Strategy B
+
+Host registered shell component，
+运行时映射到 Guest Activity。
+
+这里不要参考任何虚拟化项目。
+
+完全从：
+
+ATMS 必须看到已注册 Activity
+
+这个 Android 事实推导。
+
+分析：
+
+是否理论可行。
+
+---
+
+### Strategy C
+
+独立进程 / 不同 Component orchestration 模型。
+
+自行设计。
+
+---
+
+如果还能提出其他方案：
+
+加入。
+
+比较：
+
+* Android compatibility
+* complexity
+* task semantics
+* Window compatibility
+* ActivityResult
+* launchMode
+* lifecycle
+* configuration
+* process death
+* multi-instance
+* Play compatibility
+
+本轮不要选最终方案。
+
+只给：
+
+Preferred hypothesis
+
+并明确仍需实验。
+
+---
+
+# 九、重点审查 ClassLoader
+
+创建：
+
+`docs/review/06_CLASSLOADER_ARCHITECTURE_REVIEW.md`
+
+不要只是讨论：
+
+Parent-first / child-first。
+
+要研究：
+
+Guest APK 中可能包含：
+
+```text
+androidx.*
+kotlin.*
+okhttp.*
+gson.*
+自定义 SDK
+```
+
+Host 也可能包含相同类。
+
+分析：
+
+如果：
+
+Host 和 Guest 存在相同 class name
+
+会发生什么？
+
+再分析：
+
+Android framework classes 是否必须来自 BootClassLoader。
+
+禁止 Guest 覆盖：
+
+android.*
+
+是否自然由 class loader hierarchy 保证？
+
+还要研究：
+
+JNI：
+
+```text
+System.loadLibrary
+native method binding
+FindClass
+JNIEnv
+class loader context
+```
+
+ClassLoader 设计可能影响 native runtime。
+
+建立完整风险表。
+
+---
+
+# 十、重点审查 Resources
+
+创建：
+
+`docs/review/07_RESOURCES_ARCHITECTURE_REVIEW.md`
+
+重点不是：
+
+“怎么创建 Resources”。
+
+而是：
+
+Guest Resources 与 Android 生命周期如何联动。
+
+包括：
+
+* Configuration change
+* night mode
+* locale
+* orientation
+* density
+* Display
+* theme
+* Activity resources
+* Application resources
+* resource cache
+
+需要明确：
+
+最小实验只需要证明：
+
+未安装 APK 可以读取资源。
+
+完整 Runtime 才需要：
+
+configuration propagation。
+
+不要混为一个阶段。
+
+---
+
+# 十一、审查 Application Runtime
+
+创建：
+
+`docs/review/08_APPLICATION_ARCHITECTURE_REVIEW.md`
+
+区分：
+
+### 创建 Java Application 对象
+
+和：
+
+### 创建真正具备 Android App 环境的 Guest Application
+
+这是两个完全不同的难度。
+
+列出 `Application.onCreate()` 中常见操作：
+
+* SharedPreferences
+* database
+* PackageManager
+* ContentProvider
+* getSystemService
+* registerReceiver
+* startService
+* native library
+* WorkManager
+* Firebase
+* WebView
+
+分析：
+
+最简单的 HelloWorld Application 成功：
+
+不代表真实 App Application 可运行。
+
+因此定义 Application compatibility levels。
+
+---
+
+# 十二、重新审查 Process Model
+
+创建：
+
+`docs/review/09_PROCESS_MODEL_REVIEW.md`
+
+重点分析：
+
+之前提出的：
+
+固定 Process Slot Pool
+
+是否真的合理。
+
+不要因为它“看起来不错”就保留。
+
+比较：
+
+Single process
+
+Per guest package process
+
+Per guest instance process
+
+Process slot pool
+
+需要重点分析：
+
+### ClassLoader isolation
+
+### static state
+
+### native state
+
+### crash blast radius
+
+### memory
+
+### Android process lifecycle
+
+### Binder callbacks
+
+### package/process identity
+
+尤其回答：
+
+> 同一进程同时运行两个完全不同 APK，是否真的值得支持？
+
+不要把“技术上可能”当作“产品必须”。
+
+---
+
+# 十三、重新审查 Multi-instance
+
+创建：
+
+`docs/review/10_MULTI_INSTANCE_REVIEW.md`
+
+非常重要：
+
+Multi-instance 不一定等于：
+
+同一进程同时运行多个实例。
+
+可以是：
+
+```text
+same APK
+
+instance A
+instance B
+
+不同时间运行
+```
+
+也可以是：
+
+独立 process。
+
+重新分析产品需求。
+
+确定：
+
+MVP Multi-instance
+
+与：
+
+Advanced Multi-instance
+
+分别是什么。
+
+---
+
+# 十四、System Service 不要急着设计 Hook
+
+创建：
+
+`docs/review/11_SYSTEM_SERVICE_INTERCEPTION_REVIEW.md`
+
+删除思维惯性：
+
+```text
+有问题
+↓
+Hook
+```
+
+重新分类每一个问题可以通过：
+
+1. Public API
+2. Context wrapper
+3. Custom PackageManager
+4. Runtime-owned service
+5. Intent translation
+6. Binder-level compatibility
+7. Hidden API
+8. 无法支持
+
+哪种方式解决。
+
+建立：
+
+```text
+Least invasive first
+```
+
+原则。
+
+只有前面方法都不够：
+
+才进入 Binder interception。
+
+---
+
+# 十五、建立“不可虚拟化能力”列表
+
+创建：
+
+`docs/review/12_HARD_LIMITS.md`
+
+明确：
+
+我们不是 Android OS。
+
+例如可能无法真正提供：
+
+* 独立 Linux UID
+* 独立 SELinux domain
+* 独立 kernel namespace
+* 完整真实 package installation state
+* signature-level permission
+* 某些 system-only API
+* 强硬件安全能力
+* KeyStore 中完全独立系统身份
+
+这些必须提前列出来。
+
+然后区分：
+
+```text
+Impossible without OS modification
+
+Possible with degraded semantics
+
+Possible through Host capability
+
+Unknown
+```
+
+这对防止后面无限填坑非常重要。
+
+---
+
+# 十六、建立 Compatibility Tier
+
+创建：
+
+`docs/review/13_COMPATIBILITY_TIERS.md`
+
+不要设定目标：
+
+“支持所有 Android App”。
+
+那是不现实的。
+
+建立：
+
+### Tier 1
+
+纯 Java/Kotlin 普通 App
+
+没有：
+
+* native
+* complex provider
+* privileged API
+* anti-tamper
+
+---
+
+### Tier 2
+
+普通 AndroidX App
+
+包含：
+
+* SQLite
+* network
+* Service
+* Receiver
+* basic Provider
+
+---
+
+### Tier 3
+
+Native App
+
+---
+
+### Tier 4
+
+大型复杂 App
+
+---
+
+### Out of scope
+
+高安全性：
+
+* banking
+* DRM
+* anti-cheat
+* hardware attestation
+* Play Integrity dependent
+
+后续所有兼容性指标都按 Tier 测。
+
+---
+
+# 十七、建立第一个 Test Guest
+
+创建：
+
+`docs/review/14_TEST_GUEST_SPEC.md`
+
+不要从真实第三方 APK 开始测试。
+
+设计我们自己的：
+
+`GuestTestApp`
+
+它将来是独立 Android 项目。
+
+需要逐步包含：
+
+Phase A：
+
+* 一个普通 Java/Kotlin class
+
+Phase B：
+
+* string resource
+* drawable
+* layout
+
+Phase C：
+
+* Application
+
+Phase D：
+
+* Activity
+
+Phase E：
+
+* SharedPreferences
+* files
+* SQLite
+
+Phase F：
+
+* Service
+
+Phase G：
+
+* Receiver
+
+Phase H：
+
+* Provider
+
+Phase I：
+
+* native library
+
+每个能力都可单独开关。
+
+以后框架出问题：
+
+能够精准知道坏在哪一层。
+
+本轮只写规格。
+
+不要创建项目。
+
+---
+
+# 十八、设计 Experiment 001
+
+这是本轮最重要的最终产物之一。
+
+创建：
+
+`docs/experiments/EXP-001-PLAN.md`
+
+但：
+
+不要执行。
+
+Experiment 001 目标必须尽可能小。
+
+推荐研究：
+
+# 未安装 APK 的 Java Class Loading
+
+问题：
+
+给定一个没有安装到 PMS 的 APK：
+
+能否：
+
+1. 从 AppSandbox 私有路径读取
+2. 创建一个 Android 支持的 ClassLoader
+3. 加载 Guest 自定义 class
+4. 创建对象
+5. 调用一个纯 Java 方法
+
+要求：
+
+完全不涉及：
+
+* Activity
+* Application
+* Resources
+* PackageManager virtualization
+* Binder Hook
+* hidden API
+* native
+* Service
+
+如果这一点都做不到：
+
+后面无需继续。
+
+实验计划必须包含：
+
+Question
+Hypothesis
+AOSP/API basis
+Setup
+Guest APK requirement
+Host action
+Expected result
+Failure modes
+Logs
+Exit criteria
+Architecture impact
+
+---
+
+# 十九、同时规划 EXP-002 和 EXP-003
+
+但不要执行。
+
+### EXP-002
+
+未安装 APK Resources loading
+
+### EXP-003
+
+Guest Application object + controlled Context experiment
+
+这里只写高层计划。
+
+不要进入代码。
+
+---
+
+# 二十、建立 Decision Gate
+
+创建：
+
+`docs/review/15_DECISION_GATES.md`
+
+例如：
+
+```text
+Gate 1:
+EXP-001 成功
+→ Code loading architecture valid
+
+EXP-001 失败
+→ 停止 Runtime 开发并重新设计
+```
+
+Gate 2:
+
+Resources
+
+Gate 3:
+
+Application
+
+Gate 4:
+
+Activity
+
+Gate 5:
+
+System Service compatibility
+
+每个 Gate：
+
+成功后才能进入下一阶段。
+
+不要并行铺开十几个模块。
+
+---
+
+# 二十一、修订 Roadmap
+
+基于本轮结果更新：
+
+`docs/design/24_IMPLEMENTATION_ROADMAP.md`
+
+新的 Roadmap 必须：
+
+Research
+
+↓
+
+Experiment
+
+↓
+
+ADR
+
+↓
+
+Implementation
+
+↓
+
+Integration
+
+而不是：
+
+Module 1
+
+Module 2
+
+Module 3
+
+---
+
+# 二十二、禁止本轮新增生产代码
+
+本轮结束时：
+
+`app/src/`
+
+应该没有任何功能性修改。
+
+如果真的发现必须修改代码：
+
+不要修改。
+
+记录：
+
+TODO / issue。
+
+---
+
+# 二十三、最终需要给负责人返回
+
+完成后输出：
+
+## A. 架构评审结果
+
+列出：
+
+CRITICAL
+HIGH
+MEDIUM
+
+问题。
+
+---
+
+## B. Top 10 Critical Assumptions
+
+按风险排序。
+
+---
+
+## C. 最大的三个架构风险
+
+不是一般性风险。
+
+而是：
+
+如果判断错误会导致项目大规模推翻的风险。
+
+---
+
+## D. Activity Runtime 当前判断
+
+详细说明：
+
+哪些部分属于 system_server
+
+哪些属于 client process
+
+为什么 Activity 是关键难点。
+
+---
+
+## E. Process Model 当前判断
+
+说明：
+
+是否仍推荐之前的 Process Slot 方案。
+
+如果改变：
+
+解释原因。
+
+---
+
+## F. 最小 Runtime Path
+
+输出：
+
+```text
+APK
+↓
+Class
+↓
+Resources
+↓
+Application
+↓
+UI
+↓
+Activity
+```
+
+或者根据研究调整。
+
+---
+
+## G. EXP-001
+
+完整摘要：
+
+要验证什么。
+
+不要执行。
+
+---
+
+## H. 下一步
+
+只能推荐：
+
+是否应该执行 EXP-001。
+
+不要自行执行。
+
+---
+
+## I. Clean-room
+
+再次确认：
+
+没有查看任何第三方应用虚拟化框架源码。
+
+---
+
+## J. Git
+
+输出：
+
+git status --short
+
+git diff --stat
+
+本轮应该仍然只有：
+
+docs/
+
+发生变化。
+
+---
+
+# 二十四、这轮的核心思想
+
+从现在开始：
+
+不要把“Virtual App”看成一个大功能。
+
+把它拆成一系列能够独立证伪的假设。
+
+我们的目标不是证明：
+
+“这个方案肯定可行”。
+
+而是尽可能早地发现：
+
+“哪个假设不成立”。
+
+越早发现架构错误：
+
+代价越低。
+
+因此整个项目后续固定采用：
+
+```text
+Question
+↓
+Android/AOSP Research
+↓
+Hypothesis
+↓
+Minimal Experiment
+↓
+Observed Result
+↓
+ADR
+↓
+Production Implementation
+```
+
+禁止：
+
+```text
+猜一个方案
+↓
+写几千行代码
+↓
+发现 Android 不允许
+↓
+全部重写
+```
+
+本轮完成文档后停止。

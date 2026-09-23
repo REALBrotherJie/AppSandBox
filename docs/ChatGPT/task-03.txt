@@ -1,0 +1,1234 @@
+继续负责当前 AppSandbox 项目。
+
+我们已经完成：
+
+* Phase 0 / Phase 1 基础工程
+* 总体架构设计
+* Architecture Review
+* Critical Assumptions
+* EXP-001 / 002 / 003 计划
+
+现在正式执行：
+
+# EXP-001 — Uninstalled APK Java/Kotlin Class Loading
+
+本轮只验证一个问题：
+
+> 一个没有安装进 Android PackageManager 的 APK，放在 AppSandbox 私有目录中后，Host 是否能够通过 Android 官方 ClassLoader 机制加载 APK 中一个自定义类、创建实例并调用普通方法？
+
+这是整个 Runtime 的第一个实际验证。
+
+---
+
+# 一、本轮范围必须严格控制
+
+本轮允许：
+
+* 创建专门的 GuestTestApp
+* 构建 Guest APK
+* 使用现有 APK Import 功能导入
+* 使用 Android 官方 ClassLoader API
+* 反射加载 Guest class
+* 调用纯 Java/Kotlin 方法
+* 添加仅用于 EXP-001 的调试 UI / debug code
+* 添加实验日志
+* 更新实验文档
+* 创建设计结论 / ADR
+
+本轮禁止扩展到：
+
+* Guest Resources
+* Guest Application
+* Guest Activity
+* Service
+* Receiver
+* Provider
+* PackageManager virtualization
+* Binder interception
+* System Service compatibility
+* Context virtualization
+* native library
+* JNI
+* hidden API
+* ActivityThread 修改
+* Instrumentation 修改
+* Manifest Stub Activity
+* 方法 Hook
+* Xposed
+* native hook
+
+注意：
+
+这些技术以后并非架构上禁止。
+
+包括：
+
+* Java method hook
+* Binder interception
+* Instrumentation interception
+* JNI/native hook
+* PLT/GOT
+* inline hook
+* Xposed-style method replacement
+
+未来如果实际问题需要，都允许进入方案比较。
+
+只是 EXP-001 没有任何理由使用它们。
+
+---
+
+# 二、实验必须证明“代码真的来自未安装 Guest APK”
+
+不能只做到：
+
+```text
+Class.forName(...)
+成功
+```
+
+因为这不能排除该 class 已经被 Host 打包。
+
+必须建立严格证据。
+
+---
+
+# 三、创建独立 GuestTestApp
+
+创建一个独立测试 APK。
+
+建议位置：
+
+```text
+test-guests/
+  GuestTestApp/
+```
+
+或者采用你认为更合理的位置。
+
+它可以在同一个 Git 仓库中，但必须满足：
+
+# Host App 不得依赖 GuestTestApp
+
+禁止：
+
+```gradle
+implementation(project(":GuestTestApp"))
+```
+
+禁止：
+
+```gradle
+api(project(...))
+```
+
+禁止：
+
+Host 直接 import Guest class。
+
+Host 编译产物中不得包含 GuestTestApp 的测试类。
+
+如果采用同一个 Gradle multi-module：
+
+允许为了方便构建把 GuestTestApp 注册成 module，
+
+但：
+
+`app` module 与它之间必须没有任何依赖关系。
+
+---
+
+# 四、GuestTestApp 设计
+
+Guest 包名使用明显独立名称，例如：
+
+```text
+com.example.appsandbox.testguest
+```
+
+创建至少两个类。
+
+例如：
+
+```text
+com.example.appsandbox.testguest.runtime.GuestProbe
+```
+
+和：
+
+```text
+com.example.appsandbox.testguest.runtime.GuestHelper
+```
+
+但名称可以自行优化。
+
+---
+
+## GuestProbe
+
+必须是普通 Java/Kotlin class。
+
+不要：
+
+* extends Activity
+* 使用 Context
+* 使用 Resources
+* 使用 PackageManager
+* 使用 JNI
+
+提供类似：
+
+```text
+ping(String input)
+```
+
+返回确定结果，例如：
+
+```text
+guest:<input>:<固定实验标记>
+```
+
+不要照搬这里的代码，自己实现。
+
+---
+
+## GuestHelper
+
+让 GuestProbe 调用 GuestHelper。
+
+目的是额外验证：
+
+> Guest ClassLoader 不只是加载一个孤立 class，还能够解析同一个 Guest APK 中的另一个 Guest class。
+
+例如：
+
+```text
+GuestProbe
+  ↓
+GuestHelper
+  ↓
+构造结果
+```
+
+仍然全部是纯 Java/Kotlin。
+
+---
+
+# 五、加入不可混淆的 Guest Marker
+
+Guest APK 内定义一个非常独特的实验标记，例如随机 UUID：
+
+```text
+EXP001_GUEST_<UUID>
+```
+
+要求：
+
+这个字符串只存在于 GuestTestApp。
+
+Host 不应该提前包含这个值。
+
+后面实验结果必须返回该 marker。
+
+目的是进一步证明：
+
+执行的是 Guest APK 中的实现。
+
+---
+
+# 六、确保 Guest APK 没有安装到 Android 系统
+
+实验前检查设备：
+
+```bash
+adb shell pm path com.example.appsandbox.testguest
+```
+
+预期：
+
+没有 package path。
+
+如果之前为了测试安装过 GuestTestApp：
+
+先卸载。
+
+再次确认：
+
+```bash
+adb shell pm path com.example.appsandbox.testguest
+```
+
+仍为空。
+
+记录结果到实验报告。
+
+整个 EXP-001：
+
+**禁止安装 GuestTestApp。**
+
+Guest APK 只能作为普通文件存在。
+
+---
+
+# 七、构建 Guest APK
+
+正常构建：
+
+GuestTestApp debug APK。
+
+记录：
+
+* APK path
+* file size
+* SHA-256
+* packageName
+* versionCode
+
+然后使用：
+
+AppSandbox 当前已经完成的 Import APK 流程
+
+导入它。
+
+最终应该进入类似：
+
+```text
+filesDir/
+  guests/
+    <guest-id>/
+      base.apk
+```
+
+使用项目当前真实路径。
+
+不要为了 EXP-001 创建第二套 APK 管理体系。
+
+---
+
+# 八、实验前必须增加一个 Host-side negative check
+
+这是非常重要的一步。
+
+Host 在创建 Guest ClassLoader 之前：
+
+尝试使用：
+
+```text
+Host ClassLoader
+```
+
+加载：
+
+```text
+com.example.appsandbox.testguest.runtime.GuestProbe
+```
+
+预期：
+
+```text
+ClassNotFoundException
+```
+
+如果 Host ClassLoader 能成功加载：
+
+立即判定实验设计无效。
+
+原因可能是：
+
+Guest class 被错误打包进 Host。
+
+必须查明并修复实验隔离问题。
+
+不能继续测试。
+
+---
+
+# 九、ClassLoader 方案
+
+优先使用 Android 官方公开 API。
+
+研究：
+
+* BaseDexClassLoader
+* DexClassLoader
+* PathClassLoader
+
+根据实验条件选择最合理方案。
+
+当前 Guest APK 位于 App 私有目录，而且没有系统安装状态。
+
+优先评估：
+
+```text
+DexClassLoader
+```
+
+但不要机械执行。
+
+先说明：
+
+为什么选择它。
+
+记录：
+
+* dexPath
+* parent ClassLoader
+* library search path
+* optimized/code cache 相关处理
+
+如果 Android API 版本对 optimizedDirectory 行为有变化：
+
+记录。
+
+不要调用 hidden API。
+
+---
+
+# 十、Parent ClassLoader 必须明确
+
+这是实验需要观察的数据。
+
+记录：
+
+```text
+Host classLoader
+Guest classLoader
+Guest parent
+Host parent
+```
+
+至少输出实际类名。
+
+例如可能出现：
+
+```text
+PathClassLoader
+DexClassLoader
+BootClassLoader
+```
+
+以设备实际结果为准。
+
+不要预设。
+
+---
+
+# 十一、真正加载 Guest Class
+
+通过类名字符串加载：
+
+```text
+com.example.appsandbox.testguest.runtime.GuestProbe
+```
+
+禁止：
+
+Host 编译期引用该类。
+
+流程应类似：
+
+```text
+Guest APK path
+↓
+Guest ClassLoader
+↓
+loadClass(className)
+↓
+reflection
+↓
+constructor
+↓
+instance
+↓
+method lookup
+↓
+invoke
+```
+
+全部通过运行时反射。
+
+---
+
+# 十二、验证 GuestHelper
+
+GuestProbe 内部应调用：
+
+GuestHelper。
+
+如果：
+
+GuestProbe 成功加载，
+
+但是 GuestHelper resolution 失败，
+
+实验仍不能算完整成功。
+
+这可以验证 Guest 内部类依赖解析。
+
+---
+
+# 十三、需要记录的证据
+
+创建统一日志 TAG：
+
+```text
+AppSandbox.Exp001
+```
+
+至少记录：
+
+### APK
+
+* Guest internal ID
+* APK absolute path
+* exists
+* readable
+* size
+* SHA-256
+
+### Package
+
+* packageName
+
+### Installation state
+
+* 系统是否安装 Guest package
+
+### Host loader
+
+* Host ClassLoader 类型
+* Host parent
+
+### Negative check
+
+```text
+HostClassLoader -> GuestProbe
+```
+
+结果必须是：
+
+```text
+NOT FOUND
+```
+
+### Guest loader
+
+* Guest ClassLoader 类型
+* parent
+* dexPath
+
+### Loaded class
+
+* full class name
+* `clazz.classLoader`
+* 是否与 Guest ClassLoader 相同
+
+### Reflection
+
+* constructor result
+* method lookup
+* invocation result
+
+### Marker
+
+最终返回：
+
+Guest unique marker。
+
+### Helper
+
+确认 GuestProbe 调用了 GuestHelper。
+
+---
+
+# 十四、必须明确判断 ClassLoader ownership
+
+实验成功不能只报告：
+
+```text
+loaded successfully
+```
+
+需要验证：
+
+```text
+clazz.classLoader === guestClassLoader
+```
+
+如果不是：
+
+需要解释该 class 实际由谁加载。
+
+如果最终由 Host ClassLoader 加载：
+
+实验失败。
+
+---
+
+# 十五、不要把 Android Framework class 当 Guest class
+
+可以额外观察：
+
+Guest loader 请求：
+
+```text
+java.lang.String
+android.os.Build
+```
+
+最终由哪个 ClassLoader 提供。
+
+这里只用于理解 parent delegation。
+
+不要修改 Android Framework class。
+
+记录观察结果。
+
+目的：
+
+确认 Guest loader 不应该自己加载：
+
+```text
+java.*
+android.*
+```
+
+但不要把这个扩展成完整 ClassLoader 隔离研究。
+
+---
+
+# 十六、至少执行以下测试
+
+## Test 1 — Valid Guest APK
+
+预期：
+
+```text
+Host loader:
+GuestProbe NOT FOUND
+
+Guest loader:
+GuestProbe FOUND
+
+GuestProbe:
+instantiated
+
+GuestHelper:
+resolved
+
+ping():
+返回正确 marker
+```
+
+这是核心测试。
+
+---
+
+## Test 2 — Wrong class name
+
+例如加载：
+
+```text
+com.example.appsandbox.testguest.DoesNotExist
+```
+
+预期：
+
+正常：
+
+```text
+ClassNotFoundException
+```
+
+AppSandbox 不能 crash。
+
+---
+
+## Test 3 — Corrupted APK
+
+制作损坏测试副本。
+
+不要破坏用户原始 Guest APK。
+
+测试：
+
+创建 loader / load class。
+
+预期：
+
+失败必须：
+
+* 能捕获
+* 有明确日志
+* App 不 crash
+
+记录具体异常。
+
+---
+
+## Test 4 — Repeat loading
+
+对同一个 APK：
+
+重新创建一个新的 Guest ClassLoader。
+
+再次加载 GuestProbe。
+
+记录：
+
+```text
+Class object 是否相同
+ClassLoader 是否相同
+```
+
+预期不要提前假设。
+
+观察实际行为。
+
+这对未来：
+
+Guest Runtime isolation
+
+非常重要。
+
+---
+
+## Test 5 — Two ClassLoaders
+
+同时创建：
+
+```text
+GuestLoaderA
+GuestLoaderB
+```
+
+指向：
+
+同一个 Guest APK。
+
+分别加载：
+
+同一个 GuestProbe class。
+
+观察：
+
+```text
+classA == classB ?
+classA.classLoader
+classB.classLoader
+classA.isAssignableFrom(classB)
+```
+
+这个实验很重要。
+
+因为它能够提前告诉我们：
+
+> Java type identity 是否包含 ClassLoader identity。
+
+不要扩展到多实例。
+
+这里只记录 Java/ART 实际行为。
+
+---
+
+# 十七、这一点对未来架构非常重要
+
+Test 5 的结果需要明确写入报告。
+
+如果：
+
+```text
+same class name
++
+same APK
++
+different ClassLoader
+```
+
+得到不同 Java type identity，
+
+那么它会直接影响未来：
+
+* Instance isolation
+* static state
+* cross-instance object passing
+* interface casting
+* Binder bridge
+* Plugin API
+
+记录即可。
+
+本轮不要据此设计完整多实例方案。
+
+---
+
+# 十八、Debug UI
+
+可以增加一个非常简单的：
+
+```text
+Run EXP-001
+```
+
+入口。
+
+但建议：
+
+只存在于 Debug variant。
+
+不要污染 Release 产品 UI。
+
+如果当前工程不方便做 debug-only Activity/View：
+
+可以采用最小侵入方案。
+
+必须说明选择。
+
+不要为了一个实验重构 UI。
+
+---
+
+# 十九、不允许“为了成功而偷偷兜底”
+
+禁止：
+
+如果加载失败：
+
+把 Guest class 复制进 Host
+
+或者：
+
+使用 Host 自己的同名 class。
+
+禁止：
+
+安装 APK。
+
+禁止：
+
+动态修改 Guest APK。
+
+禁止：
+
+解压 classes.dex 然后直接复制代码到 Host。
+
+我们的目的就是测试：
+
+**Android 官方 runtime 是否能直接从未安装 APK 加载代码。**
+
+---
+
+# 二十、完成后更新 EXP-001 文档
+
+更新：
+
+```text
+docs/experiments/EXP-001-PLAN.md
+```
+
+或者创建：
+
+```text
+docs/experiments/EXP-001-RESULT.md
+```
+
+建议保留 Plan 不覆盖。
+
+创建：
+
+```text
+EXP-001-RESULT.md
+```
+
+包含：
+
+# Question
+
+# Hypothesis
+
+# Environment
+
+至少：
+
+* Device
+* Android version
+* ABI
+* AppSandbox version
+* compileSdk
+* targetSdk
+
+# Setup
+
+# Procedure
+
+# Observed Results
+
+# Logs
+
+# Negative Controls
+
+# Failure Tests
+
+# Conclusion
+
+结论只能：
+
+```text
+CONFIRMED
+PARTIALLY CONFIRMED
+REJECTED
+```
+
+---
+
+# 二十一、成功标准
+
+只有下面全部满足：
+
+1. Guest APK 未安装
+2. APK 位于 AppSandbox 私有目录
+3. Host 编译产物不包含 GuestProbe
+4. Host ClassLoader 无法加载 GuestProbe
+5. Guest ClassLoader 成功加载 GuestProbe
+6. `clazz.classLoader` 为 Guest ClassLoader
+7. 成功创建实例
+8. 成功调用普通方法
+9. GuestHelper 正常解析
+10. 返回 Guest 独有 marker
+11. Wrong class 不 crash
+12. Corrupt APK 不 crash
+
+EXP-001 才能判定：
+
+```text
+CONFIRMED
+```
+
+---
+
+# 二十二、如果 EXP-001 成功
+
+不要开始 EXP-002。
+
+先创建 ADR：
+
+例如：
+
+```text
+ADR-0004-GUEST-CODE-LOADING-BASELINE.md
+```
+
+具体编号根据当前仓库决定。
+
+ADR 记录：
+
+Context
+
+Observed evidence
+
+Decision
+
+Consequences
+
+Limitations
+
+明确：
+
+本实验只证明：
+
+> 未安装 APK 中普通 dex class 可以在 Host App runtime 中通过独立 ClassLoader 加载。
+
+它**没有证明**：
+
+* Application 可以运行
+* Resources 可以工作
+* Activity 可以运行
+* Context 可以虚拟化
+* Native 可以加载
+* System Services 可以正常使用
+
+禁止扩大结论。
+
+---
+
+# 二十三、如果 EXP-001 失败
+
+不要通过：
+
+Hook
+Hidden API
+Native
+Xposed
+
+来强行救活。
+
+先停止。
+
+分析：
+
+失败发生在哪一层：
+
+APK
+Dex
+ClassLoader
+Class resolution
+Instantiation
+Reflection
+
+然后返回结果。
+
+我们再决定：
+
+是否需要修改 Code Runtime 架构。
+
+---
+
+# 二十四、生产代码隔离
+
+这次已经允许修改代码，因为我们开始执行实验。
+
+但是实验代码尽量：
+
+```text
+debug-only
+```
+
+或者集中在：
+
+```text
+experiment/
+```
+
+命名空间。
+
+例如：
+
+```text
+com.example.appsandbox.experiments.exp001
+```
+
+不要让 EXP-001 实验逻辑直接变成未来正式：
+
+GuestRuntime
+
+设计。
+
+因为现在：
+
+我们是在验证 Android。
+
+不是已经确定生产架构。
+
+---
+
+# 二十五、不要提前创建正式抽象
+
+本轮不要为了一个：
+
+DexClassLoader
+
+提前创建：
+
+```text
+GuestCodeRuntimeManager
+RuntimeClassLoaderFactory
+GuestExecutionCoordinator
+ClassSpaceController
+```
+
+等等复杂抽象。
+
+实验代码越简单越好。
+
+核心思想：
+
+```text
+APK
+↓
+ClassLoader
+↓
+Class
+↓
+Object
+↓
+Method
+```
+
+---
+
+# 二十六、最终必须回传
+
+完成后停止。
+
+不要执行 EXP-002。
+
+返回给负责人：
+
+## A. 最终结论
+
+只能：
+
+CONFIRMED
+PARTIALLY CONFIRMED
+REJECTED
+
+---
+
+## B. 测试环境
+
+* Android version
+* device
+* ABI
+* AppSandbox build
+* GuestTestApp build
+
+---
+
+## C. Guest 状态
+
+证明：
+
+GuestTestApp 没有系统安装。
+
+输出：
+
+```bash
+adb shell pm path ...
+```
+
+结果。
+
+---
+
+## D. ClassLoader 链
+
+完整输出：
+
+Host loader
+
+Host parent
+
+Guest loader
+
+Guest parent
+
+GuestProbe loader
+
+---
+
+## E. Negative control
+
+Host 是否能够加载 GuestProbe？
+
+必须明确。
+
+---
+
+## F. 正向结果
+
+GuestProbe：
+
+是否加载
+
+是否实例化
+
+方法返回值
+
+Guest marker
+
+GuestHelper 是否成功解析
+
+---
+
+## G. Test 5
+
+重点返回：
+
+```text
+classA == classB
+classA.classLoader
+classB.classLoader
+classA.isAssignableFrom(classB)
+```
+
+以及你的解释。
+
+---
+
+## H. 错误测试
+
+Wrong class
+
+Corrupt APK
+
+分别是什么结果。
+
+---
+
+## I. 修改文件
+
+完整列出。
+
+区分：
+
+Host experiment
+
+GuestTestApp
+
+docs
+
+---
+
+## J. 第三方依赖
+
+本轮是否新增。
+
+如果新增：
+
+名称
+用途
+License
+
+原则上：
+
+这个实验不应该需要任何第三方 dependency。
+
+---
+
+## K. ADR
+
+如果成功：
+
+返回新 ADR 摘要。
+
+如果失败：
+
+不创建确认型 ADR。
+
+---
+
+## L. Git
+
+输出：
+
+```bash
+git status --short
+git diff --stat
+```
+
+---
+
+## M. 下一步
+
+只回答：
+
+从 EXP-001 结果来看，
+
+是否具备进入 EXP-002 Resources Loading 的前提？
+
+回答：
+
+YES / NO
+
+并解释原因。
+
+**不要自行执行 EXP-002。**
