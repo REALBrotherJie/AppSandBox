@@ -63,6 +63,7 @@ class ExperimentActivity : Activity() {
                     "c1-read" -> com.example.appsandbox.experiments.exp003c1.C1Experiment.run(this, experimental, true)
                     "layout" -> com.example.appsandbox.experiments.exp003c1.LayoutExperiment.run(this, experimental)
                     "oncreate", "oncreate-read", "oncreate-error" -> com.example.appsandbox.experiments.exp003c.OnCreateExperiment.run(this, experimental, mode)
+                    "multi-a", "multi-b" -> com.example.appsandbox.experiments.exp003b1.MultiInstanceExperiment.run(this, experimental, mode == "multi-a")
                     else -> error("Unknown experiment $mode")
                 })
             }
