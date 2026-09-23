@@ -57,6 +57,8 @@ class ExperimentActivity : Activity() {
                     "exp002" -> Exp002Runner.run(this, experimental)
                     "exp003a" -> Exp003aRunner.run(this, experimental)
                     "exp003b0" -> Exp003b0Runner.run(this, experimental)
+                    "c1" -> com.example.appsandbox.experiments.exp003c1.C1Experiment.run(this, experimental)
+                    "c1-read" -> com.example.appsandbox.experiments.exp003c1.C1Experiment.run(this, experimental, true)
                     else -> error("Unknown experiment $mode")
                 })
             }
