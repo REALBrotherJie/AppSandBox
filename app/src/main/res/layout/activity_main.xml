@@ -1,0 +1,51 @@
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/sandbox_background">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="App Sandbox"
+            android:textAppearance="?attr/textAppearanceHeadlineMedium"
+            android:textStyle="bold" />
+        <Button
+            android:id="@+id/importApkButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/import_apk" />
+        <LinearLayout
+            android:id="@+id/guestSummary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+            <ImageView
+                android:id="@+id/appIcon"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:contentDescription="@null" />
+            <TextView android:id="@+id/appLabel" style="@style/SummaryText" />
+            <TextView android:id="@+id/packageName" style="@style/SummaryText" />
+            <TextView android:id="@+id/version" style="@style/SummaryText" />
+            <TextView android:id="@+id/componentCounts" style="@style/SummaryText" />
+            <TextView
+                android:id="@+id/importStatus"
+                style="@style/SummaryText"
+                android:textStyle="bold" />
+        </LinearLayout>
+        <TextView
+            android:id="@+id/errorText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textColor="#B00020"
+            android:visibility="gone" />
+    </LinearLayout>
+</ScrollView>
