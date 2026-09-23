@@ -1,0 +1,2314 @@
+你现在进行一次独立的：
+
+# Android App Virtualization Technology Survey — 2026
+
+本轮不要修改 AppSandbox 代码。
+
+不要实现任何功能。
+
+不要修改现有 ADR 的最终状态。
+
+不要执行 EXP-003。
+
+本轮目标不是继续“闭门推导”。
+
+而是：
+
+# 系统搜索互联网上已经公开存在的 Android 应用虚拟化、应用容器、多开、插件化、Hook、Binder 代理、Native/IO 虚拟化、进程隔离等技术资料。
+
+我们需要搞清楚：
+
+1. 行业已经有哪些路线
+2. 每种路线解决什么问题
+3. Android 9～16 分别遇到什么变化
+4. 哪些方法仍然可行
+5. 哪些方法已经过时
+6. 哪些能力必须依赖 hidden API / Hook / native
+7. 哪些可以只靠 Public API
+8. 当前成熟项目真正采用哪些技术
+9. 是否存在我们尚未考虑的方案
+10. 我们当前 AppSandbox 的设计是否遗漏重要方向
+
+---
+
+# 一、研究原则
+
+本轮是：
+
+Research Track
+
+不是：
+
+Implementation Track。
+
+允许广泛阅读互联网资料。
+
+包括：
+
+* Android Developers
+* AOSP
+* Android Source
+* Google Issue Tracker
+* Android Security 文档
+* 看雪
+* 技术博客
+* 学术论文
+* 安全会议
+* GitHub README
+* GitHub Wiki
+* GitHub Docs
+* GitHub Issues
+* GitHub Discussions
+* Changelog
+* Release Notes
+* Commit message
+* 项目架构说明
+* 作者技术文章
+
+可以研究现有项目采用了什么技术路线。
+
+但是：
+
+# 默认不要把第三方项目源码复制到 AppSandbox。
+
+本轮重点是：
+
+Architecture
+Mechanism
+Technique
+Tradeoff
+
+而不是：
+
+复制具体实现。
+
+如果某个重要事实只能通过查看项目源码确认：
+
+先记录：
+
+SOURCE REVIEW REQUIRED
+
+以及：
+
+为什么需要。
+
+不要直接把源码变成我们的实现。
+
+---
+
+# 二、所有资料必须有来源
+
+任何重要结论都必须包含：
+
+* URL
+* 标题
+* 作者/组织
+* 发布时间
+* 最后更新时间（如果能确认）
+* 访问日期
+* 可信度
+
+可信度至少分：
+
+PRIMARY
+
+例如：
+
+AOSP
+Android Developers
+Google
+官方项目文档
+
+SECONDARY-HIGH
+
+例如：
+
+项目作者技术文章
+高质量会议演讲
+大型安全社区原创研究
+
+SECONDARY
+
+例如：
+
+一般博客
+论坛讨论
+
+UNVERIFIED
+
+例如：
+
+没有证据支持的个人结论
+
+---
+
+# 三、优先搜索 2024～2026 资料
+
+当前时间：
+
+2026。
+
+所以不能只研究：
+
+2016～2019 VirtualApp 时代。
+
+必须重点搜索：
+
+Android 13
+Android 14
+Android 15
+Android 16
+
+上的最新变化。
+
+同时保留旧资料用于理解历史演进。
+
+---
+
+# 四、首先建立技术路线总分类
+
+创建：
+
+docs/research/virtualization/01_TECHNOLOGY_LANDSCAPE_2026.md
+
+至少研究以下几类。
+
+---
+
+## Route A — Application-level Virtualization
+
+目标：
+
+普通 Host App 中运行：
+
+未安装 Guest APK。
+
+典型能力：
+
+* Guest APK Registry
+* Dex/ClassLoader
+* Resources
+* Component virtualization
+* PackageManager compatibility
+* Activity/Service/Provider virtualization
+* Binder/SystemService translation
+* Multi-instance
+* Storage mapping
+
+研究：
+
+这种路线到 Android 16 是否仍然现实。
+
+---
+
+## Route B — Plugin Framework
+
+例如：
+
+Host 控制插件 APK。
+
+研究：
+
+它与：
+
+arbitrary third-party APK virtualization
+
+有什么根本区别。
+
+重点研究：
+
+* RePlugin
+* Shadow
+* VirtualAPK
+* DroidPlugin
+* 其他现代插件框架
+
+重点不是代码。
+
+而是：
+
+它们解决问题的边界。
+
+---
+
+## Route C — Work Profile / Managed Profile
+
+研究：
+
+Android Enterprise
+
+Work Profile
+
+Managed Profile
+
+DevicePolicyManager
+
+是否可以实现：
+
+真正系统级：
+
+* 独立 package install
+* 独立 UID
+* 独立 data
+* 多实例
+
+研究：
+
+普通 Google Play App 能做到什么。
+
+需要哪些：
+
+Device Owner
+Profile Owner
+用户授权
+
+与 AppSandbox application virtualization 的优缺点对比。
+
+---
+
+## Route D — Android Multi-user
+
+研究：
+
+Android User / Profile
+
+能否作为多实例容器。
+
+普通第三方 App 权限边界。
+
+是否需要：
+
+system privilege
+adb
+root
+device owner
+
+---
+
+## Route E — Android Virtualization Framework
+
+研究：
+
+AVF
+pKVM
+Microdroid
+
+重点回答：
+
+* 它是什么
+* Android 哪个版本开始
+* 第三方普通 App 是否能使用
+* 需要什么 permission
+* 是否可以运行完整普通 Android APK
+* 是否适合 Play App
+
+不要因为名字叫 Virtualization：
+
+就与 VirtualApp 混淆。
+
+---
+
+## Route F — Full Android VM / Emulator
+
+例如：
+
+完整 Android guest OS。
+
+研究：
+
+* QEMU
+* Cuttlefish
+* emulator
+* containerized Android
+* Redroid 类技术
+
+为什么通常不适合普通手机 App 内运行。
+
+---
+
+## Route G — Root / Xposed / LSPosed
+
+研究：
+
+root 环境下：
+
+方法 Hook
+
+ClassLoader injection
+
+framework interception
+
+相比无 Root virtualization 的能力差异。
+
+重点明确：
+
+哪些方案：
+
+必须 root。
+
+哪些：
+
+可以无 root。
+
+---
+
+## Route H — Native virtualization / interception
+
+研究：
+
+* PLT/GOT hook
+* inline hook
+* linker interception
+* libc syscall interception
+* Binder ioctl interception
+* seccomp
+* seccomp-bpf
+* seccomp-notify
+* path redirection
+* `/proc` compatibility
+* linker namespace
+
+这些分别解决什么问题。
+
+---
+
+# 五、重点研究现有 VirtualApp 最新公开技术信息
+
+研究：
+
+asLody/VirtualApp
+
+但重点：
+
+README
+技术架构
+公开 changelog
+issue
+release information
+公开作者文章
+
+不是复制源码。
+
+建立：
+
+docs/research/virtualization/02_VIRTUALAPP_PUBLIC_TECH_EVOLUTION.md
+
+整理：
+
+2016
+2017
+...
+2024
+2025
+2026
+
+公开信息中提到的重要技术变化。
+
+重点调查：
+
+* Android 12
+* Android 13
+* Android 14
+* Android 15
+* Android 16
+* Binder interception
+* dynamic proxy
+* inline hook
+* seccomp-bpf
+* IO redirect
+* process management
+* native layer
+* hidden API
+* PackageManager
+* ActivityManager
+* AppOps
+* AttributionSource
+
+注意：
+
+区分：
+
+PUBLICLY CONFIRMED
+
+与：
+
+INFERRED。
+
+---
+
+# 六、研究 BlackBox 系生态
+
+包括但不限于：
+
+BlackBox
+NewBlackBox
+Blacks-BlackBox
+现代 fork
+
+目的：
+
+不是拿代码。
+
+而是了解：
+
+它们在：
+
+Android 14
+15
+16
+
+上遇到哪些兼容问题。
+
+搜索：
+
+Issues
+README
+Changelog
+release notes
+
+整理：
+
+哪些 SystemService 最容易出问题。
+
+例如：
+
+* Credential Manager
+* IME
+* telephony
+* package visibility
+* notification
+* storage
+* VPN
+* WebView
+
+建立：
+
+docs/research/virtualization/03_BLACKBOX_ECOSYSTEM_FINDINGS.md
+
+同时必须记录：
+
+项目 lineage / 来源关系。
+
+不要假设每个 fork 都是独立实现。
+
+---
+
+# 七、研究现代第三方“新虚拟化项目”
+
+搜索：
+
+2024
+2025
+2026
+
+GitHub / 技术社区。
+
+关键词：
+
+Android app virtualization
+Android virtual engine
+APK sandbox Android
+run APK without install
+app clone framework
+multi instance Android
+guest runtime Android
+virtual package manager Android
+virtual activity manager Android
+
+至少找：
+
+10 个候选。
+
+每个记录：
+
+Name
+URL
+Last update
+Stars
+License
+Android support claim
+Architecture claim
+Root requirement
+Open source status
+Source lineage
+可信度
+
+不要因为 README 写：
+
+Android 16 supported
+
+就直接相信。
+
+标：
+
+CLAIMED
+
+或：
+
+VERIFIED EVIDENCE FOUND。
+
+---
+
+# 八、研究学术论文
+
+搜索：
+
+Google Scholar 可访问页面
+arXiv
+USENIX
+ACM 页面
+大学论文
+安全会议
+
+关键词：
+
+Android application virtualization
+Android app sandboxing
+Android app cloning
+Android application container
+Android Binder virtualization
+Android component virtualization
+Android multi-instance
+Android app isolation
+
+目标：
+
+找历史上已经研究过：
+
+* virtualization architecture
+* API interposition
+* Binder mediation
+* app repackaging
+* process isolation
+* system service virtualization
+
+的论文。
+
+建立：
+
+docs/research/virtualization/04_ACADEMIC_RESEARCH.md
+
+每篇只记录：
+
+Problem
+Technique
+Architecture
+Limitations
+Year
+Relevance to AppSandbox
+
+不要大段抄原文。
+
+---
+
+# 九、研究 Binder 拦截方案
+
+这是重点。
+
+创建：
+
+docs/research/virtualization/05_BINDER_INTERCEPTION_TECHNIQUES.md
+
+至少研究以下路线。
+
+---
+
+## Binder Strategy 1
+
+Java framework object replacement。
+
+例如：
+
+ServiceManager
+Manager singleton
+IBinder cache
+
+概念级研究。
+
+---
+
+## Binder Strategy 2
+
+Java dynamic proxy / interface proxy
+
+优缺点：
+
+* 易实现
+* API version coupling
+* method signature变化
+* hidden API
+
+---
+
+## Binder Strategy 3
+
+Native libbinder interception
+
+例如：
+
+Binder ioctl path
+
+PLT/GOT
+inline hook
+
+研究：
+
+调用链：
+
+Java Proxy
+↓
+native Binder
+↓
+ioctl
+↓
+binder driver
+
+---
+
+## Binder Strategy 4
+
+seccomp / seccomp-bpf interception
+
+重点搜索：
+
+2025～2026
+
+相关 Android Binder proxy 技术。
+
+---
+
+## Binder Strategy 5
+
+seccomp-notify Binder routing
+
+研究：
+
+近期公开：
+
+AndProxy / 看雪等资料
+
+了解：
+
+为什么有人尝试不用 traditional hook
+
+而直接：
+
+intercept ioctl syscall / transaction handle。
+
+---
+
+# 十、对 Binder 方法做比较表
+
+至少：
+
+| 方法 | Root | Native | Hidden API | Android版本敏感 | 全局影响 | 性能 | 稳定性 |
+| -- | ---- | ------ | ---------- | ----------- | ---- | -- | --- |
+
+再分析：
+
+对于 AppSandbox：
+
+分别适合解决：
+
+PackageManager
+ActivityManager
+AppOps
+Notification
+Clipboard
+Account
+Storage
+
+哪类问题。
+
+不要现在选择最终方案。
+
+---
+
+# 十一、研究 Activity Virtualization
+
+创建：
+
+docs/research/virtualization/06_ACTIVITY_VIRTUALIZATION.md
+
+搜索公开资料解释：
+
+未安装 Activity
+
+如何与：
+
+ATMS
+ActivityRecord
+Task
+Window token
+ClientTransaction
+ActivityThread
+
+建立关系。
+
+重点搜：
+
+* stub activity
+* proxy activity
+* activity redirection
+* intent substitution
+* client transaction interception
+* Instrumentation
+* ActivityThread
+* transaction executor
+* LaunchActivityItem
+
+但：
+
+必须按 Android 版本整理。
+
+因为旧版：
+
+AMS
+
+与现代：
+
+ATMS
+ClientTransaction
+
+不同。
+
+---
+
+# 十二、Activity 至少研究五条路线
+
+例如：
+
+A. Host Activity + Guest View
+
+B. Manifest Stub Activity + Guest component mapping
+
+C. Instrumentation based interception
+
+D. ActivityThread / ClientTransaction interception
+
+E. Framework / Binder transaction level component virtualization
+
+如果找到其他：
+
+加入。
+
+每种说明：
+
+system_server sees what
+Host sees what
+Guest sees what
+
+以及：
+
+Task
+Window
+launchMode
+result
+configuration
+saved state
+
+如何处理。
+
+---
+
+# 十三、研究 Application / LoadedApk
+
+创建：
+
+docs/research/virtualization/07_APPLICATION_LOADEDAPK.md
+
+针对我们刚发现的问题。
+
+搜索：
+
+AOSP
+官方源码分析
+高质量 Android Framework 文章
+
+研究：
+
+Application
+ContextImpl
+LoadedApk
+ActivityThread
+
+关系。
+
+重点：
+
+Application.attach
+ContextImpl.getImpl
+LoadedApk
+
+并搜索：
+
+是否有人公开讨论：
+
+uninstalled APK Application
+custom LoadedApk
+plugin Application
+dynamic Application Context
+
+不要照搬实现。
+
+我们的目标：
+
+找有哪些理论路线。
+
+---
+
+# 十四、研究 Resources
+
+创建：
+
+docs/research/virtualization/08_RESOURCES_STRATEGIES.md
+
+研究：
+
+API 28
+29
+30+
+
+不同路线。
+
+包括：
+
+PackageManager.getResourcesForApplication
+ResourcesLoader
+ResourcesProvider
+AssetManager
+ApkAssets
+
+以及：
+
+split APK
+overlay
+configuration
+theme
+layout inflation
+
+寻找：
+
+别人是如何解决：
+
+package ID collision
+resources isolation
+
+的问题。
+
+重点验证：
+
+我们 Option B 是否已有公开先例。
+
+---
+
+# 十五、研究 PackageManager Virtualization
+
+创建：
+
+docs/research/virtualization/09_PACKAGE_MANAGER_VIRTUALIZATION.md
+
+列出：
+
+Guest 常见 PackageManager API。
+
+例如：
+
+getPackageInfo
+getApplicationInfo
+resolveActivity
+queryIntentActivities
+getInstalledPackages
+checkPermission
+getPackagesForUid
+getInstallerPackageName
+getLaunchIntentForPackage
+signingInfo
+
+研究：
+
+行业常见方案：
+
+Guest Registry
++
+System PMS view
++
+merged view
+
+如何组合。
+
+重点：
+
+Android package visibility
+
+Android 11+
+
+变化。
+
+---
+
+# 十六、研究 Context 虚拟化
+
+创建：
+
+docs/research/virtualization/10_CONTEXT_VIRTUALIZATION.md
+
+搜索：
+
+ContextWrapper
+ContextImpl
+createPackageContext
+createContextForSplit
+createConfigurationContext
+Application Context
+
+了解：
+
+别人如何解决：
+
+packageName
+resources
+classloader
+storage
+application info
+
+与：
+
+真实 UID/AppOps
+
+分离。
+
+---
+
+# 十七、研究 System Service compatibility
+
+创建：
+
+docs/research/virtualization/11_SYSTEM_SERVICE_MATRIX.md
+
+搜索现代虚拟化项目公开资料中：
+
+最常需要代理的系统服务。
+
+至少覆盖：
+
+PackageManager
+ActivityManager
+ActivityTaskManager
+AppOps
+Notification
+Clipboard
+Account
+Location
+Connectivity
+Storage
+JobScheduler
+AlarmManager
+PowerManager
+UserManager
+RoleManager
+ShortcutManager
+CredentialManager
+InputMethodManager
+Telephony
+Media
+Sensor
+Camera
+
+分类：
+
+No virtualization
+Parameter translation
+Return translation
+Full virtual service
+Unsupported
+
+---
+
+# 十八、研究 Native / IO Virtualization
+
+创建：
+
+docs/research/virtualization/12_NATIVE_AND_IO.md
+
+重点：
+
+Guest native library
+
+linker namespace
+
+dlopen
+JNI_OnLoad
+FindClass
+
+路径：
+
+/data/data/package
+/data/user/0/package
+/proc/self
+/proc/self/maps
+
+如何影响 Guest。
+
+搜索：
+
+IO redirect
+path redirect
+syscall hook
+seccomp-bpf
+linker namespace
+
+---
+
+# 十九、研究进程模型
+
+创建：
+
+docs/research/virtualization/13_PROCESS_MODELS.md
+
+行业上至少存在：
+
+Host single process
+Guest shared sandbox process
+fixed process slots
+per package process
+per instance process
+multi-process mapping
+
+研究：
+
+各自优缺点：
+
+ClassLoader
+static state
+JNI globals
+crash isolation
+memory
+processName
+Binder callbacks
+manifest process registration
+
+---
+
+# 二十、研究 Multi-instance
+
+重点：
+
+同一个 APK：
+
+instance A
+instance B
+
+如何隔离：
+
+data
+SharedPreferences
+database
+process
+native state
+notification
+provider authority
+account
+
+是否需要：
+
+different process
+different user/profile
+logical mapping
+
+---
+
+# 二十一、研究 Hidden API
+
+创建：
+
+docs/research/virtualization/14_HIDDEN_API_2026.md
+
+重点：
+
+Android P 开始 non-SDK restriction
+
+到：
+
+Android 16
+
+的演进。
+
+研究：
+
+* reflection restriction
+* greylist/blacklist
+* targetSdk effect
+* hidden API exemption techniques
+* ART changes
+
+只研究公开信息。
+
+记录：
+
+哪些 AppSandbox 未来问题：
+
+很可能无法只用 Public API。
+
+---
+
+# 二十二、研究 Hook 技术全景
+
+创建：
+
+docs/research/virtualization/15_HOOKING_TECHNIQUES.md
+
+覆盖：
+
+Java reflection replacement
+dynamic proxy
+Instrumentation
+method hook
+Xposed-style
+ART method hook
+inline hook
+PLT/GOT
+Dobby
+xHook
+linker hook
+syscall hook
+seccomp
+
+每种：
+
+Layer
+Root requirement
+Architecture
+Android version stability
+Performance
+Risk
+Use cases
+
+---
+
+# 二十三、研究 Android 14/15/16 对虚拟化的影响
+
+创建：
+
+docs/research/virtualization/16_ANDROID_VERSION_CHANGES.md
+
+重点搜索：
+
+Android 14
+Android 15
+Android 16
+
+以下变化：
+
+* Activity launch
+* foreground services
+* package visibility
+* implicit/explicit intent
+* background start restrictions
+* dynamic receiver
+* PendingIntent
+* ContentProvider
+* AppOps
+* AttributionSource
+* storage
+* native linker
+* seccomp
+* Binder
+* hidden API
+* targetSdk enforcement
+* 16 KB page size
+* edge-to-edge 如果相关
+* CredentialManager
+* WebView
+* native libraries
+
+只保留与 AppSandbox 相关的变化。
+
+---
+
+# 二十四、研究 Google Play 可行性
+
+创建：
+
+docs/research/virtualization/17_PLAY_CONSTRAINTS.md
+
+搜索最新 Google Play：
+
+2026 当前规则。
+
+重点：
+
+dynamic code loading
+APK download/execution
+QUERY_ALL_PACKAGES
+Accessibility
+Device/Admin
+VPN
+permissions
+malware policy
+self-updating code
+native code loading
+
+区分：
+
+Android 技术可行
+
+与：
+
+Google Play 可以发布
+
+是两件事。
+
+---
+
+# 二十五、研究 AVF
+
+创建：
+
+docs/research/virtualization/18_ANDROID_VIRTUALIZATION_FRAMEWORK.md
+
+明确：
+
+AVF
+pKVM
+Microdroid
+
+和：
+
+AppSandbox user-space virtualization
+
+完全不同。
+
+研究：
+
+API level
+permissions
+SystemApi
+preinstalled requirements
+third-party app availability
+
+最后回答：
+
+AVF 是否可以成为普通 Play App 的基础。
+
+不要因为 AVF 安全性很强就误判为可用。
+
+---
+
+# 二十六、研究 Work Profile 路线
+
+创建：
+
+docs/research/virtualization/19_WORK_PROFILE_ALTERNATIVE.md
+
+这是非常重要的替代方案。
+
+对比：
+
+App-level virtualization
+
+与：
+
+Managed Profile
+
+在：
+
+real UID
+real installation
+SELinux
+PackageManager
+Activity
+SystemService
+security
+compatibility
+
+上的差异。
+
+回答：
+
+如果产品只是：
+
+“双开 App / 多账户”
+
+是否：
+
+Work Profile
+
+其实比 VirtualApp-style 更合理。
+
+---
+
+# 二十七、研究 Shizuku / privileged bridge
+
+搜索：
+
+Shizuku
+Sui
+ADB privileged API bridge
+
+了解：
+
+普通 App 借助：
+
+ADB / shell permission
+
+可以多获得哪些能力。
+
+但明确：
+
+它是否适合普通消费者 Play 产品。
+
+建立候选路线，不要现在采用。
+
+---
+
+# 二十八、研究 root 路线
+
+单独记录：
+
+如果允许：
+
+root / Magisk / LSPosed
+
+整个问题会怎样改变。
+
+但：
+
+与无 Root AppSandbox
+
+分开。
+
+不要混在同一 architecture。
+
+---
+
+# 二十九、搜索实际失败案例
+
+不要只看成功文章。
+
+搜索：
+
+VirtualApp crash Android 14
+VirtualApp Android 15 issue
+BlackBox Android 16 crash
+app clone Android 14 issue
+virtual app WebView crash
+virtual app native crash
+Binder permission denied virtual app
+AttributionSource package uid mismatch
+
+目标：
+
+建立：
+
+REAL-WORLD FAILURE DATABASE。
+
+---
+
+# 三十、建立 Failure Database
+
+创建：
+
+docs/research/virtualization/20_REAL_WORLD_FAILURES.md
+
+每条：
+
+Android version
+Guest type
+Failure
+Stack trace summary
+Root cause if known
+Layer
+Possible solution
+Source
+
+这对我们未来兼容性价值非常高。
+
+---
+
+# 三十一、研究高复杂度 Guest
+
+分类研究：
+
+普通 App
+AndroidX App
+Native App
+WebView App
+Flutter
+React Native
+Unity
+游戏
+银行
+DRM
+Play Integrity
+Firebase
+WorkManager
+
+不用研究绕过安全。
+
+只研究：
+
+为什么它们对 virtualization 的技术要求不同。
+
+---
+
+# 三十二、特别研究 WebView
+
+WebView 是一个大坑。
+
+搜索：
+
+WebView data directory
+multiple processes
+setDataDirectorySuffix
+package identity
+provider
+WebView zygote
+
+建立：
+
+docs/research/virtualization/21_WEBVIEW_COMPATIBILITY.md
+
+---
+
+# 三十三、特别研究 Native Guest
+
+创建：
+
+docs/research/virtualization/22_NATIVE_GUEST_COMPATIBILITY.md
+
+包括：
+
+ABI
+extractNativeLibs
+nativeLibraryDir
+System.loadLibrary
+dlopen
+JNI
+namespace
+
+---
+
+# 三十四、特别研究 Split APK
+
+现代 App 很多不是单一：
+
+base.apk。
+
+研究：
+
+base APK
+config split
+ABI split
+density split
+dynamic feature
+
+建立：
+
+docs/research/virtualization/23_SPLIT_APK_SUPPORT.md
+
+评估：
+
+我们现在只导入 base.apk
+
+会导致什么兼容性问题。
+
+---
+
+# 三十五、特别研究签名
+
+Guest 应用可能查询：
+
+SigningInfo
+PackageInfo.signatures
+
+研究：
+
+Guest Registry 如何获取真实 APK signing cert。
+
+系统 PMS 又看不到 Guest。
+
+建立：
+
+docs/research/virtualization/24_SIGNING_AND_PACKAGE_IDENTITY.md
+
+---
+
+# 三十六、研究权限模型
+
+研究行业如何处理：
+
+Guest CAMERA
+MIC
+LOCATION
+CONTACTS
+
+而系统实际授权对象：
+
+Host。
+
+列出方案：
+
+Host permission superset
+per Guest logical grants
+runtime broker
+unsupported
+
+---
+
+# 三十七、研究 notification
+
+第三方 Guest：
+
+发 notification。
+
+系统看到：
+
+Host package。
+
+如何：
+
+channel
+icon
+PendingIntent
+click routing
+
+多 Guest 如何区分。
+
+---
+
+# 三十八、研究 Provider authority
+
+多个 Guest：
+
+相同 authority
+
+系统不认识。
+
+研究常见解决思路。
+
+---
+
+# 三十九、研究 Service
+
+Android 8+：
+
+background service
+
+foreground service
+
+新的 FGS type
+
+对 Guest Service virtualization 影响。
+
+---
+
+# 四十、研究 Broadcast
+
+Android：
+
+implicit broadcast restriction
+receiver export flags
+dynamic receiver API
+
+现代版本对 virtualization 的影响。
+
+---
+
+# 四十一、研究 JobScheduler / Alarm
+
+这些 system server API 经常验证：
+
+UID/package。
+
+非常适合作为：
+
+identity translation
+
+研究案例。
+
+---
+
+# 四十二、建立技术成熟度矩阵
+
+创建：
+
+docs/research/virtualization/25_TECHNIQUE_MATURITY_MATRIX.md
+
+例如：
+
+| Technique | Proven | Android16 | Public API | Native | Root | Complexity |
+| --------- | ------ | --------- | ---------- | ------ | ---- | ---------- |
+
+至少包含：
+
+DexClassLoader
+getResourcesForApplication
+ResourcesLoader
+ContextWrapper
+Stub Activity
+Instrumentation
+ActivityThread
+Binder proxy
+Binder ioctl
+seccomp
+IO redirect
+native hook
+Work Profile
+AVF
+Xposed
+
+---
+
+# 四十三、建立“我们漏了什么”
+
+创建：
+
+docs/research/virtualization/26_GAPS_IN_CURRENT_APPSANDBOX.md
+
+把外部调研结果
+
+和我们当前：
+
+Master Design
+EXP-001
+EXP-002
+EXP-003
+
+比较。
+
+列：
+
+Already considered
+
+Missing
+
+Underestimated
+
+Possibly wrong
+
+New alternative
+
+---
+
+# 四十四、不要自动改变现有设计
+
+外部资料发现：
+
+某项目用了某方案
+
+不代表：
+
+我们马上改成它。
+
+任何新方案必须走：
+
+External evidence
+↓
+Our reasoning
+↓
+Experiment
+↓
+ADR
+
+不能：
+
+Blog says it works
+↓
+Production implementation
+
+---
+
+# 四十五、License / provenance 单独记录
+
+每个开源项目：
+
+记录：
+
+LICENSE
+source lineage
+fork/original
+commercial restriction if any
+
+但本轮不做完整法律审计。
+
+只为：
+
+后面避免误用代码。
+
+---
+
+# 四十六、搜索专利/已有技术描述
+
+可以搜索：
+
+Google Patents
+WIPO
+CNIPA 公开资料
+
+关键词：
+
+Android app virtualization
+application cloning
+virtual package manager
+virtual activity manager
+Binder proxy Android
+
+目的：
+
+了解已有技术思路。
+
+不是做正式 FTO 专利意见。
+
+建立：
+
+PRIOR ART NOTES
+
+即可。
+
+---
+
+# 四十七、时间要求
+
+搜索必须覆盖：
+
+历史经典资料
+
+以及：
+
+最近 24 个月。
+
+尤其：
+
+2025
+2026
+
+不能搜索几篇 2017 VirtualApp 文章就结束。
+
+---
+
+# 四十八、搜索语言
+
+至少：
+
+中文
+英文
+
+如果遇到：
+
+日文
+韩文
+俄文
+
+有高价值资料：
+
+也可以记录。
+
+---
+
+# 四十九、不要只用搜索引擎摘要
+
+高价值结果：
+
+必须打开原页面。
+
+特别：
+
+AOSP
+官方 Android docs
+GitHub README
+issue
+技术文章
+论文
+
+必须阅读实际内容。
+
+---
+
+# 五十、冲突资料必须记录
+
+如果资料 A 说：
+
+某方案 Android 15 可用
+
+资料 B 说：
+
+不可用
+
+不要自行选一个。
+
+记录：
+
+CONFLICTING EVIDENCE
+
+并说明：
+
+需要实验。
+
+---
+
+# 五十一、所有技术结论标状态
+
+只能：
+
+CONFIRMED BY PRIMARY SOURCE
+
+MULTIPLE INDEPENDENT REPORTS
+
+PROJECT CLAIM
+
+SINGLE SECONDARY SOURCE
+
+SPECULATIVE
+
+NEEDS EXPERIMENT
+
+---
+
+# 五十二、最终创建总报告
+
+创建：
+
+docs/research/ANDROID_APP_VIRTUALIZATION_2026_MASTER_SURVEY.md
+
+它是这轮最终入口。
+
+结构建议：
+
+Executive Summary
+
+Technology Landscape
+
+Modern Android Constraints
+
+Architecture Families
+
+Binder Techniques
+
+Component Virtualization
+
+Resources/ClassLoader
+
+Native/IO
+
+Process Models
+
+Multi-instance
+
+Alternative Routes
+
+Android 14/15/16
+
+Google Play
+
+Existing Ecosystem
+
+Research Papers
+
+Real-world Failures
+
+Implications for AppSandbox
+
+Recommended Research Priorities
+
+---
+
+# 五十三、最终必须提出多种总体架构
+
+不要只给一个。
+
+至少给：
+
+## Architecture A
+
+Pure userspace application virtualization
+
+## Architecture B
+
+Userspace + Native/Binder interception
+
+## Architecture C
+
+Userspace + seccomp/syscall mediation
+
+## Architecture D
+
+Work Profile based cloning
+
+## Architecture E
+
+Root/Xposed based virtualization
+
+## Architecture F
+
+System/AVF based virtualization
+
+每个分析：
+
+Capability
+Root
+Compatibility
+Isolation
+Complexity
+Play suitability
+Maintenance
+Android-version sensitivity
+
+---
+
+# 五十四、特别回答一个问题
+
+我们现在正在走：
+
+Pure userspace
+
+路线。
+
+调研完成后必须回答：
+
+> 现代 Android 14～16 上，一个希望运行“任意普通第三方 APK”的 VirtualApp-style 框架，是否现实地可以只使用 Public API？
+
+答案不能凭感觉。
+
+根据资料写：
+
+YES
+NO
+PARTIALLY
+
+并说明：
+
+哪些部分大概率需要：
+
+hidden API
+Binder interception
+native
+system privilege
+
+---
+
+# 五十五、特别回答第二个问题
+
+> Activity virtualization 在现代 Android 上有哪些已知实现路线？
+
+至少列：
+
+3～5 种。
+
+并说明：
+
+哪种最值得我们实验。
+
+不要实现。
+
+---
+
+# 五十六、特别回答第三个问题
+
+> Binder/SystemService virtualization 当前最成熟的几种技术是什么？
+
+比较：
+
+Java proxy
+service cache replacement
+native ioctl interception
+seccomp/seccomp-notify
+other
+
+---
+
+# 五十七、特别回答第四个问题
+
+> App-level virtualization 与 Work Profile 哪个更适合商业“双开”产品？
+
+给事实比较。
+
+不要只给一句结论。
+
+---
+
+# 五十八、特别回答第五个问题
+
+> Android 16 相比 Android 12，我们当前设计最可能在哪些地方失效？
+
+列 Top 10。
+
+---
+
+# 五十九、特别回答第六个问题
+
+> 当前 AppSandbox 设计中，哪 10 个问题网上已经有成熟研究，不值得我们从零猜？
+
+列出来。
+
+这是本轮最重要的输出之一。
+
+---
+
+# 六十、特别回答第七个问题
+
+> 哪 10 个问题目前依然没有成熟、稳定、公开、跨 Android 版本的解决方案？
+
+也列出来。
+
+---
+
+# 六十一、特别回答第八个问题
+
+> 有没有公开项目在 2025/2026 声称已经支持 Android 16 的 app virtualization？
+
+列：
+
+项目
+证据
+是否只是 README claim
+是否有 issue/test/release 佐证
+
+---
+
+# 六十二、本轮不能修改代码
+
+不要改：
+
+app/
+test-guests/
+
+只允许：
+
+docs/research/
+docs/ChatGPT/
+
+如果确实需要记录当前代码状态：
+
+只读。
+
+---
+
+# 六十三、不要修改 ADR
+
+本轮只是：
+
+External Research。
+
+如果发现 ADR 可能错：
+
+建立：
+
+ADR REVIEW CANDIDATE
+
+不要直接修改。
+
+下一轮负责人决定。
+
+---
+
+# 六十四、最终回传格式
+
+完成后严格返回：
+
+## A. Research Coverage
+
+搜索了：
+
+多少页面
+多少官方资料
+多少 GitHub 项目
+多少论文
+多少中文技术文章
+
+---
+
+## B. Top 20 Sources
+
+每条：
+
+Title
+URL
+Date
+Type
+Why important
+
+---
+
+## C. Technology Families
+
+列出全部主要路线。
+
+---
+
+## D. Modern VirtualApp-style Architecture
+
+根据公开资料总结：
+
+2026 的典型完整栈可能包括哪些层。
+
+不要复制具体项目架构。
+
+---
+
+## E. Binder Techniques
+
+对比表。
+
+---
+
+## F. Activity Techniques
+
+对比表。
+
+---
+
+## G. Native/IO Techniques
+
+对比表。
+
+---
+
+## H. Process/Multi-instance
+
+主要方案。
+
+---
+
+## I. Android 14/15/16 Changes
+
+Top changes。
+
+---
+
+## J. Current Projects
+
+至少 10 个。
+
+注明：
+
+Original / Fork
+License
+Last Update
+Claimed Android Support
+Technique
+Confidence
+
+---
+
+## K. Academic Research
+
+至少 5 个高价值论文/研究。
+
+如果找不到 5 个可靠：
+
+明确说明。
+
+不要凑垃圾资料。
+
+---
+
+## L. Alternative Architecture
+
+Work Profile
+AVF
+Root/Xposed
+Full VM
+
+比较。
+
+---
+
+## M. Google Play
+
+哪些技术路线：
+
+技术上可行但 Play 风险高。
+
+---
+
+## N. What AppSandbox Got Right
+
+当前设计已经正确考虑了什么。
+
+---
+
+## O. What AppSandbox Missed
+
+遗漏了什么。
+
+---
+
+## P. What AppSandbox May Be Wrong About
+
+哪些设计假设值得重新审查。
+
+---
+
+## Q. Top 10 Known Problems With Existing Solutions
+
+网上已有成熟思路的问题。
+
+---
+
+## R. Top 10 Still-Hard Problems
+
+仍然困难的问题。
+
+---
+
+## S. Recommended Experiments
+
+根据外部调研：
+
+重新排序未来最值得做的：
+
+10 个实验。
+
+但不要执行。
+
+---
+
+## T. Architecture Candidates
+
+至少：
+
+A/B/C/D
+
+多个整体方案。
+
+---
+
+## U. Clean-room / Provenance
+
+列出：
+
+哪些资料只是学习技术思想。
+
+哪些项目具有 GPL / LGPL / Apache / MIT。
+
+任何源码级研究必须单独说明。
+
+---
+
+## V. Files Changed
+
+应该只有：
+
+docs/
+
+---
+
+## W. Git
+
+git status --short
+git diff --stat
+
+---
+
+## X. Final Recommendation
+
+只回答：
+
+接下来 AppSandbox 最值得先研究：
+
+哪 3 个技术方向。
+
+不要实现。
+
+完成后停止。

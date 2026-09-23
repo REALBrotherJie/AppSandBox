@@ -1,0 +1,618 @@
+继续负责当前 AppSandbox 项目。
+
+本轮是一个 **合并大任务**：包含 7 个工作流（WS-0 ~ WS-7），按顺序执行，每个工作流完成后单独提交。目的是加快进度，减少来回。
+
+当前状态：
+
+```text
+EXP-001 = CONFIRMED（API31）
+EXP-002 Option B = CONFIRMED FOR API31（ADR-0007）
+EXP-003A C0 = CONFIRMED FOR DEBUG API31（ADR-0008）
+EXP-003B0-P = 已执行（task-14），PUBLIC-ONLY
+EXP-003B1 = 仅计划
+V-1 = 登记为 BLOCKED_NO_DEVICE（本轮纠正，见审计第 1 条）
+```
+
+---
+
+# 一、task-14 审计结论（负责人意见，本轮生效）
+
+## 审计 1：V-1 并不缺设备
+
+本机已有：
+
+```text
+AVD：Pixel_3a_API_36_extension_level_19_x86_64
+系统镜像：D:/Company/Install/Android/SDK/system-images/android-36/google_apis
+模拟器：D:/Company/Install/Android/SDK/emulator/emulator.exe
+```
+
+API 36 ≥ 34，满足 V-1 条件。V-1 状态改为 **PENDING**，本轮 WS-1 执行。
+
+GuestTestApp 没有 native 代码，x86_64 模拟器可以直接运行。
+
+## 审计 2：两项分类错误
+
+task-14 把以下两项分类为 `LOADEDAPK_SENSITIVE`：
+
+* `LayoutInflater.context` = Host Application / Host Activity
+* `createConfigurationContext()` = Host ContextImpl / Host package
+
+但 `Exp003aControlledContext` **没有重写** `getSystemService()` 和 `createConfigurationContext()`。这两个调用经过 `ContextWrapper` 直接委托给了 base，结果自然是 Host。
+
+它们是 **Controlled Context 的委托缺口**，不是 LoadedApk 的证据。
+
+新增分类：
+
+```text
+C0_DELEGATION_GAP   Controlled Context 未重写，委托给 Host base 导致；可用 PUBLIC API 修复
+```
+
+EXP-003B0-P-RESULT.md 中这两行改为 `C0_DELEGATION_GAP`，并注明本审计。
+
+## 审计 3：getApplicationContext() 语义错误
+
+当前实现：
+
+```kotlin
+override fun getApplicationContext(): Context = this
+```
+
+B0-P 结果中 `applicationContext === this 为 false，返回 Controlled Context`，被归为 `BASE_CONTEXT_DOMINANT`（正确）。
+
+**这在语义上是错的。** 真实应用普遍这样写：
+
+```java
+MyApp app = (MyApp) context.getApplicationContext();
+```
+
+按现有实现会抛 ClassCastException。
+
+正确语义：Guest Application 创建（attach）之后，Guest 侧所有 Context 的 `getApplicationContext()` 都应返回 **Guest Application 实例**。
+
+## 审计 4：hidden observation 仍然不需要
+
+B0-P 中被认为「Host 敏感」的几项，经审计 2、3 都属于包装层问题，可以用 PUBLIC API 修复。目前 **没有** 只能通过读取框架内部字段才能回答的问题。
+
+决定：
+
+```text
+Hidden observation request = NOT NEEDED NOW
+在 WS-2 完成后，如果仍有无法用 PUBLIC 方式解释的 Host 行为，再单独申请
+```
+
+## 审计 5：Git
+
+task-11/12/13 合并成了一个 checkpoint 提交（9e96c99），没有按 task 分组。接受，不回退。本轮开始按工作流分别提交。
+
+---
+
+# 二、全局规则（所有工作流适用）
+
+## 允许
+
+* 只使用 PUBLIC SDK API
+* 反射只允许用于调用 **Guest 自己的** 类和方法（观测方法、测试标志）
+* WS-4 在门控通过后允许调用一次 `Instrumentation.callApplicationOnCreate()`
+
+## 禁止
+
+* 读取框架内部字段、调用非 SDK 接口、使用 hidden API bypass 库
+* Hook、方法拦截、Binder 拦截、动态代理替换系统服务
+* 启动 Guest 的 Activity / Service / Receiver / Provider
+* JNI / native
+* 修改 ADR-0006 / 0007 / 0008 的 Status
+* 在 `app/src/main` 中加入实验逻辑（入口按钮除外）
+
+实验代码放在：
+
+```text
+app/src/debug/java/com/example/appsandbox/experiments/exp003c1/   （WS-2、WS-3）
+app/src/debug/java/com/example/appsandbox/experiments/exp003c/    （WS-4）
+app/src/debug/java/com/example/appsandbox/experiments/exp003b1/   （WS-5）
+app/src/debug/java/com/example/appsandbox/experiments/v1/         （WS-1）
+```
+
+## 实验纪律（沿用）
+
+* 每次实验在 **全新进程** 中执行，记录 PID 和 run count（必须 = 1）
+* Guest APK 重建后记录 SHA-256，导入后 SHA 必须一致
+* `adb shell pm path com.example.appsandbox.testguest` 前后都必须无输出（真机和模拟器都要）
+* 不预设异常类型，记录真实异常类与消息
+* 每个结论标注设备与 API level
+
+---
+
+# 三、WS-0：提交遗留文件
+
+在任何编码之前：
+
+1. 提交 task-14 的全部修改（一个提交，信息写明 EXP-003B0-P / B1 plan / V-1 登记）
+2. 提交以下文档（一个 docs 提交）：
+   * `docs/ChatGPT/task-14.txt`
+   * `docs/ChatGPT/task-15.txt`
+   * `docs/ChatGPT/web-search-01.txt`
+   * `docs/research/`（外部调研文档，只提交，不改内容）
+3. 按审计 2 修改 `EXP-003B0-P-RESULT.md` 的两行分类，并补充审计 3 的说明。单独一个提交
+4. 不推送
+
+---
+
+# 四、WS-1：API 36 模拟器与 V-1
+
+## 4.1 启动模拟器
+
+使用现有 AVD：
+
+```text
+Pixel_3a_API_36_extension_level_19_x86_64
+```
+
+记录：
+
+```text
+ro.build.version.sdk
+ro.build.version.release
+ro.product.cpu.abilist
+页大小（adb shell getconf PAGE_SIZE）
+```
+
+## 4.2 V-1：动态加载只读检查
+
+在 API 36 模拟器上：
+
+1. 按现有导入流程导入 GuestTestApp，得到私有目录下的 `base.apk`
+2. **不设只读**，用 EXP-001 的 DexClassLoader 路径加载 `GuestProbe` 并调用
+3. 复制一份到另一个实验路径，调用 `File.setReadOnly()` 后再加载一次
+4. 记录两次的结果：成功，或真实异常类 + 消息 + 发生在哪一步（构造 ClassLoader / loadClass / 调用）
+
+注意：
+
+* V-1 只做判断，**不修改** `GuestStore` 的生产代码
+* 如果结论是「不设只读就失败」，在 ROADMAP 中登记为 **BLOCKER for API 34+**，并在结果文档中写出建议修复位置（导入完成后立即设只读，与 ADR-0003 不可变版本一致），修复本身留给下一轮
+
+## 4.3 API 36 回归
+
+在同一模拟器上依次重跑（每项全新进程）：
+
+* EXP-001 基本链路（若 V-1 显示需要只读，则在只读副本上跑，并注明）
+* EXP-002 Option B（含 landscape 重载）
+* EXP-003A C0
+* EXP-003B0-P
+
+输出一张对比表：
+
+| 实验 | API31 真机 | API36 模拟器 | 差异 |
+|---|---|---|---|
+
+结果写入：
+
+```text
+docs/experiments/V-1-READONLY-DCL-CHECK.md（更新）
+docs/experiments/API36-REGRESSION-RESULT.md（新增）
+```
+
+提交一次。
+
+---
+
+# 五、WS-2：Controlled Context C1（PUBLIC-ONLY）
+
+目标：把 C0 升级为 C1，修复审计 2、3 暴露的缺口，并补齐存储相关接口。
+
+新建：
+
+```text
+exp003c1/Exp003c1ControlledContext.kt
+```
+
+**不要修改** `exp003a/Exp003aControlledContext.kt`（保留 C0 作为基线对照）。
+
+## 5.1 base Context
+
+固定使用：
+
+```text
+base = Host applicationContext
+```
+
+（task-14 D3 的结论。Activity 底座不再使用。）
+
+## 5.2 必须实现的行为
+
+### A. Application 绑定
+
+* 新增 `bindApplication(app: Application)`
+* 绑定前：`getApplicationContext()` 返回自身（与 C0 一致）
+* 绑定后：`getApplicationContext()` 返回 **Guest Application 实例**
+* 所有由 C1 派生出来的 Context，`getApplicationContext()` 也返回同一个 Guest Application
+
+### B. LayoutInflater
+
+* `getSystemService(LAYOUT_INFLATER_SERVICE)` 返回：
+
+```kotlin
+LayoutInflater.from(baseContext).cloneInContext(this)
+```
+
+* 在 C1 实例内缓存，保证同一个 C1 多次获取得到同一个对象
+* 其他 `getSystemService(name)`：**不改变行为**，委托给 base，但要记录每个被请求的服务名（用于后续的系统服务清单）
+
+### C. Theme
+
+* `getTheme()`：基于 Guest Resources 的 `newTheme()`
+* 默认主题：`guestInfo.theme`；如果为 0，使用一个框架默认主题（如 `android.R.style.Theme_DeviceDefault_Light`），并记录用的是哪一个
+* `setTheme(resId)`：应用到 Guest 的 Theme 上
+
+### D. 派生 Context
+
+| 方法 | C1 行为 |
+|---|---|
+| `createConfigurationContext(config)` | 返回新的 C1 实例，其 Resources 来自 `getResourcesForApplication(guestInfo, config)`（ADR-0007 的 API 31 重载） |
+| `createDeviceProtectedStorageContext()` | 返回新的 C1 实例，数据根目录为 **instance 的 device-protected 根目录**（位于 Host 的 device-protected 存储下，按 instance 划分） |
+| `createAttributionContext(tag)`（API 30+） | 返回新的 C1 实例，保留 Guest 语义；`AttributionSource` 仍是 Host（ADR-0002），记录 tag 是否保留 |
+| `createPackageContext(guestPkg, …)` | 不改变，预期 NameNotFoundException，记录 |
+| `createDisplayContext` / `createWindowContext` | 不实现，记录为 DEFERRED |
+
+所有派生出的 C1 都必须满足：包名、ClassLoader、Resources、存储路径全部是 Guest 的。
+
+### E. SharedPreferences
+
+先观测，再实现：
+
+1. **观测**：用 C0 调用 `getSharedPreferences("exp003c1", MODE_PRIVATE)` 写入一个 marker，记录文件落在哪里（预期落在 Host 的 `shared_prefs`，属于泄漏）
+2. **实现**：C1 重写 `getSharedPreferences(name, mode)`，返回一个 **实验用** 的 `SharedPreferences` 接口实现：
+   * 存储在 `instanceRoot/shared_prefs/<name>.xml`（格式可以简化，但要能跨进程重启读回）
+   * 同一个 C1 内，同名返回同一个实例
+   * 支持 `edit/putString/putInt/putBoolean/putLong/putFloat/putStringSet/remove/clear/apply/commit`，以及 `OnSharedPreferenceChangeListener`
+   * 不追求与框架实现完全一致；已知差异写进结果文档
+3. 同时重写 `deleteSharedPreferences(name)`
+
+这是 **debug 实验代码**，不是生产实现。
+
+### F. 数据库
+
+C1 重写：
+
+* `getDatabasePath(name)` → `instanceRoot/databases/<name>`
+* `openOrCreateDatabase(...)`（全部重载）→ `SQLiteDatabase.openOrCreateDatabase(File, ...)`
+* `deleteDatabase(name)`、`databaseList()`
+
+用标准 `SQLiteOpenHelper(context=C1, ...)` 建库、建表、读写一行，验证文件落在 instance 目录。
+
+### G. 外部存储
+
+`getExternalFilesDir(type)`、`getExternalCacheDir()`、`getObbDir()`：
+
+* 路由到 Host 对应外部目录下的 `sandbox/<instanceId>/...` 子目录
+* 记录 Host 原始路径与路由后的路径
+
+### H. 明确不处理的接口（只观测并分类）
+
+以下调用 **不做任何修改**，只观测结果并分类为 `HOST_IDENTITY_REALITY` / `UNSUPPORTED` / `DEFERRED`：
+
+* `getContentResolver()`
+* `registerReceiver(...)`（注册一个无害的自定义 action 后立即注销）
+* `sendBroadcast(...)`（发送一个只有本进程接收的自定义 action）
+* `startActivity(...)`、`startService(...)`、`bindService(...)`：**不调用**，只记录为 UNSUPPORTED（组件阶段处理）
+* `checkSelfPermission(...)`：记录返回的是 Host 的授权状态
+* `getPackageManager()`：Guest 包查询预期 NameNotFoundException
+
+## 5.3 C1 验证矩阵
+
+对 C1 本身及其每一种派生 Context，逐项检查：
+
+```text
+packageName / classLoader / resources / assets / applicationInfo
+filesDir / cacheDir / codeCacheDir / noBackupFilesDir / dataDir / getDir
+getDatabasePath / SharedPreferences 文件位置 / externalFilesDir
+getApplicationContext（绑定前 / 绑定后）
+LayoutInflater.context
+theme（能否解析一个 Guest 主题属性）
+```
+
+每项：PASS / FAIL / 分类。
+
+## 5.4 负面对照
+
+* Host 的 `shared_prefs` 目录中 **不能** 出现 C1 写入的 marker
+* Host 的 `databases` 目录中 **不能** 出现 C1 创建的库
+* Host 的 LayoutInflater（`LayoutInflater.from(hostActivity)`）的 context 仍是 Host
+* Host 的 Theme 不受影响
+
+结果写入：
+
+```text
+docs/experiments/EXP-003C1-CONTROLLED-CONTEXT-RESULT.md（新增）
+docs/experiments/EXP-003C1-SYSTEM-SERVICE-REQUESTS.md（新增：记录 5.2-B 中被请求的服务名清单）
+```
+
+提交一次。
+
+---
+
+# 六、WS-3：Guest Layout Inflate
+
+这是 EXP-002 当时因为 Context 边界而推迟的项目，现在用 C1 完成。
+
+## 6.1 GuestTestApp 增加资源
+
+在 GuestTestApp 中新增：
+
+* `res/values/themes.xml`：一个 Guest 主题 `Exp003GuestTheme`，定义一个自定义属性（如 `exp003AccentColor`，在 `res/values/attrs.xml` 中声明），值引用 `@color/exp002_color`
+* `res/layout/exp003_themed_layout.xml`：根布局 + 一个 TextView，其 `android:textColor="?attr/exp003AccentColor"`，文本引用 Guest 字符串
+* 在 manifest 的 `<application>` 上设置 `android:theme="@style/Exp003GuestTheme"`
+
+重新构建、导入，记录 SHA。
+
+## 6.2 测试
+
+使用 C1 的 LayoutInflater：
+
+1. inflate `exp002_test_layout`：
+   * 根 View 类名、子 View 类名
+   * TextView 的文本 == `EXP002_STRING_...` 完整 marker
+   * `view.context` 是否为 C1（或其 ContextThemeWrapper）
+2. inflate `exp003_themed_layout`：
+   * TextView 的当前文字颜色 == `0xff12ab34`
+   * 如果失败，记录真实异常；不要为了通过而改用硬编码颜色
+3. 用 C1 的 `createConfigurationContext(landscape)` 派生出的 Context 再 inflate 一次，读取 `exp002_config_value`（如在布局中引用）或直接从其 Resources 读取，验证为 `EXP002_LANDSCAPE`
+
+## 6.3 负面对照
+
+* 用 **Host** 的 LayoutInflater inflate Guest 的 layout ID：记录真实结果（预期失败或读到 Host 资源），证明 inflate 结果依赖 Guest Context
+
+结果写入：
+
+```text
+docs/experiments/EXP-003C1-LAYOUT-INFLATE-RESULT.md（新增）
+```
+
+如果 6.2 第 1、2 项都通过，在 EXP-002-RESULT.md 末尾追加一段「Deferred item resolved: layout inflation via C1」，引用本结果。
+
+提交一次。
+
+---
+
+# 七、WS-4：EXP-003C-min（带门控的 onCreate）
+
+## 7.1 门控
+
+只有当以下条件 **全部满足** 时，才执行 WS-4：
+
+1. WS-2 验证矩阵中，packageName / classLoader / resources / 全部存储路径 / SharedPreferences / 数据库 / getApplicationContext（绑定后）全部 PASS
+2. WS-2 负面对照全部 PASS
+3. WS-3 第 1 项（普通 layout inflate）PASS
+
+任何一条不满足：WS-4 状态记为 `SKIPPED (GATE FAILED)`，列出未通过的条目，直接进入 WS-5。
+
+## 7.2 GuestTestApp 的 onCreate 脚本
+
+修改 `Exp003GuestApplication.onCreate()`，按顺序执行以下步骤，**每一步都用 try/catch 独立包起来**，把结果（成功 / 异常类 + 消息）写进一个静态结果表：
+
+1. `getResources().getString(R.string.exp002_string)` 与 marker 比较
+2. `getApplicationContext()` 强转为 `Exp003GuestApplication`（审计 3 的核心验证）
+3. `openFileOutput` 写入一个新 marker，再 `openFileInput` 读回
+4. `getSharedPreferences("guest_prefs", MODE_PRIVATE)` 写入并读回
+5. `SQLiteOpenHelper` 建库、写一行、读回
+6. `LayoutInflater.from(this).inflate(R.layout.exp002_test_layout, null)`，读 TextView 文本
+7. `getSystemService(Context.CLIPBOARD_SERVICE)`：只获取对象、记录类名，**不读写剪贴板内容**
+8. `registerActivityLifecycleCallbacks(...)`：注册，记录是否抛异常
+
+保留 `onCreateCalled = true`。
+
+提供 Guest 侧方法 `onCreateResults(): Map<String, String>` 供 Host 通过反射读取。
+
+## 7.3 执行
+
+```text
+fresh process
+→ C1（base = Host applicationContext）
+→ Instrumentation().newApplication(guestLoader, className, c1)
+→ c1.bindApplication(app)
+→ Instrumentation().callApplicationOnCreate(app)
+→ 读取 onCreateResults()
+```
+
+`callApplicationOnCreate` 本身用 try/catch 包住。
+
+## 7.4 检查
+
+* 8 个步骤逐项结果
+* Host 进程存活
+* Host 的 `shared_prefs`、`databases`、`files` 中没有 Guest marker
+* Guest instance 目录中有全部 marker
+* 进程重启后（新的全新进程），Guest SharedPreferences 和数据库中的值仍可读回（持久化验证）
+
+## 7.5 异常测试
+
+新增一个受开关控制的 Guest Application 子类（或复用 `Exp003ThrowingApplication` 的思路），在 `onCreate()` 中抛出 RuntimeException：
+
+* 记录 `callApplicationOnCreate` 抛出的真实异常
+* Host 存活
+
+结果写入：
+
+```text
+docs/experiments/EXP-003C-MIN-ONCREATE-RESULT.md（新增）
+```
+
+提交一次。
+
+---
+
+# 八、WS-5：执行 EXP-003B1 多实例
+
+按已有计划 `EXP-003B1-SAME-PACKAGE-MULTI-INSTANCE-PLAN.md` 执行，使用 **C1**（不是 C0）。
+
+两种形态都执行：
+
+| 形态 | ClassLoader | instance |
+|---|---|---|
+| M-A | 同一个 DexClassLoader | instance-1、instance-2 |
+| M-B | 两个独立的 DexClassLoader | instance-1、instance-2 |
+
+每种形态：
+
+* 分别创建两个 Guest Application（**不调用 onCreate**，避免与 WS-4 混淆）
+* 记录：静态构造计数器、`Application` identity、Resources identity、`getApplicationContext()` 指向、instance 数据目录、SharedPreferences 和数据库文件位置
+* 在 instance-1 写入 marker，检查 instance-2 是否可见
+
+预期（仅作对照，不预设结论）：
+
+* M-A 中静态状态共享
+* M-B 中静态状态隔离
+
+结论只写观测结果，以及对进程模型选择的影响（参考 `docs/research/virtualization/13_PROCESS_MODELS.md`），**不做进程模型决策**。
+
+结果写入：
+
+```text
+docs/experiments/EXP-003B1-SAME-PACKAGE-MULTI-INSTANCE-RESULT.md（新增）
+```
+
+提交一次。
+
+---
+
+# 九、WS-6：在 API 36 上重跑本轮新实验
+
+在 WS-1 的模拟器上重跑：
+
+* WS-2 C1 验证矩阵
+* WS-3 layout inflate
+* WS-4 onCreate（如果 API 31 上门控通过）
+* WS-5 多实例
+
+在各结果文档中补充 API 36 一列。只记录差异，不为了对齐而改代码。
+
+与 WS-1 的回归表合并到 `API36-REGRESSION-RESULT.md`。
+
+提交一次。
+
+---
+
+# 十、WS-7：文档与 ADR
+
+## 10.1 更新
+
+* `EXP-003-HOST-LEAKAGE-MATRIX.md`：按 C1 结果更新每一行，标出「C0 → C1」的变化
+* `EXP-003-APPLICATION-COMPATIBILITY-LEVELS.md`：写明 C1 能达到的兼容等级
+* `EXP-003B-LOADEDAPK-PRECHECK.md`：记录审计 4 的决定
+* `docs/ROADMAP.md`、`docs/design/24_IMPLEMENTATION_ROADMAP.md`
+* `docs/ChatGPT/README.md`：登记 task-15
+
+## 10.2 ADR
+
+允许新建以下 ADR，但 Status 只能是 **PROPOSED**，由负责人审查后决定：
+
+* `ADR-0009-CONTROLLED-GUEST-CONTEXT-C1.md`（WS-2、WS-3 的结论）
+* 如果 WS-4 执行并通过：`ADR-0010-GUEST-APPLICATION-ONCREATE-MIN.md`
+* 如果 V-1 显示需要只读：`ADR-0011-READONLY-GUEST-CODE-API34.md`
+
+每个 ADR 必须写明：确认了什么、**没有确认什么**、测试设备与 API level。
+
+提交一次。
+
+---
+
+# 十一、如果中途遇到阻塞
+
+* 某个工作流失败：记录失败点与真实异常，标记该工作流为 `FAILED` 或 `PARTIAL`，**继续执行后续不依赖它的工作流**
+* 依赖关系：WS-4 依赖 WS-2、WS-3；WS-6 依赖 WS-1；其余可独立推进
+* 不要为了让某项通过而引入被禁止的技术。无法用 PUBLIC API 解决的，记录为 `NEEDS_NON_PUBLIC` 并说明原因，交给负责人决定
+
+---
+
+# 十二、最终回传格式
+
+## A. Commits
+
+每个工作流对应的提交 hash + message。
+
+## B. Devices
+
+```text
+API31 真机：型号 / SDK / ABI
+API36 模拟器：SDK / release / ABI / PAGE_SIZE
+```
+
+## C. Guest APK
+
+最终版本的 Build SHA256 / Imported SHA256（两台设备）/ SHA match / pm path 前后。
+
+## D. 工作流状态总表
+
+| WS | 状态（DONE / PARTIAL / FAILED / SKIPPED） | API31 | API36 | 关键结论（一句话） |
+|---|---|---|---|---|
+
+## E. V-1
+
+```text
+Non-read-only load =
+Read-only load =
+Status = CONFIRMED / NOT REPRODUCED
+Blocker for API34+ = YES / NO
+```
+
+## F. API36 Regression
+
+对比表。
+
+## G. C1 验证矩阵
+
+表格：观测项 / C0 / C1 / 分类。
+
+## H. SharedPreferences 与数据库
+
+C0 观测到的文件位置、C1 的文件位置、负面对照、已知与框架实现的差异。
+
+## I. Layout Inflate
+
+普通布局 / 主题属性 / landscape 三项的结果，以及 Host inflater 负面对照。
+
+## J. onCreate-min
+
+门控结果；8 个步骤逐项结果；持久化验证；异常测试；Host 存活。
+
+## K. Multi-instance
+
+M-A、M-B 两张表，以及对进程模型的影响。
+
+## L. System Service Requests
+
+WS-2 中被请求的系统服务名清单。
+
+## M. NEEDS_NON_PUBLIC
+
+所有无法用 PUBLIC API 解决的问题（如有），每条说明原因。
+
+## N. ADR
+
+新建 ADR 的文件名与摘要（均为 PROPOSED）。
+
+## O. Modified Files
+
+完整列出。
+
+## P. Git
+
+```bash
+git status --short
+git log --oneline -15
+```
+
+不推送。
+
+## Q. Next Step
+
+只回答：
+
+```text
+Ready for component stage design（Activity 承载方案设计，不实现）: YES / NO
+Hidden observation request needed: YES / NO
+```
+
+各给出最多 5 条理由。
+
+不要启动任何 Guest 组件，不要开始组件阶段的实现。
