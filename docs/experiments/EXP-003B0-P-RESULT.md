@@ -65,9 +65,9 @@ app-created `Instrumentation`.
 | AttributionSource | Host package/UID | Host package/UID | HOST_IDENTITY_REALITY |
 | applicationContext | Controlled Context | Controlled Context | BASE_CONTEXT_DOMINANT |
 | PackageManager Guest query | NameNotFoundException | Same | DEFERRED |
-| LayoutInflater context | Guest Application | Host MainActivity | LOADEDAPK_SENSITIVE |
+| LayoutInflater context | Host Application | Host MainActivity | C0_DELEGATION_GAP |
 | ActivityManager class | Host manager | Host manager | HOST_IDENTITY_REALITY |
-| createConfigurationContext | Host ContextImpl/package | Host ContextImpl/package | LOADEDAPK_SENSITIVE |
+| createConfigurationContext | Host ContextImpl/package | Host ContextImpl/package | C0_DELEGATION_GAP |
 | component callbacks | Registration no exception | Registration no exception | DEFERRED |
 | activity lifecycle callbacks | Registration no exception | Registration no exception | DEFERRED |
 
@@ -128,6 +128,14 @@ Reflection was used only to invoke Guest-owned `observe()` and read Guest-owned
 test flags/classes; it did not access framework internals.
 
 ## Interpretation
+
+Task-15 audit supersedes the original attribution: C0 does not override
+getSystemService or createConfigurationContext. These observations demonstrate
+delegation to the Host base, not evidence of LoadedApk state. Returning the
+Controlled Context from getApplicationContext after Application attachment is
+also a semantic gap: a Guest Application cast fails. C1 must bind the Guest
+Application and propagate that binding to derived contexts. Hidden observation
+is NOT NEEDED NOW; public wrapper behavior explains these observations.
 
 Route A, accepting Host LoadedApk with a Controlled Context, is `LIMITED`, not
 Rejected: simple Guest Application getters worked, but LayoutInflater,
