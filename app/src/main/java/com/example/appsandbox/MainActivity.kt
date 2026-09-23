@@ -40,6 +40,10 @@ class MainActivity : AppCompatActivity() {
                 visibility = android.view.View.VISIBLE
                 setOnClickListener { runExp003a() }
             }
+            findViewById<android.view.View>(R.id.runExp003b0Button).apply {
+                visibility = android.view.View.VISIBLE
+                setOnClickListener { runExp003b0() }
+            }
         }
         findViewById<android.view.View>(R.id.importApkButton).setOnClickListener {
             startActivityForResult(
@@ -183,6 +187,29 @@ class MainActivity : AppCompatActivity() {
         } catch (error: Throwable) {
             errorText.setTextColor(0xFFB00020.toInt())
             errorText.text = "EXP-003A failed: ${error.cause?.message ?: error.message}"
+            errorText.visibility = android.view.View.VISIBLE
+        }
+    }
+
+    private fun runExp003b0() {
+        val record = importedRecord ?: run {
+            errorText.text = "Import GuestTestApp APK first"
+            errorText.visibility = android.view.View.VISIBLE
+            return
+        }
+        try {
+            val runner = Class.forName("com.example.appsandbox.experiments.exp003b0.Exp003b0Runner")
+            val result = runner.getMethod(
+                "run",
+                Activity::class.java,
+                com.example.appsandbox.model.GuestPackageRecord::class.java
+            ).invoke(null, this, record) as String
+            errorText.setTextColor(0xFF1B5E20.toInt())
+            errorText.text = result
+            errorText.visibility = android.view.View.VISIBLE
+        } catch (error: Throwable) {
+            errorText.setTextColor(0xFFB00020.toInt())
+            errorText.text = "EXP-003B0 failed: ${error.cause?.message ?: error.message}"
             errorText.visibility = android.view.View.VISIBLE
         }
     }

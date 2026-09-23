@@ -2,7 +2,7 @@
 
 ## Status
 
-`NEEDS_MORE_RESEARCH`
+`READY FOR B0-P (PUBLIC-ONLY); HIDDEN OBSERVATION DEFERRED`
 
 This task is research and design only. No Guest Application was created and
 none of `Instrumentation.newApplication()`, `Application.attach()`, or
@@ -115,3 +115,7 @@ All sources are `PRIMARY / AOSP`, accessed September 23, 2026:
 10. https://android.googlesource.com/platform/frameworks/base/+/android16-qpr2-release/core/java/android/app/ActivityThread.java
 
 No third-party source was copied.
+
+Task-14 decision: hidden observation remains unapproved. The public-only B0-P
+experiment is allowed; field reads, reflection into framework classes, and
+`getPackageInfoNoCheck` remain deferred.

@@ -33,6 +33,10 @@
 | `LoadedApk.getApplicationInfo()` | Guest metadata | Host metadata | **CRITICAL** |
 | `ActivityThread` package cache | per-instance state | package-keyed cache collision | **CRITICAL** |
 | application context lookup | Guest bootstrap/Application | Host `mPackageInfo.getApplication()` | **CRITICAL** |
+| `Application.getApplicationContext` in B0-P | Controlled Context | Controlled Context, not Application/Host Application | BASE CONTEXT DOMINANT |
+| `AppComponentFactory` | Guest factory | Not used by app-created Instrumentation | HOST FRAMEWORK REALITY |
+| `LayoutInflater` from Application | Guest Context inflater | Manager/context remains base-sensitive | LOADEDAPK-SENSITIVE |
+| derived configuration Context | Guest package/context | Host ContextImpl and Host package | LOADEDAPK-SENSITIVE |
 
 The most dangerous leaks are package name, paths, resources, class loader,
 Application context, PackageManager, process identity, system-service
