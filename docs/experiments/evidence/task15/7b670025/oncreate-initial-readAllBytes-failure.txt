@@ -1,0 +1,15 @@
+mode=oncreate PID=18672 runCount=1 API=31
+imported=/data/user/0/com.example.appsandbox/files/guests/847975e0-16d4-472d-9a77-3a00ccc18f29/base.apk sha256=6830b06c246ffb44fae1c4863a57122bf6e5d1738a2153ed74bbc0e5040df3dd
+experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/b12f2559-d99c-4428-b444-6fca858da963/base.apk sha256=6830b06c246ffb44fae1c4863a57122bf6e5d1738a2153ed74bbc0e5040df3dd readOnly=true
+gates={c1=true, layout=true}
+callApplicationOnCreate=RETURNED
+results={1.resources=PASS, 2.applicationCast=PASS, 3.files=java.lang.NoSuchMethodError:No virtual method readAllBytes()[B in class Ljava/io/InputStream; or its super classes (declaration of 'java.io.InputStream' appears in /apex/com.android.art/javalib/core-oj.jar), 4.preferences=PASS, 5.database=PASS, 6.layout=PASS, clipboardClass=android.content.ClipboardManager, 7.clipboard=PASS, 8.lifecycle=PASS}
+onCreateCalled=true
+host.files.absent=true
+host.preferences.absent=true
+host.database.absent=true
+guest.files=/data/user/0/com.example.appsandbox/files/task15-instances/oncreate/files/guest-oncreate.txt exists=true
+guest.preferences=/data/user/0/com.example.appsandbox/files/task15-instances/oncreate/shared_prefs/guest_prefs.xml exists=true
+guest.database=/data/user/0/com.example.appsandbox/files/task15-instances/oncreate/databases/guest-oncreate.db exists=true
+services=[layout_inflater, window, clipboard]
+END hostSurvived=true

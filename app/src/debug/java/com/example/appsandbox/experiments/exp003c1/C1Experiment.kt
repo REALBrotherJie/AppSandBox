@@ -128,7 +128,7 @@ object C1Experiment {
         line("createDisplayContext/createWindowContext=DEFERRED_NOT_CALLED")
         line("services=${c.requestedServices()}")
         line("gate.c1=$passed")
-        File(host.filesDir, "task15-c1-gate.txt").writeText("${android.os.Build.VERSION.SDK_INT}:$passed")
+        File(host.filesDir, "task15-c1-gate.txt").writeText(GateEvidence.stamp(record, passed))
         return lines.joinToString("\n")
     }
 }

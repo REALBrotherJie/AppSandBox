@@ -22,6 +22,8 @@ class ExperimentActivity : Activity() {
         val out = StringBuilder()
         fun line(s: String) { out.appendLine(s); Log.i("Task15", s) }
         line("mode=$mode PID=${Process.myPid()} runCount=${++runs} API=${android.os.Build.VERSION.SDK_INT}")
+        if (mode == "c1" || mode == "c1-read") File(filesDir, "task15-c1-gate.txt").delete()
+        if (mode == "layout") File(filesDir, "task15-layout-gate.txt").delete()
         try {
             check(runs == 1) { "Fresh process required" }
             val store = GuestStore(this)
@@ -60,6 +62,7 @@ class ExperimentActivity : Activity() {
                     "c1" -> com.example.appsandbox.experiments.exp003c1.C1Experiment.run(this, experimental)
                     "c1-read" -> com.example.appsandbox.experiments.exp003c1.C1Experiment.run(this, experimental, true)
                     "layout" -> com.example.appsandbox.experiments.exp003c1.LayoutExperiment.run(this, experimental)
+                    "oncreate", "oncreate-read", "oncreate-error" -> com.example.appsandbox.experiments.exp003c.OnCreateExperiment.run(this, experimental, mode)
                     else -> error("Unknown experiment $mode")
                 })
             }

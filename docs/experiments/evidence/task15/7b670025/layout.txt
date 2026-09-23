@@ -1,6 +1,6 @@
-mode=layout PID=23611 runCount=1 API=31
-imported=/data/user/0/com.example.appsandbox/files/guests/ee698d43-2c5a-4740-adcb-feb2dd4f0475/base.apk sha256=92651aee64f0235fd3a6307e2ca14763c2dd22b8a35775ab641c74eef790c920
-experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/0f1d6844-fc83-4cf4-aac6-ff86bb330e3f/base.apk sha256=92651aee64f0235fd3a6307e2ca14763c2dd22b8a35775ab641c74eef790c920 readOnly=true
+mode=layout PID=27803 runCount=1 API=31
+imported=/data/user/0/com.example.appsandbox/files/guests/2c360be5-df37-4458-83d1-9c2fc1c24bbe/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/06420be9-e57d-46f9-8f6a-2105a548fbed/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494 readOnly=true
 exp002_test_layout root=android.widget.LinearLayout child=android.widget.TextView text=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10 contextIsC1=true color=ff70777c
 exp002_test_layout=PASS
 exp003_themed_layout root=android.widget.LinearLayout child=android.widget.TextView text=EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10 contextIsC1=true color=ff12ab34

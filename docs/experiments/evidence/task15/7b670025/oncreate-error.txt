@@ -1,0 +1,13 @@
+mode=oncreate-error PID=30542 runCount=1 API=31
+imported=/data/user/0/com.example.appsandbox/files/guests/2c360be5-df37-4458-83d1-9c2fc1c24bbe/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/8082be3c-88e7-4a07-b05e-5fcfa5aa0449/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494 readOnly=true
+gates={c1=true, layout=true}
+callApplicationOnCreate=java.lang.RuntimeException:EXP003C onCreate failure
+host.files.absent=true
+host.preferences.absent=true
+host.database.absent=true
+guest.files=/data/user/0/com.example.appsandbox/files/task15-instances/oncreate/files/guest-oncreate.txt exists=true
+guest.preferences=/data/user/0/com.example.appsandbox/files/task15-instances/oncreate/shared_prefs/guest_prefs.xml exists=true
+guest.database=/data/user/0/com.example.appsandbox/files/task15-instances/oncreate/databases/guest-oncreate.db exists=true
+services=[]
+END hostSurvived=true

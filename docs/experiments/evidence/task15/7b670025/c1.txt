@@ -1,6 +1,6 @@
-mode=c1 PID=21684 runCount=1 API=31
-imported=/data/user/0/com.example.appsandbox/files/guests/ee698d43-2c5a-4740-adcb-feb2dd4f0475/base.apk sha256=92651aee64f0235fd3a6307e2ca14763c2dd22b8a35775ab641c74eef790c920
-experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/fb08b181-d4b0-4224-89bc-87b16b399e35/base.apk sha256=92651aee64f0235fd3a6307e2ca14763c2dd22b8a35775ab641c74eef790c920 readOnly=true
+mode=c1 PID=25750 runCount=1 API=31
+imported=/data/user/0/com.example.appsandbox/files/guests/2c360be5-df37-4458-83d1-9c2fc1c24bbe/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/59b47add-0aa0-4de6-91a5-6dd06191f831/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494 readOnly=true
 unbound.applicationContext=PASS
 C0.preferences.write=PASS
 C0.preferences.path=/data/user/0/com.example.appsandbox/shared_prefs/exp003c1.xml

@@ -34,7 +34,7 @@ object LayoutExperiment {
             val view = LayoutInflater.from(host).inflate(c.resources.getIdentifier("exp002_test_layout", "layout", c.packageName), null)
             "${view.javaClass.name}:context=${view.context.javaClass.name}"
         }.getOrElse { "${it.javaClass.name}:${it.message}" }}"
-        File(host.filesDir, "task15-layout-gate.txt").writeText("${android.os.Build.VERSION.SDK_INT}:$ordinary")
+        File(host.filesDir, "task15-layout-gate.txt").writeText(GateEvidence.stamp(record, ordinary))
         output += "gate.layout=$ordinary"
         return output.joinToString("\n")
     }

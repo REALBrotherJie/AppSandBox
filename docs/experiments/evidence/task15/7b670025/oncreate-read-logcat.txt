@@ -1,0 +1,15 @@
+--------- beginning of main
+09-23 23:52:12.866 29669 29669 I Task15  : mode=oncreate-read PID=29669 runCount=1 API=31
+09-23 23:52:12.899 29669 29669 I Task15  : imported=/data/user/0/com.example.appsandbox/files/guests/2c360be5-df37-4458-83d1-9c2fc1c24bbe/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+09-23 23:52:12.909 29669 29669 I Task15  : experimentCopy=/data/user/0/com.example.appsandbox/cache/task15/6bde5d3f-9547-407e-84b9-9a9b484ad4d2/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494 readOnly=true
+09-23 23:52:12.943 29669 29669 I Task15  : gates={c1=true, layout=true}
+09-23 23:52:12.943 29669 29669 I Task15  : persisted={preferences=GUEST_ONCREATE_PREF, database=GUEST_ONCREATE_DB}
+09-23 23:52:12.943 29669 29669 I Task15  : onCreateCalled=false
+09-23 23:52:12.943 29669 29669 I Task15  : host.files.absent=true
+09-23 23:52:12.943 29669 29669 I Task15  : host.preferences.absent=true
+09-23 23:52:12.943 29669 29669 I Task15  : host.database.absent=true
+09-23 23:52:12.943 29669 29669 I Task15  : guest.files=/data/user/0/com.example.appsandbox/files/task15-instances/oncreate/files/guest-oncreate.txt exists=true
+09-23 23:52:12.943 29669 29669 I Task15  : guest.preferences=/data/user/0/com.example.appsandbox/files/task15-instances/oncreate/shared_prefs/guest_prefs.xml exists=true
+09-23 23:52:12.943 29669 29669 I Task15  : guest.database=/data/user/0/com.example.appsandbox/files/task15-instances/oncreate/databases/guest-oncreate.db exists=true
+09-23 23:52:12.943 29669 29669 I Task15  : services=[]
+09-23 23:52:12.943 29669 29669 I Task15  : END hostSurvived=true
