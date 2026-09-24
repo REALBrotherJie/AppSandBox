@@ -30,8 +30,10 @@ EXP-002 Option A = REJECTED
 EXP-002 Option B API31 = CONFIRMED (TESTED ANDROID 12/API31 PATH)
 EXP-002 API28/29 = RESEARCH NEEDED
 EXP-003A = CONFIRMED C0 DEBUG BASELINE
-EXP-003B = DESIGNED / BLOCKED BY LOADEDAPK PRECHECK
-EXP-003C = NOT READY
+EXP-003B0-P = PUBLIC OBSERVATION COMPLETE API31/API36
+EXP-003C1 = DEBUG MATRIX PASS API31/API36
+EXP-003C-min = SCRIPTED ONCREATE PASS API31/API36, NOT FULL APPLICATION RUNTIME
+EXP-003B1 = OBSERVED LIMITED JAVA/FILE ISOLATION API31/API36
 V-1 API36 = CONFIRMED; writable GuestStore code is a BLOCKER for API34+ support
 ```
 
@@ -39,11 +41,14 @@ EXP-003 is split into independently gated designs:
 
 ```text
 EXP-003A Controlled Guest Context = CONFIRMED C0
-EXP-003B Guest Application instantiation = BLOCKED
-EXP-003C Minimal Application.onCreate = NOT READY
+EXP-003B Guest Application instantiation = PUBLIC PATH OBSERVED, FACTORY/LIFECYCLE LIMITS REMAIN
+EXP-003C Minimal Application.onCreate = DEBUG MINIMAL SCRIPT PASS
 EXP-003D Compatibility surface (future)
 ```
 
 
-No Guest Context, Guest Application, Activity, Hook, Binder, JNI, or native
-runtime implementation is authorized by this roadmap yet.
+Task-15 authorizes debug Context/Application experiments only. ADR-0009/0010/0011
+are PROPOSED. Production runtime, Guest components, Hook, Binder interception,
+JNI and native are not authorized. Hidden observation is NOT NEEDED NOW.
+Next: review proposed ADRs; repair GuestStore read-only publication in a separate
+task; component hosting design may be reviewed without implementing components.

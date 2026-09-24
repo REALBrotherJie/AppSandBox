@@ -32,15 +32,20 @@ Dependencies: M1. Deliverables: normalized component/filter model, deterministic
 
 M3 must begin with EXP-001 and EXP-002. Production code is not authorized by the roadmap until the corresponding decision gates pass.
 
+Task-15 V-1: writable GuestStore APK fails on API36/target36. BLOCKER for
+API34+ support; proposed ADR-0011 covers read-only immutable publication.
+Production import permission changes are deferred to the next task.
+
 Goal: load a test guest's classes/resources in a controlled process.
 
 Dependencies: M1, M2 only for metadata. Deliverables: loader/resource owner, leak tests, failure cleanup. Experiments: Java, AndroidX, reflection, resources, configuration, JNI. Exit: no host class/resource leakage in defined tests. Risks: hidden implementation dependencies.
 
 ## M4 Application lifecycle
 
-Status: EXP-003A DEBUG BASELINE CONFIRMED (2026-09-23). EXP-003B remains
-designed and blocked by the LoadedApk precheck; task-13 completed the
-docs-only route comparison and B0 design.
+Status (task-15, 2026-09-24): C0 baseline preserved; C1 matrix, Guest layout,
+minimal onCreate and limited multi-instance tests passed on API31/API36.
+ADR-0009/0010 are PROPOSED, not production authorization. Hidden observation
+is not currently needed; lifecycle dispatch and component hosting remain open.
 
 Goal: construct and stop a guest Application with an explicit Context
 contract, beginning with EXP-003A, then EXP-003B, then EXP-003C.

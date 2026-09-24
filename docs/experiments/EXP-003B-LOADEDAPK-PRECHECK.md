@@ -4,7 +4,7 @@
 
 `READY FOR B0-P (PUBLIC-ONLY); HIDDEN OBSERVATION DEFERRED`
 
-This task is research and design only. No Guest Application was created and
+Historical task-13 scope was research and design only. No Guest Application was created and
 none of `Instrumentation.newApplication()`, `Application.attach()`, or
 `Application.onCreate()` was called.
 
@@ -119,3 +119,12 @@ No third-party source was copied.
 Task-14 decision: hidden observation remains unapproved. The public-only B0-P
 experiment is allowed; field reads, reflection into framework classes, and
 `getPackageInfoNoCheck` remain deferred.
+
+## Task-15 audit and public C1 results
+
+Hidden observation request = NOT NEEDED NOW. B0 inflater and configuration
+context observations were C0 delegation gaps, not LoadedApk field evidence.
+C1 publicly repairs those gaps and binds applicationContext to the Guest
+Application. API31/API36 matrices and minimal onCreate passed. This does not
+confirm any hidden field value or remove broader factory/component limits.
+No unresolved measured behavior currently requires framework field reads.

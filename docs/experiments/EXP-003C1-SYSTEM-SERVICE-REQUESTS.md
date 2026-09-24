@@ -11,6 +11,7 @@ requested. No interception, service replacement or Binder changes are used.
 ContentResolver and PackageManager are separate getters, not service-name calls.
 
 WS-6: API36 C1 matrix requested layout_inflater, matching API31. The separate
-WS-4 Guest onCreate requested layout_inflater, window and clipboard on both
-devices. window/clipboard remained Host-backed; clipboard was only obtained,
+WS-4 Guest onCreate requested layout_inflater, window and clipboard on API31;
+API36 requested layout_inflater and clipboard (no window request observed).
+window/clipboard remained Host-backed; clipboard was only obtained,
 not read or written. See both devices' oncreate.txt service lists.

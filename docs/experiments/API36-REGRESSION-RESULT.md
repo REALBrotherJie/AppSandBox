@@ -38,7 +38,7 @@ current build/import verification is performed by the harness.
 |---|---|---|---|
 | C1 full matrix + persistence + Host negatives | PASS | PASS | None in tested assertions |
 | Ordinary/themed/landscape layout | PASS | PASS | Default ordinary text color differs; Guest themed color agrees |
-| onCreate-min eight steps | PASS | PASS | None in tested assertions |
+| onCreate-min eight steps | PASS | PASS | API31 additionally requested window; API36 did not |
 | onCreate restart / exception | PASS | PASS | Same persistence and RuntimeException containment |
 | M-A shared loader | Counts 2/2, files separate | Same | None observed |
 | M-B separate loaders | Counts 1/1, files separate | Same | None observed |
