@@ -1,0 +1,5 @@
+mode=writable-negative PID=3496 runCount=1 API=36
+imported=/data/user/0/com.example.appsandbox/files/guests/be99ace1-4fe4-4ed7-a2e5-7e250e6680e9/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+writable.path=/data/user/0/com.example.appsandbox/cache/task16-writable-negative.apk canWrite=true
+writable.load=java.lang.SecurityException:Writable dex file '/data/user/0/com.example.appsandbox/cache/task16-writable-negative.apk' is not allowed.
+END hostSurvived=true

@@ -9,5 +9,6 @@
 | task-13 | EXP-003B LoadedApk research, route comparison, and B0 design | Checkpoint 9e96c99, docs only |
 | task-14 | EXP-003B0 public-only impact observation | Committed f44378c; attribution corrected 18922f0 |
 | task-15 | WS-0 through WS-7, C1/layout/onCreate/multi-instance/API36 | Implemented and locally committed by workflow; no push; see experiments/TASK-15-RESULT.md |
+| task-16 | Production GuestStore immutable artifact hardening | Implemented; see experiments/TASK-16-GUESTSTORE-HARDENING-RESULT.md |
 
 task-09 and task-10 have identical content. Neither is deleted.

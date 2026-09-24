@@ -23,7 +23,11 @@ data class GuestPackageRecord(
     val apkPath: String,
     val appLabel: String,
     val importedAt: Long,
-    val componentSummary: ComponentSummary
+    val componentSummary: ComponentSummary,
+    val revisionId: String = internalGuestId,
+    val sha256: String? = null,
+    val fileSize: Long = -1L,
+    val schemaVersion: Int = 1
 ) {
     fun toJson() = JSONObject()
         .put("internalGuestId", internalGuestId)
@@ -34,4 +38,8 @@ data class GuestPackageRecord(
         .put("appLabel", appLabel)
         .put("importedAt", importedAt)
         .put("componentSummary", componentSummary.toJson())
+        .put("revisionId", revisionId)
+        .put("sha256", sha256)
+        .put("fileSize", fileSize)
+        .put("schemaVersion", schemaVersion)
 }

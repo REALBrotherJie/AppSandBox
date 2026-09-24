@@ -1,0 +1,7 @@
+mode=production-exp001 PID=2216 runCount=1 API=36
+imported=/data/user/0/com.example.appsandbox/files/guests/e24bb01a-e348-4842-aec5-3db5dfe164df/base.apk sha256=666fbb1ec28d5c36e8dcde928e67bbd95fc31d9025beeaff1af3aace2b536494
+production.canRead=true canWrite=false size=30356
+production.reopenForWrite=java.io.FileNotFoundException: EACCES (Permission denied)
+guestInstalled=false
+conclusion=CONFIRMED
+END hostSurvived=true

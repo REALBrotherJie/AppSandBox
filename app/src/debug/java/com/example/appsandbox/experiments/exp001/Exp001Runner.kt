@@ -5,6 +5,8 @@ import android.content.pm.PackageManager
 import android.util.Log
 import dalvik.system.DexClassLoader
 import com.example.appsandbox.model.GuestPackageRecord
+import com.example.appsandbox.storage.ArtifactState
+import com.example.appsandbox.storage.GuestArtifactVerifier
 import java.io.File
 import java.io.FileInputStream
 import java.security.MessageDigest
@@ -16,6 +18,10 @@ object Exp001Runner {
     @JvmStatic
     fun run(activity: Activity, record: GuestPackageRecord): String {
         val apk = File(record.apkPath)
+        val verification = GuestArtifactVerifier.verify(record)
+        check(verification.state == ArtifactState.VALID) {
+            "${verification.state}: ${verification.message ?: "artifact verification failed"}"
+        }
         val hostLoader = Exp001Runner::class.java.classLoader
         val lines = mutableListOf<String>()
         fun line(value: String) {

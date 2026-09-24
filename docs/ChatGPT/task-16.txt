@@ -1,0 +1,2122 @@
+继续负责当前 AppSandbox 项目。
+
+当前仓库状态：
+
+```text
+branch = main
+working tree = clean
+latest commit = 83e240d
+not pushed
+```
+
+任务记录：
+
+```text
+docs/ChatGPT/task-01.txt
+...
+docs/ChatGPT/task-15.txt
+
+docs/ChatGPT/README.md
+```
+
+task-15 汇总：
+
+```text
+docs/experiments/TASK-15-RESULT.md
+```
+
+---
+
+# 一、当前已经确认的实验基础
+
+```text
+EXP-001
+DexClassLoader 加载未安装 Guest 代码
+= CONFIRMED
+API31 + API36
+
+EXP-002
+Guest Resources
+Option A = REJECTED
+Option B getResourcesForApplication = CONFIRMED
+API31 + API36
+
+EXP-003A
+Controlled Context C0 = CONFIRMED
+API31 + API36
+
+EXP-003B0-P
+Instrumentation.newApplication public API observation
+API31 + API36
+
+C1 Context
+= CONFIRMED
+API31 + API36
+
+Layout inflate
+normal/theme/landscape
+= CONFIRMED
+
+onCreate-min
+= CONFIRMED
+API31 + API36
+
+B1 multi-instance
+shared ClassLoader → shared static state
+independent ClassLoader → isolated static state
+AssetManager sharing observed
+```
+
+以及：
+
+```text
+V-1:
+Android 14+ / target 34+
+writable dynamically loaded APK is rejected.
+```
+
+API36 实验目前靠：
+
+```text
+cache/task15/
+```
+
+中的只读副本运行。
+
+---
+
+# 二、当前最高优先级问题
+
+Production GuestStore 当前正式写出的：
+
+```text
+files/guests/<guest-id>/.../base.apk
+```
+
+仍然是：
+
+```text
+writable
+```
+
+因此：
+
+# 当前 production GuestStore 在 Android 14+ 上不能作为可靠的 Guest code source。
+
+这必须在继续 Activity Runtime 之前解决。
+
+本轮不要设计 Activity。
+
+不要实现 Activity。
+
+---
+
+# 三、本轮目标
+
+完成：
+
+# Production Guest Package Artifact Hardening
+
+核心目标：
+
+```text
+SAF selected APK
+↓
+staged immutable Guest artifact
+↓
+validation
+↓
+SHA-256
+↓
+immutable Package Revision
+↓
+atomic Guest registry
+↓
+DexClassLoader directly loads production base.apk
+```
+
+最终：
+
+API36 不再依赖：
+
+```text
+cache/task15 readonly copy
+```
+
+而直接从 production GuestStore 的：
+
+```text
+base.apk
+```
+
+运行 EXP-001 / 最小 code-loading verification。
+
+---
+
+# 四、本轮禁止扩展范围
+
+本轮不要进入：
+
+```text
+Activity
+Stub Activity
+ATMS
+Instrumentation interception
+Binder interception
+Xposed
+Hidden API
+native hook
+JNI
+Service
+Receiver
+Provider
+```
+
+这些不是永久禁区。
+
+只是与：
+
+GuestStore durability / immutable code artifact
+
+没有关系。
+
+如果本轮遇到问题：
+
+不要为了让 GuestStore 通过而引入这些技术。
+
+---
+
+# 五、先阅读现有实现
+
+开始编码前完整检查：
+
+```text
+GuestStore
+GuestPackageRecord
+GuestPackageReader
+Guest import flow
+registry.json
+Guest revision layout
+latestRecord()
+MainActivity import path
+```
+
+以及：
+
+```text
+ADR-0003
+ADR-0005
+ADR-0011 PROPOSED
+```
+
+和 storage/design 文档。
+
+先输出现状：
+
+```text
+current import transaction
+current directory layout
+current registry schema
+current failure behavior
+current overwrite/update behavior
+```
+
+不要在不了解现有结构的情况下另造一套 GuestStore。
+
+---
+
+# 六、官方 Android 14 DCL 约束作为硬需求
+
+Android 14 / targetSdk 34+：
+
+动态加载：
+
+```text
+DEX
+JAR
+APK
+```
+
+必须是：
+
+# read-only
+
+否则：
+
+系统拒绝动态加载。
+
+生产实现必须满足：
+
+```text
+GuestStore base.apk
+=
+read-only before DexClassLoader use
+```
+
+这不能继续依赖 debug workaround。
+
+---
+
+# 七、写入时序非常重要
+
+不要简单采用：
+
+```text
+write APK
+↓
+close
+↓
+setReadOnly()
+```
+
+作为首选生产路径。
+
+优先按 Android 官方建议设计：
+
+```text
+create destination/staging file
+↓
+open FileOutputStream
+↓
+immediately mark file read-only
+↓
+verify setReadOnly succeeded
+↓
+write APK bytes through already-open FD
+↓
+flush / sync
+↓
+close
+```
+
+核心原则：
+
+# 文件在内容写入前就移除可写权限。
+
+在 Linux/Android 上：
+
+已经打开的 FD 仍可以完成当前写入；
+
+后续重新打开文件进行写操作应该失败。
+
+必须实际验证。
+
+---
+
+# 八、不要直接写最终 revision
+
+设计 staging transaction。
+
+建议概念：
+
+```text
+guest-store/
+  staging/
+    <transaction-id>/
+      base.apk
+
+  guests/
+    <guest-id>/
+      revisions/
+        <revision-id>/
+          base.apk
+```
+
+但：
+
+如果当前目录结构已有定义，
+
+不要强行换目录。
+
+关键语义必须是：
+
+```text
+STAGING
+↓
+VALIDATE
+↓
+COMMIT
+```
+
+失败：
+
+```text
+ROLLBACK
+```
+
+---
+
+# 九、Revision 必须不可变
+
+ADR-0003 已经规定：
+
+Package Revision immutable。
+
+因此：
+
+正式 commit 后：
+
+```text
+base.apk
+```
+
+禁止：
+
+* 原地覆盖
+* 原地更新
+* chmod 回可写再修改
+* append
+* truncate
+
+Guest APK 更新必须生成：
+
+```text
+new Package Revision
+```
+
+而不是修改旧 revision。
+
+---
+
+# 十、SHA-256 成为正式 metadata
+
+当前记录没有持久化 SHA-256。
+
+本轮加入。
+
+Guest package/revision metadata 至少保存：
+
+```text
+sha256
+fileSize
+packageName
+versionCode
+versionName if available
+revisionId
+importedAt
+APK relative/absolute reference as current design requires
+```
+
+不要把：
+
+SHA-256
+
+只留在实验日志。
+
+它必须进入：
+
+production Guest record/revision metadata。
+
+---
+
+# 十一、Hash 计算时机
+
+推荐：
+
+在 SAF URI → staged APK
+
+流式复制时：
+
+同时计算：
+
+```text
+SHA-256
+```
+
+避免额外完整读取一次。
+
+但如果当前架构更适合：
+
+copy
+↓
+hash
+
+也可以。
+
+关键是：
+
+最终 metadata hash
+
+必须对应：
+
+正式 committed `base.apk` 的真实 bytes。
+
+---
+
+# 十二、Commit 前再次验证
+
+正式 revision commit 前至少：
+
+```text
+APK exists
+APK readable
+APK not writable
+size > 0
+SHA-256 calculated
+PackageManager archive parse succeeds
+packageName valid
+```
+
+并再次计算/核对：
+
+staged artifact SHA
+
+与准备写入 registry 的 SHA。
+
+---
+
+# 十三、只读验证不能只看一个 API
+
+至少记录：
+
+```text
+File.canRead()
+File.canWrite()
+setReadOnly return
+```
+
+如果当前环境支持安全执行：
+
+尝试重新：
+
+```text
+FileOutputStream(base.apk, true)
+```
+
+预期：
+
+失败。
+
+不要真正修改 APK。
+
+只验证 reopen-for-write 是否被拒绝。
+
+如果 Android/Linux 行为导致 `canWrite()` 不可靠：
+
+以实际重新打开写 FD 的行为作为补充证据。
+
+---
+
+# 十四、API31 也统一使用 immutable artifact
+
+不要写：
+
+```text
+if API >= 34:
+    read-only
+else:
+    writable
+```
+
+建议所有 Android 版本 production Guest revision：
+
+一旦 commit：
+
+都保持不可变/只读。
+
+这样：
+
+API31
+API36
+
+使用同一 GuestStore invariant。
+
+---
+
+# 十五、旧 Guest Record migration
+
+这是本轮必须设计的问题。
+
+仓库/设备上已有历史 Guest：
+
+```text
+没有 sha256
+base.apk writable
+```
+
+禁止启动时直接：
+
+```text
+chmod read-only
+↓
+继续信任
+```
+
+而不考虑完整性。
+
+需要明确 legacy policy。
+
+推荐：
+
+## Legacy state A
+
+记录有可信 SHA：
+
+```text
+verify current file
+↓
+match
+↓
+可以迁移成 immutable
+```
+
+## Legacy state B
+
+记录没有 SHA：
+
+当前项目历史记录属于这种。
+
+生产语义优先：
+
+```text
+LEGACY_UNVERIFIED
+```
+
+不要把运行时计算出的当前 hash：
+
+自动当作“历史可信 hash”。
+
+因为那只能证明：
+
+当前文件是什么，
+
+不能证明：
+
+它仍是最初导入的文件。
+
+---
+
+# 十六、开发环境 legacy record
+
+为了当前开发测试能继续：
+
+允许：
+
+重新通过 SAF 导入 GuestTestApp，
+
+生成新的：
+
+immutable revision + SHA。
+
+不要为了兼容旧开发数据：
+
+污染新的 production invariant。
+
+---
+
+# 十七、Legacy 行为必须 deterministic
+
+遇到：
+
+```text
+record missing sha256
+```
+
+或者：
+
+```text
+artifact writable
+```
+
+production runtime 必须有明确状态，例如：
+
+```text
+NEEDS_REIMPORT
+LEGACY_UNVERIFIED
+INVALID_ARTIFACT
+```
+
+名称自行设计。
+
+禁止：
+
+静默继续动态加载。
+
+尤其 Android 14+。
+
+---
+
+# 十八、registry.json 原子写入
+
+当前：
+
+```text
+registry.json
+```
+
+普通覆盖写。
+
+如果：
+
+写到一半
+↓
+process death
+
+````
+
+可能损坏。
+
+本轮修复。
+
+优先使用公开：
+
+```text
+android.util.AtomicFile
+````
+
+或者项目已有可靠原子持久化机制。
+
+不要手写脆弱：
+
+```text
+delete old
+rename temp
+```
+
+除非能证明语义。
+
+---
+
+# 十九、AtomicFile 注意事项
+
+AtomicFile：
+
+只保证写入/恢复模式。
+
+它：
+
+# 不提供线程/进程锁。
+
+因此 GuestStore 必须有明确互斥策略。
+
+当前如果 GuestStore mutation：
+
+只在一个 Host process：
+
+可以使用：
+
+```text
+synchronized lock
+Mutex
+single-thread owner
+```
+
+任选与当前代码风格一致的方式。
+
+但必须记录：
+
+```text
+process-local mutual exclusion only
+```
+
+未来 multi-process runtime：
+
+不能假设这个锁跨进程。
+
+---
+
+# 二十、所有 registry 读写经过统一入口
+
+不要留下：
+
+```text
+某些地方直接 File.readText()
+某些地方 AtomicFile
+某些地方直接 writeText()
+```
+
+统一：
+
+```text
+readRegistry()
+writeRegistryAtomically()
+```
+
+或当前设计等价入口。
+
+---
+
+# 二十一、latestRecord() 不能再静默吞坏 JSON
+
+当前问题：
+
+```text
+registry corrupt
+↓
+latestRecord()
+↓
+silent fallback / null
+```
+
+这会把：
+
+存储损坏
+
+伪装成：
+
+“没有 Guest”。
+
+本轮修复。
+
+区分至少：
+
+```text
+NO_RECORD
+VALID_RECORD
+CORRUPT_REGISTRY
+MISSING_ARTIFACT
+HASH_MISMATCH
+LEGACY_UNVERIFIED
+```
+
+API 设计可以不同，
+
+但语义必须明确。
+
+---
+
+# 二十二、Corrupt registry 不允许自动覆盖
+
+如果读取发现：
+
+```text
+registry.json malformed
+```
+
+不要立即：
+
+创建一个空 registry
+
+覆盖损坏数据。
+
+先：
+
+返回明确错误。
+
+保留文件供诊断。
+
+AtomicFile 的 `.new` rollback 行为按照官方 API 使用。
+
+---
+
+# 二十三、Registry schema version
+
+如果目前没有：
+
+建议增加：
+
+```text
+schemaVersion
+```
+
+例如：
+
+```text
+schemaVersion = 2
+```
+
+具体编号根据现有格式。
+
+目的：
+
+以后：
+
+Split APK
+SigningInfo
+multiple revisions
+instance metadata
+
+可以迁移。
+
+不要设计过度复杂数据库。
+
+---
+
+# 二十四、不要现在改 Room/SQLite
+
+GuestStore 当前小规模 JSON：
+
+先修正确性。
+
+不要本轮顺手迁移：
+
+Room
+SQLite
+Proto DataStore
+
+除非仓库已有明确设计要求。
+
+目标：
+
+最小可靠修复。
+
+---
+
+# 二十五、Import transaction ordering
+
+必须明确顺序。
+
+推荐：
+
+```text
+1. SAF URI selected
+
+2. create staging transaction
+
+3. create/open staged base.apk
+
+4. mark staged APK read-only BEFORE content write
+
+5. stream bytes
+   + SHA-256
+
+6. fsync/close
+
+7. parse APK
+
+8. validate package metadata
+
+9. verify immutable artifact
+
+10. prepare Guest revision record
+
+11. atomically move/commit revision
+
+12. atomically update registry
+
+13. expose record as installed-in-AppSandbox
+```
+
+如果 current storage design 需要不同顺序：
+
+允许调整。
+
+但必须避免：
+
+```text
+registry points to artifact that never committed
+```
+
+---
+
+# 二十六、Commit failure semantics
+
+分析两个危险窗口：
+
+## Window A
+
+Artifact committed
+
+但 registry write 失败。
+
+结果可能：
+
+```text
+orphan revision
+```
+
+必须：
+
+清理
+
+或者：
+
+未来 recovery 能识别。
+
+## Window B
+
+Registry committed
+
+但 artifact 没 commit。
+
+这是更严重状态。
+
+设计必须避免。
+
+---
+
+# 二十七、优先顺序
+
+更安全的一般原则：
+
+```text
+artifact fully durable
+↓
+registry references artifact
+```
+
+这样 registry 不会指向：
+
+半写/不存在 APK。
+
+如果 registry commit 失败：
+
+最多留下 orphan artifact。
+
+这比：
+
+dangling record
+
+更容易恢复。
+
+---
+
+# 二十八、Orphan cleanup
+
+本轮可以实现：
+
+非常保守的：
+
+staging cleanup
+
+和：
+
+明确 orphan detection。
+
+不要做激进：
+
+“扫描到 registry 不认识的目录就删除”。
+
+因为以后可能出现：
+
+并发/恢复状态。
+
+至少把策略写清楚。
+
+---
+
+# 二十九、cache/task15 readonly copy
+
+当前 task-15 临时 workaround：
+
+```text
+cache/task15/
+```
+
+不断累积。
+
+本轮完成 production readonly Guest APK 后：
+
+新的 production runtime verification
+
+不能再依赖这个副本。
+
+同时：
+
+给 debug experiment cache 增加清理。
+
+例如：
+
+实验结束：
+
+```text
+try/finally cleanup
+```
+
+或启动前清理对应 task cache。
+
+不要删除：
+
+用户正式 Guest revision。
+
+---
+
+# 三十、Production verification
+
+完成 GuestStore 修复后：
+
+重新导入：
+
+GuestTestApp。
+
+不要修改它。
+
+记录新的：
+
+```text
+guestId
+revisionId
+base.apk
+sha256
+size
+read-only state
+```
+
+---
+
+# 三十一、API31 production-path verification
+
+Xiaomi Mi 10 / API31：
+
+直接使用：
+
+# Production GuestStore base.apk
+
+执行最小：
+
+```text
+DexClassLoader
+↓
+GuestProbe
+↓
+marker
+```
+
+不得创建 task-specific readonly copy。
+
+结果必须：
+
+PASS。
+
+---
+
+# 三十二、API36 production-path verification
+
+官方 Emulator / API36：
+
+同样直接使用：
+
+```text
+production GuestStore base.apk
+```
+
+执行：
+
+```text
+DexClassLoader
+↓
+GuestProbe
+```
+
+不得：
+
+copy to cache
+chmod temp copy
+use task15 helper artifact
+
+````
+
+结果必须：
+
+PASS。
+
+这才真正关闭：
+
+V-1。
+
+---
+
+# 三十三、Negative control：writable copy
+
+API36：
+
+保留一个 debug-only controlled test。
+
+将同一 Guest APK：
+
+复制到实验 cache 的：
+
+```text
+writable.apk
+````
+
+保持可写。
+
+然后尝试 DexClassLoader。
+
+记录：
+
+平台拒绝。
+
+不要改变 production artifact。
+
+这证明：
+
+测试设备上的：
+
+Android 14+ enforcement
+
+仍然真实存在。
+
+---
+
+# 三十四、Production artifact tamper test
+
+正式 Guest APK 已只读。
+
+尝试：
+
+普通 FileOutputStream reopen for overwrite/append。
+
+应失败。
+
+Host 不 crash。
+
+记录异常。
+
+不要：
+
+chmod writable
+
+后再改。
+
+---
+
+# 三十五、Hash validation before code load
+
+设计并实现一个 production guard。
+
+在创建：
+
+```text
+DexClassLoader
+```
+
+之前：
+
+检查：
+
+```text
+recorded SHA256
+vs
+actual SHA256
+```
+
+是否每次启动都重新完整 hash：
+
+可能有性能代价。
+
+需要做一个明确决定。
+
+至少第一版 baseline：
+
+优先 correctness。
+
+可以每次 Guest runtime cold start：
+
+verify hash。
+
+记录：
+
+耗时。
+
+以后再优化缓存策略。
+
+---
+
+# 三十六、Hash mismatch
+
+创建 debug-only tamper scenario：
+
+不要修改正式 immutable revision。
+
+复制成实验 artifact，
+
+构造：
+
+expected hash A
+actual hash B
+
+验证 Runtime guard：
+
+拒绝加载。
+
+状态明确：
+
+```text
+HASH_MISMATCH
+```
+
+不得：
+
+继续 DexClassLoader。
+
+---
+
+# 三十七、APK signing metadata
+
+本轮不要做完整 SigningInfo virtualization。
+
+但是：
+
+研究当前 PackageManager archive parse
+
+能否获得：
+
+APK signing certificate digest。
+
+只记录：
+
+是否容易加入未来 revision identity。
+
+不要把 scope 扩到签名兼容层。
+
+SHA-256 本轮是：
+
+# artifact integrity identifier
+
+不是：
+
+APK publisher identity。
+
+两者不要混淆。
+
+---
+
+# 三十八、测试基础必须建立
+
+当前项目：
+
+# 没有任何测试。
+
+本轮至少建立最小测试框架。
+
+不要试图一口气做到 100% coverage。
+
+目标：
+
+GuestStore persistence / integrity 有自动回归测试。
+
+---
+
+# 三十九、优先增加纯 JVM unit tests
+
+将可以独立测试的逻辑提取成小型 pure logic：
+
+例如：
+
+```text
+SHA-256 formatting
+registry serialization
+registry parsing
+schema version
+revision state validation
+```
+
+放入：
+
+```text
+app/src/test/
+```
+
+如果项目已有 test setup：
+
+复用。
+
+不要为了测试加入大型 framework。
+
+---
+
+# 四十、Android-specific tests
+
+对：
+
+```text
+AtomicFile
+File permissions
+PackageManager archive parsing
+SAF/internal files
+```
+
+如果 JVM test 不适合：
+
+可以使用：
+
+```text
+androidTest
+```
+
+或：
+
+debug instrumentation verification。
+
+根据现有环境选择。
+
+不要为了“测试数字漂亮”
+
+mock Android filesystem 到失真。
+
+---
+
+# 四十一、至少覆盖以下自动测试
+
+## T1 Registry round-trip
+
+record：
+
+write
+↓
+read
+↓
+equal
+
+---
+
+## T2 SHA round-trip
+
+known file
+
+expected SHA
+
+match。
+
+---
+
+## T3 malformed registry
+
+返回：
+
+CORRUPT
+
+而不是：
+
+empty/no record。
+
+---
+
+## T4 incomplete atomic write
+
+模拟：
+
+write failure
+
+旧 registry 保持可读。
+
+如果很难 JVM 模拟 AtomicFile：
+
+做 instrumentation。
+
+---
+
+## T5 record references missing APK
+
+返回：
+
+MISSING_ARTIFACT。
+
+---
+
+## T6 hash mismatch
+
+返回：
+
+HASH_MISMATCH。
+
+---
+
+## T7 legacy missing hash
+
+返回：
+
+LEGACY_UNVERIFIED / NEEDS_REIMPORT。
+
+---
+
+## T8 immutable revision update
+
+禁止：
+
+覆盖同一个 revision base.apk。
+
+---
+
+# 四十二、不要让测试依赖 GuestTestApp 构建路径硬编码
+
+Windows：
+
+```text
+D:\...
+```
+
+不能写进 production/test logic。
+
+测试 APK fixture：
+
+如果需要，
+
+采用：
+
+Gradle task dependency
+
+或者：
+
+test resource
+
+或明确 debug integration script。
+
+设计干净。
+
+---
+
+# 四十三、Build verification
+
+至少：
+
+```text
+:app:testDebugUnitTest
+:app:assembleDebug
+:app:assembleRelease
+:test-guests:GuestTestApp:assembleDebug
+```
+
+如果增加 androidTest：
+
+记录实际执行情况。
+
+---
+
+# 四十四、API31 / API36 device verification
+
+继续使用：
+
+已有真实 API31 设备
+
+以及：
+
+task-15 API36 emulator。
+
+不要重新搭另一套设备脚本。
+
+可以复用：
+
+```text
+scripts/task15-*.ps1
+```
+
+但新任务脚本请：
+
+```text
+scripts/task16-*.ps1
+```
+
+避免修改 task15 历史脚本语义。
+
+---
+
+# 四十五、debug ExperimentActivity 安全问题
+
+当前：
+
+```text
+ExperimentActivity
+exported="true"
+```
+
+且能：
+
+导入并执行 APK。
+
+虽然只存在 debug build，
+
+仍应修。
+
+---
+
+# 四十六、ExperimentActivity 处理
+
+优先：
+
+```text
+android:exported="false"
+```
+
+如果没有外部启动需求。
+
+如果 task scripts 通过：
+
+adb shell am start
+
+依赖 exported=true，
+
+则：
+
+不要简单破坏自动化。
+
+可考虑：
+
+debug-only signature permission
+
+或者其他明确测试保护方式。
+
+但：
+
+不要为了 adb 方便让任意第三方 App：
+
+启动 APK execution experiment。
+
+---
+
+# 四十七、选择最小安全方案
+
+如果：
+
+adb shell
+
+在 exported=false 下不能启动，
+
+而自动测试必须外部触发，
+
+优先评估：
+
+debug-only permission。
+
+例如：
+
+signature-level
+
+或当前 debug scenario 可用方案。
+
+记录：
+
+为什么。
+
+不要影响 release。
+
+---
+
+# 四十八、Release invariant
+
+必须确认 Release：
+
+不包含：
+
+```text
+ExperimentActivity
+experimental runner
+task15/task16 test controls
+debug-only Guest execution entry
+```
+
+或者如果 Manifest merge 后组件存在：
+
+解释。
+
+目标：
+
+production release 不暴露实验入口。
+
+---
+
+# 四十九、ADR-0011
+
+当前：
+
+```text
+ADR-0011 Guest code read-only publication
+= PROPOSED
+```
+
+本轮验证成功后：
+
+更新状态：
+
+```text
+ACCEPTED
+```
+
+但 ADR 内容必须与最终实现一致。
+
+尤其记录：
+
+```text
+read-only before write
+immutable revision
+SHA-256
+Android 14+ requirement
+```
+
+---
+
+# 五十、新 ADR：GuestStore durability
+
+建议单独创建：
+
+```text
+ADR-0012-GUEST-STORE-ATOMIC-REGISTRY-AND-INTEGRITY.md
+```
+
+编号按仓库实际。
+
+内容：
+
+```text
+AtomicFile registry
+process-local mutation lock
+SHA-256 per revision
+explicit corrupt states
+artifact-before-registry commit
+legacy unverified policy
+```
+
+不要把所有内容塞进 ADR-0011。
+
+---
+
+# 五十一、不要宣称 SHA 是安全沙箱
+
+SHA-256 能证明：
+
+```text
+current bytes
+==
+previously recorded bytes
+```
+
+如果记录本身可信。
+
+它不提供：
+
+```text
+publisher authenticity
+malware safety
+Guest isolation
+```
+
+报告明确区分。
+
+---
+
+# 五十二、Google Play 本轮不做政策结论
+
+本轮只修：
+
+本地用户选择 APK
+
+的技术完整性。
+
+不要扩展成：
+
+remote APK download。
+
+不要实现：
+
+network code update。
+
+Google 官方也警告动态代码加载具有安全和 Play 政策风险，尤其来自远程来源；但本轮不要把这个问题和 GuestStore correctness 混在一起。
+
+---
+
+# 五十三、Activity 阶段继续暂停
+
+即使 task-16 全部成功：
+
+不要实现：
+
+Activity。
+
+下一轮负责人会根据：
+
+task-12 外部调研
+task-15
+task-16
+
+决定 Activity carrier / interception 技术路线。
+
+---
+
+# 五十四、Result 文档
+
+创建：
+
+```text
+docs/experiments/TASK-16-GUESTSTORE-HARDENING-RESULT.md
+```
+
+包含：
+
+```text
+Question
+Prior State
+Android 14 Requirement
+New Storage Transaction
+Immutable Artifact Design
+SHA-256 Model
+Registry Atomicity
+Legacy Migration
+Failure Recovery
+Tests
+API31 Verification
+API36 Verification
+Security Boundary
+Known Limitations
+Conclusion
+```
+
+---
+
+# 五十五、更新 Roadmap
+
+如果成功：
+
+```text
+Production Guest APK immutable/read-only = CONFIRMED
+SHA persisted = CONFIRMED
+Atomic registry = CONFIRMED
+API36 production path DCL = CONFIRMED
+```
+
+Activity：
+
+仍：
+
+```text
+DESIGN NEXT
+NOT IMPLEMENTED
+```
+
+---
+
+# 五十六、提交要求
+
+当前工作区开始时：
+
+clean。
+
+本轮完成并验证后：
+
+可以创建一个独立 focused commit。
+
+建议：
+
+```text
+fix(gueststore): publish immutable verified guest revisions
+```
+
+但在 commit 前：
+
+先输出 diff summary
+
+并确认：
+
+没有实验垃圾/绝对路径/cache 文件被加入 Git。
+
+如果当前协作规则允许自动 commit：
+
+可以 commit。
+
+不要 push。
+
+---
+
+# 五十七、最终回传格式
+
+严格返回：
+
+## A. Task-16 Status
+
+```text
+CONFIRMED
+PARTIALLY CONFIRMED
+REJECTED
+```
+
+---
+
+## B. Previous Problem
+
+说明旧 GuestStore：
+
+```text
+writable base.apk
+registry atomicity
+missing SHA
+```
+
+实际情况。
+
+---
+
+## C. Final Import Transaction
+
+按实际代码列：
+
+```text
+URI
+→ ...
+→ committed revision
+→ registry
+```
+
+---
+
+## D. Production APK
+
+```text
+guestId =
+revisionId =
+path =
+size =
+SHA256 =
+canRead =
+canWrite =
+reopenForWrite =
+```
+
+---
+
+## E. Android 14 DCL Requirement
+
+说明最终实现如何满足：
+
+```text
+read-only before content write
+```
+
+如果没有严格做到：
+
+必须说明。
+
+不能只写：
+
+“最终是只读”。
+
+---
+
+## F. Revision Immutability
+
+回答：
+
+```text
+Can overwrite existing revision =
+Can truncate base.apk =
+Can append base.apk =
+Update creates new revision =
+```
+
+---
+
+## G. Registry
+
+```text
+storage =
+AtomicFile =
+schema version =
+locking =
+corrupt behavior =
+```
+
+---
+
+## H. Registry Failure States
+
+至少返回：
+
+```text
+NO_RECORD
+CORRUPT
+MISSING_ARTIFACT
+HASH_MISMATCH
+LEGACY_UNVERIFIED
+VALID
+```
+
+实际名称可不同。
+
+---
+
+## I. Legacy Migration
+
+说明：
+
+旧无 SHA / writable Guest
+
+现在如何处理。
+
+---
+
+## J. SHA Guard
+
+```text
+recorded SHA =
+actual SHA =
+verified before load =
+hash mismatch behavior =
+cold verification time =
+```
+
+---
+
+## K. API31 Verification
+
+必须是：
+
+```text
+production GuestStore base.apk
+→ DexClassLoader
+→ GuestProbe
+```
+
+结果。
+
+不能用副本。
+
+---
+
+## L. API36 Verification
+
+同上。
+
+明确：
+
+```text
+task15 readonly cache copy used = false
+```
+
+---
+
+## M. Writable Negative Control API36
+
+```text
+writable copy =
+load result =
+exception =
+```
+
+---
+
+## N. Registry Crash/Atomic Tests
+
+返回实际测试：
+
+```text
+round trip =
+malformed =
+partial write =
+missing artifact =
+hash mismatch =
+legacy =
+immutable overwrite =
+```
+
+---
+
+## O. Automated Tests
+
+```text
+unit tests count =
+instrumentation tests count =
+passed =
+failed =
+```
+
+以及：
+
+Gradle commands。
+
+---
+
+## P. Experiment Cache Cleanup
+
+```text
+task15 old behavior =
+task16 behavior =
+leftover files =
+```
+
+---
+
+## Q. ExperimentActivity
+
+```text
+exported =
+protection =
+adb automation still works =
+release presence =
+```
+
+---
+
+## R. API Classification
+
+核心实现是否全部：
+
+```text
+PUBLIC
+```
+
+如有其他：
+
+列出。
+
+---
+
+## S. ADR
+
+```text
+ADR-0011 status =
+ADR-0012 =
+```
+
+摘要。
+
+---
+
+## T. Production Files Modified
+
+列：
+
+```text
+GuestStore
+records/models
+import flow
+registry
+```
+
+---
+
+## U. Test/Debug Files Modified
+
+单独列。
+
+---
+
+## V. Docs Modified
+
+单独列。
+
+---
+
+## W. Build
+
+```text
+testDebugUnitTest =
+assembleDebug =
+assembleRelease =
+GuestTestApp assembleDebug =
+```
+
+---
+
+## X. Git
+
+```text
+git status --short
+git diff --stat
+git log -3 --oneline
+```
+
+---
+
+## Y. Commit
+
+如果提交：
+
+```text
+commit hash =
+message =
+pushed = false
+```
+
+---
+
+## Z. Next Step
+
+只能回答：
+
+```text
+Ready to design Activity carrier architecture: YES / NO
+```
+
+最多 5 条理由。
+
+不要设计或实现 Activity。

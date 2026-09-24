@@ -40,7 +40,16 @@ class ExperimentActivity : Activity() {
             } else requireNotNull(store.latestRecord())
             val apk = File(record.apkPath)
             line("imported=${record.apkPath} sha256=${sha(apk)}")
-            if (mode == "v1") {
+            if (mode == "writable-negative") {
+                val writable = File(cacheDir, "task16-writable-negative.apk").apply { parentFile!!.mkdirs(); apk.copyTo(this, overwrite = true) }
+                line("writable.path=$writable canWrite=${writable.canWrite()}")
+                line("writable.load=${runCatching {
+                    val loader = DexClassLoader(writable.path, codeCacheDir.path, null, classLoader)
+                    loader.loadClass("com.example.appsandbox.testguest.runtime.GuestProbe")
+                        .getMethod("ping", String::class.java).invoke(loader.loadClass("com.example.appsandbox.testguest.runtime.GuestProbe").getDeclaredConstructor().newInstance(), "TASK16")
+                }.getOrElse { "${it.javaClass.name}:${it.message}" }}")
+                writable.delete()
+            } else if (mode == "v1") {
                 fun load(label: String, file: File) {
                     var step = "constructClassLoader"
                     try {
@@ -55,6 +64,10 @@ class ExperimentActivity : Activity() {
                 load("writable", apk)
                 val copy = readonly(apk)
                 load("readonly", copy)
+            } else if (mode == "production-exp001") {
+                line("production.canRead=${apk.canRead()} canWrite=${apk.canWrite()} size=${apk.length()}")
+                line("production.reopenForWrite=${runCatching { java.io.FileOutputStream(apk, true).use { } ; "UNEXPECTED_SUCCESS" }.getOrElse { "${it.javaClass.name}:${it.message}" }}")
+                line(Exp001Runner.run(this, record))
             } else {
                 val copy = readonly(apk)
                 line("experimentCopy=${copy.path} sha256=${sha(copy)} readOnly=${!copy.canWrite()}")
@@ -74,7 +87,7 @@ class ExperimentActivity : Activity() {
             }
         } catch (e: Throwable) { line("FAILED=${e.javaClass.name}:${e.message}"); Log.e("Task15", "Failure", e) }
         line("END hostSurvived=true")
-        File(filesDir, "task15-$mode.txt").writeText(out.toString())
+        File(filesDir, "${if (mode == "production-exp001") "task16" else "task15"}-$mode.txt").writeText(out.toString())
         setContentView(android.widget.TextView(this).apply { text = out.toString() })
     }
     private fun readonly(apk: File): File {
