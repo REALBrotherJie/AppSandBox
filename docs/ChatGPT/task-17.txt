@@ -1,0 +1,2599 @@
+继续负责当前 AppSandbox 项目。
+
+当前仓库基础已经达到：
+
+```text
+EXP-001 Code Loading = CONFIRMED
+EXP-002 Resources Option B = CONFIRMED
+EXP-003A Controlled Context = CONFIRMED
+Application creation/onCreate minimal baseline = CONFIRMED
+C1 Context = CONFIRMED
+Multi-instance fundamentals = OBSERVED
+Production GuestStore immutable artifact = CONFIRMED
+API31 / API36 production DCL path = CONFIRMED
+```
+
+GuestStore 已解决：
+
+* immutable/read-only APK
+* SHA-256
+* revision metadata
+* AtomicFile registry
+* artifact verification
+* Android 14+ writable DCL restriction
+* API31/API36 production loading
+
+现在开始下一阶段：
+
+# Activity Runtime / Activity Carrier Architecture
+
+本轮：
+
+# 只设计，不实现。
+
+不要修改 production Activity runtime。
+
+不要创建 Stub Activity pool。
+
+不要 Hook。
+
+不要改 Instrumentation。
+
+不要拦截 Binder。
+
+不要调用 hidden Activity APIs。
+
+但是：
+
+# 本轮允许并且必须正常评估这些方案。
+
+以下技术不再作为禁区：
+
+* Manifest Stub Activity
+* Instrumentation interception
+* ActivityThread interception
+* ClientTransaction interception
+* Handler / transaction interception
+* ATMS / Binder proxy
+* ServiceManager replacement
+* hidden API
+* Activity.attach
+* LoadedApk / ContextImpl integration
+* method Hook
+* Xposed-style interception
+* native Binder interception
+* seccomp-based mediation
+
+本轮只是研究：
+
+哪种路线最值得实验。
+
+---
+
+# 一、核心问题
+
+需要回答：
+
+> Android 系统并没有安装 Guest APK，也不知道 Guest Activity，那么 AppSandbox 应该如何让用户看到一个具有真实 Android Activity/task/window/lifecycle 行为的 Guest 页面？
+
+必须区分：
+
+```text
+显示 Guest View
+```
+
+和：
+
+```text
+运行 Guest Activity
+```
+
+二者完全不是同一个目标。
+
+---
+
+# 二、首先定义 Activity Runtime Levels
+
+创建：
+
+```text
+docs/experiments/ACTIVITY-RUNTIME-COMPATIBILITY-LEVELS.md
+```
+
+至少定义：
+
+## L0 — Guest View
+
+Host Activity：
+
+```text
+Host Activity
+↓
+Guest layout/view
+```
+
+不创建 Guest Activity。
+
+---
+
+## L1 — Guest Activity-like Delegate
+
+Host Activity 是真正系统 Activity。
+
+Guest class 获得：
+
+* Guest Context
+* lifecycle callbacks
+* Guest resources
+
+但 Guest 对象不是真正 Android Activity。
+
+---
+
+## L2 — Guest Activity Java Object
+
+真实：
+
+```text
+class GuestActivity extends Activity
+```
+
+被 Guest ClassLoader 创建。
+
+但未必拥有完整：
+
+* system token
+* Window
+* ActivityRecord
+* Task identity
+
+---
+
+## L3 — Guest Activity attached to Host carrier
+
+Guest Activity 获得：
+
+* lifecycle
+* Window/token
+* resources
+* controlled context
+
+但 system_server 仍认为：
+
+Host Stub Activity。
+
+---
+
+## L4 — High compatibility virtual Activity
+
+Guest 基本观察到正常：
+
+* launchMode
+* Intent
+* result
+* task
+* lifecycle
+* configuration
+* saved state
+* window
+
+而 system_server 仍以 Host component 承载。
+
+---
+
+## L5 — System-real Activity
+
+真正被 PMS/ATMS 识别为 Guest package/component。
+
+普通未安装 Guest 路线通常无法达到。
+
+明确每一级。
+
+---
+
+# 三、研究 Android 12 Activity 正常启动链
+
+创建：
+
+```text
+docs/research/activity/01_ANDROID12_ACTIVITY_LAUNCH_CHAIN.md
+```
+
+基于 API31 AOSP。
+
+至少梳理：
+
+```text
+Context.startActivity()
+↓
+Instrumentation.execStartActivity()
+↓
+ActivityTaskManager
+↓
+ATMS
+↓
+ActivityStarter
+↓
+ActivityRecord / Task
+↓
+ClientTransaction
+↓
+LaunchActivityItem
+↓
+ActivityThread
+↓
+performLaunchActivity()
+↓
+LoadedApk
+↓
+ContextImpl.createActivityContext()
+↓
+Instrumentation.newActivity()
+↓
+Activity.attach()
+↓
+Window
+↓
+onCreate()
+```
+
+不要只写方法名。
+
+每一步说明：
+
+* 发生在 client 还是 system_server
+* 输入是什么
+* system_server 知道什么 package/component
+* token 从哪里来
+* ActivityInfo 从哪里来
+
+---
+
+# 四、同时研究 Android 16
+
+创建：
+
+```text
+docs/research/activity/02_ANDROID16_ACTIVITY_LAUNCH_CHAIN.md
+```
+
+对比：
+
+API31
+
+和：
+
+API36。
+
+重点看：
+
+* ActivityClientRecord
+* ClientTransaction
+* LaunchActivityItem
+* ContextImpl.createActivityContext
+* Activity.attach
+* ActivityTaskManager
+* task/window token
+
+哪些发生变化。
+
+最终输出：
+
+```text
+Stable concepts
+Version-sensitive internals
+```
+
+---
+
+# 五、必须明确 system_server 的真实视角
+
+当前 Guest：
+
+```text
+com.example.appsandbox.testguest
+```
+
+未安装。
+
+所以 PMS：
+
+不知道 Guest package。
+
+ATMS：
+
+也没有 Guest manifest ActivityInfo。
+
+因此直接：
+
+```text
+Intent(
+  ComponentName(
+    guestPackage,
+    guestActivity
+  )
+)
+```
+
+交给 system_server，
+
+预期无法像正常安装应用一样启动。
+
+这一点必须基于实际 Android 机制说明。
+
+---
+
+# 六、研究 ATMS calling package 验证
+
+调查：
+
+```text
+startActivity
+callingPackage
+callingFeatureId
+Binder calling UID
+```
+
+Android 12～16。
+
+重点：
+
+系统会在哪些地方检查：
+
+```text
+package ↔ UID
+```
+
+匹配。
+
+这决定：
+
+我们不能简单伪造调用包名。
+
+---
+
+# 七、研究真正 Activity 所需系统对象
+
+建立：
+
+```text
+docs/research/activity/03_ACTIVITY_REQUIRED_STATE.md
+```
+
+至少包括：
+
+```text
+ActivityRecord
+Task
+activity token
+window token
+ActivityInfo
+ApplicationInfo
+LoadedApk
+ContextImpl
+Window
+WindowManager
+Application
+Instrumentation
+Intent
+Configuration
+saved state
+result routing
+```
+
+每个标：
+
+```text
+SYSTEM_SERVER OWNED
+CLIENT OWNED
+HYBRID
+```
+
+---
+
+# 八、特别研究 Activity.attach
+
+这是关键。
+
+研究 API31 / API36：
+
+```text
+Activity.attach(...)
+```
+
+需要什么参数。
+
+至少：
+
+* Context
+* ActivityThread
+* Instrumentation
+* token
+* ident
+* Application
+* Intent
+* ActivityInfo
+* title
+* parent
+* configuration
+* Window
+* activityConfigCallback
+* assist token
+
+实际按版本记录。
+
+标：
+
+PUBLIC / HIDDEN / INTERNAL。
+
+---
+
+# 九、回答 Public API 上限
+
+明确回答：
+
+> 只使用 Public SDK API，能否把任意 `GuestActivity extends Activity` 构造成一个真正拥有 Android Activity token/window/task 语义的 Activity？
+
+只能：
+
+```text
+YES
+NO
+PARTIALLY
+```
+
+必须给证据。
+
+如果结论是 PARTIALLY：
+
+说明最多达到 L0/L1/L2 哪一级。
+
+---
+
+# 十、Route A — Host Activity + Guest View
+
+研究最简单路线：
+
+```text
+ATMS
+↓
+HostActivity
+↓
+Controlled Guest Context
+↓
+Guest layout/view
+```
+
+系统：
+
+看到 Host Activity。
+
+Guest：
+
+只是内容。
+
+分析：
+
+优点：
+
+* Public API
+* 稳定
+* Play 友好程度相对高
+
+缺点：
+
+* Guest Activity class 不运行
+* launchMode 不真实
+* Activity API 不真实
+* onActivityResult/task/window semantics 不真实
+
+给：
+
+Compatibility ceiling。
+
+---
+
+# 十一、Route B — Host Carrier + Guest Activity Delegate
+
+模型：
+
+```text
+Host Carrier Activity
+↓
+load Guest Activity-like class
+↓
+manual lifecycle delegation
+↓
+Guest View
+```
+
+Guest class可能：
+
+不是 Activity
+
+或虽然继承 Activity但不使用 framework attach。
+
+研究：
+
+这种方案适合：
+
+自有插件
+
+还是：
+
+任意第三方 APK。
+
+明确限制。
+
+---
+
+# 十二、Route C — Manifest Stub Activity + Guest Activity substitution
+
+这是重点候选。
+
+模型：
+
+```text
+Guest Intent
+↓
+Virtual Activity Resolver
+↓
+Host Stub Activity Intent
+↓
+ATMS
+↓
+system creates Host ActivityRecord / token / task
+↓
+client receives launch
+↓
+restore Guest Activity information
+↓
+instantiate Guest Activity
+```
+
+研究：
+
+这是现代 application virtualization 常见的一类高层思路。
+
+不要复制第三方源码。
+
+只研究 architecture pattern。
+
+---
+
+# 十三、Route C 必须回答
+
+System_server：
+
+认为 component 是什么？
+
+Client：
+
+最终 Activity object 是什么？
+
+ActivityInfo：
+
+Host 还是 Guest？
+
+token：
+
+属于谁？
+
+Window：
+
+使用哪个 token？
+
+task：
+
+记录什么 component？
+
+recents：
+
+显示什么？
+
+saved state：
+
+如何映射？
+
+---
+
+# 十四、Stub Activity 池
+
+研究为什么虚拟化框架可能需要：
+
+```text
+StubStandardActivity
+StubSingleTopActivity
+StubSingleTaskActivity
+StubSingleInstanceActivity
+...
+```
+
+以及：
+
+不同：
+
+launchMode
+theme
+orientation
+translucent
+process
+
+是否需要不同 stub。
+
+不要假设一个 StubActivity 能承载所有 Guest。
+
+---
+
+# 十五、研究 launchMode 映射
+
+Android 官方存在：
+
+```text
+standard
+singleTop
+singleTask
+singleInstance
+singleInstancePerTask
+```
+
+现代版本具体行为基于官方文档。
+
+设计：
+
+Guest launchMode
+
+如何映射到：
+
+Host Stub launchMode。
+
+重点：
+
+```text
+singleTop
+onNewIntent
+task affinity
+FLAG_ACTIVITY_NEW_TASK
+CLEAR_TOP
+NEW_DOCUMENT
+MULTIPLE_TASK
+```
+
+---
+
+# 十六、Route D — Instrumentation interception
+
+研究：
+
+```text
+Instrumentation.execStartActivity
+Instrumentation.newActivity
+callActivityOnCreate
+```
+
+哪些是：
+
+public
+
+哪些是：
+
+hidden/internal。
+
+分析：
+
+如果替换 Host `Instrumentation`：
+
+能解决：
+
+* outgoing Intent substitution
+* Guest class instantiate
+* lifecycle callbacks
+
+哪些。
+
+不能解决：
+
+* ATMS ActivityRecord identity
+* ActivityInfo
+* token
+* task
+
+哪些。
+
+---
+
+# 十七、Route E — ActivityThread / ClientTransaction interception
+
+现代 Android：
+
+Activity launch 回到客户端后主要使用：
+
+```text
+ClientTransaction
+LaunchActivityItem
+ActivityThread
+```
+
+研究：
+
+在哪个点：
+
+Host Stub launch
+
+可以替换成：
+
+Guest ActivityInfo / Guest component。
+
+至少比较：
+
+```text
+Handler message interception
+ClientTransaction interception
+ActivityThread field/state manipulation
+```
+
+按：
+
+API31
+API36
+
+分别评估。
+
+---
+
+# 十八、不要只研究旧 H.LAUNCH_ACTIVITY
+
+很多旧 VirtualApp / 插件文章基于：
+
+```text
+ActivityThread.H.LAUNCH_ACTIVITY
+```
+
+现代 Android 已经转向：
+
+ClientTransaction。
+
+必须区分：
+
+旧方案
+
+和：
+
+Android 12–16。
+
+不要把 Android 7 文章直接用于现代架构。
+
+---
+
+# 十九、Route F — ATMS / Binder interception
+
+研究：
+
+在：
+
+```text
+IActivityTaskManager
+```
+
+或相关 client-side service interface
+
+层面做代理。
+
+目标可能包括：
+
+```text
+Guest Intent
+→ Host Stub Intent
+```
+
+以及：
+
+参数 package translation。
+
+分析：
+
+能解决什么。
+
+注意：
+
+system_server 最终仍然只认识：
+
+Host manifest components。
+
+---
+
+# 二十、Route G — Combined Stub + Binder + Client Restore
+
+重点研究组合架构：
+
+```text
+Guest startActivity
+↓
+virtual resolver
+↓
+Binder/Instrumentation intercept
+↓
+Host Stub sent to ATMS
+↓
+system creates real token/task/window
+↓
+ClientTransaction returned
+↓
+client restore/intercept
+↓
+Guest Activity instantiated
+↓
+Guest Context/Resources attached
+```
+
+这是本轮非常值得评估的一条。
+
+状态只能：
+
+```text
+PROPOSED
+```
+
+不要实现。
+
+---
+
+# 二十一、Route H — Framework-internal Guest LoadedApk/ContextImpl
+
+研究：
+
+是否需要：
+
+```text
+ActivityThread
+LoadedApk
+ContextImpl.createActivityContext
+Activity.attach
+```
+
+建立更真实 Guest Activity。
+
+分析：
+
+hidden API 数量
+
+以及：
+
+OEM/version维护成本。
+
+---
+
+# 二十二、Route I — Xposed-style method interception
+
+项目已经允许正常评估。
+
+研究：
+
+如果采用：
+
+method replacement / hook
+
+哪些点最适合：
+
+```text
+Instrumentation.execStartActivity
+ActivityThread.performLaunchActivity
+ClientTransactionHandler
+ContextImpl
+PackageManager
+```
+
+但：
+
+不要认为 Xposed 一定需要 root。
+
+区分：
+
+系统 Xposed/LSPosed
+
+与：
+
+进程内 method hooking framework。
+
+---
+
+# 二十三、Route J — Native/Binder interception
+
+研究：
+
+native Binder
+
+或：
+
+seccomp
+
+是否对 Activity virtualization 有帮助。
+
+重点：
+
+它可能更适合：
+
+系统服务参数翻译
+
+而不是：
+
+Activity Java object attach。
+
+判断其实际价值。
+
+---
+
+# 二十四、外部资料搜索是本轮必须项
+
+不要闭门设计。
+
+至少搜索：
+
+```text
+Android 12 Activity virtualization
+Android 14 app virtualization Activity
+Android 15 virtual Activity framework
+Android 16 ActivityThread LaunchActivityItem
+plugin framework Activity stub
+virtual Activity ClientTransaction
+ActivityThread instrumentation plugin
+```
+
+中文：
+
+```text
+Android Activity 虚拟化
+Activity 占坑
+Stub Activity
+插件化 Activity
+VirtualApp Activity 启动
+Android 14 Activity 虚拟化
+ClientTransaction 插件化
+```
+
+---
+
+# 二十五、允许研究现有框架
+
+可以研究公开架构：
+
+* VirtualApp
+* RePlugin
+* Shadow
+* VirtualAPK
+* DroidPlugin
+* BlackBox 系
+* 现代项目
+
+但：
+
+# 不复制实现代码。
+
+只记录：
+
+技术模式
+
+和：
+
+Android 版本问题。
+
+---
+
+# 二十六、必须记录项目年代
+
+每个参考项目：
+
+```text
+project
+article/release date
+Android version targeted
+modern relevance
+```
+
+2017 年方案不能直接标：
+
+CURRENT。
+
+---
+
+# 二十七、建立 Activity Route Comparison
+
+创建：
+
+```text
+docs/experiments/ACTIVITY-CARRIER-ROUTE-COMPARISON.md
+```
+
+至少：
+
+| Route | Public only | Hidden | Hook | Binder | Native | Real token | Guest Activity class | Compatibility |
+| ----- | ----------- | ------ | ---- | ------ | ------ | ---------- | -------------------- | ------------- |
+
+Route：
+
+A～J。
+
+---
+
+# 二十八、增加维护成本
+
+再比较：
+
+```text
+API version sensitivity
+OEM sensitivity
+implementation complexity
+multi-instance support
+task fidelity
+window fidelity
+Play suitability
+```
+
+不要给虚假数值分数。
+
+使用：
+
+```text
+LOW
+MEDIUM
+HIGH
+UNKNOWN
+```
+
+---
+
+# 二十九、研究 Activity Context 问题
+
+正常 Activity Context：
+
+不是普通 Application Context。
+
+AOSP 会：
+
+```text
+ContextImpl.createActivityContext(...)
+```
+
+并带：
+
+* activity token
+* display
+* override configuration
+* ActivityInfo
+* LoadedApk
+
+所以：
+
+EXP-003 Controlled Context
+
+不能直接被认为：
+
+Activity Context 已解决。
+
+明确记录。
+
+---
+
+# 三十、Guest Activity Resources
+
+核心问题：
+
+如果 system 创建：
+
+Host Stub Activity
+
+它的 base Context 默认：
+
+Host Resources。
+
+需要设计：
+
+Guest Activity 最终怎样得到：
+
+Guest Resources。
+
+比较：
+
+```text
+replace base context
+Activity.attach with Guest Context
+override Activity resource getters
+Guest-specific ContextImpl
+method interception
+```
+
+只设计。
+
+---
+
+# 三十一、Guest Activity Application
+
+Guest Activity：
+
+```text
+getApplication()
+```
+
+应该返回：
+
+Guest Application
+
+还是：
+
+Host Application？
+
+目标显然：
+
+Guest Application。
+
+研究：
+
+正常 `Activity.attach()` 如何设置 `mApplication`。
+
+以及：
+
+Stub substitution 路线如何保持。
+
+---
+
+# 三十二、ActivityInfo
+
+Guest Activity 可能访问：
+
+```text
+getComponentName()
+getRequestedOrientation()
+theme
+screenOrientation
+configChanges
+launchMode
+taskAffinity
+```
+
+这些依赖：
+
+ActivityInfo / internal state。
+
+所以 ActivityInfo 虚拟化是核心。
+
+建立：
+
+Guest ActivityInfo contract。
+
+---
+
+# 三十三、Window / Token
+
+这是不能绕过的问题。
+
+真正显示 Android Activity window：
+
+需要真实 system activity token。
+
+研究：
+
+Host Stub token
+
+是否可以被 Guest Activity 重用。
+
+从：
+
+WindowManager / Activity.attach
+
+机制分析。
+
+不要猜。
+
+---
+
+# 三十四、Window identity
+
+如果 Guest Activity 使用：
+
+Host Stub token，
+
+system_server：
+
+仍然认为窗口属于 Host Stub。
+
+研究影响：
+
+* orientation
+* transitions
+* task
+* screenshot/recents
+* PiP
+* multi-window
+* permission dialogs
+* activity result
+
+---
+
+# 三十五、Lifecycle
+
+建立完整生命周期目标：
+
+```text
+onCreate
+onStart
+onResume
+onPause
+onStop
+onDestroy
+onNewIntent
+onSaveInstanceState
+onRestoreInstanceState
+onActivityResult / modern result
+onConfigurationChanged
+```
+
+每种 route：
+
+能做到什么。
+
+---
+
+# 三十六、不要手动 lifecycle 就宣称 Activity 兼容
+
+如果只是：
+
+```text
+host.onResume()
+→ guest.onResume()
+```
+
+这是：
+
+delegation。
+
+不是：
+
+system-managed Guest Activity lifecycle。
+
+明确区别。
+
+---
+
+# 三十七、Configuration
+
+EXP-002 已验证资源 qualifier。
+
+但 Activity：
+
+涉及：
+
+```text
+orientation
+density
+night mode
+locale
+window size
+multi-window
+display
+```
+
+研究：
+
+Host Stub configuration
+
+如何传播给 Guest。
+
+---
+
+# 三十八、Theme
+
+Activity theme 来自：
+
+Guest ActivityInfo/theme resource。
+
+设计：
+
+在 Stub 被 system 创建后：
+
+如何让 Guest 使用 Guest Theme。
+
+需要考虑：
+
+theme 必须在：
+
+setContentView
+
+之前正确。
+
+---
+
+# 三十九、LayoutInflater
+
+C1 已经验证 Guest inflater。
+
+Activity carrier 必须保证：
+
+```text
+guestActivity.getLayoutInflater()
+```
+
+不会重新回到 Host context。
+
+---
+
+# 四十、Task / Back Stack
+
+这是本轮必须重点设计。
+
+例如：
+
+```text
+Guest A
+→ Guest B
+→ back
+```
+
+system_server 实际 stack 可能是：
+
+```text
+Stub1
+→ Stub2
+```
+
+需要：
+
+Guest ↔ Stub
+
+映射。
+
+---
+
+# 四十一、Activity Virtual Record
+
+提出一个设计概念：
+
+```text
+VirtualActivityRecord
+```
+
+只是设计，不实现。
+
+可能包含：
+
+```text
+guestPackage
+guestComponent
+instanceId
+stubComponent
+realActivityToken
+taskId
+launchMode
+intent
+activityInfo
+state
+```
+
+判断是否必要。
+
+不要直接创建 production class。
+
+---
+
+# 四十二、Token Map
+
+可能需要：
+
+```text
+real activity token
+↔
+Guest Activity record
+```
+
+研究：
+
+token 生命周期
+
+以及：
+
+process death 后如何恢复。
+
+---
+
+# 四十三、Intent translation
+
+设计：
+
+```text
+Guest Intent
+↓
+preserve original
+↓
+Host-safe Stub Intent
+```
+
+需要考虑：
+
+* extras
+* ClipData
+* flags
+* categories
+* data URI
+* selector
+* source bounds
+* referrer
+* classloader
+
+不要把整个 Guest Intent：
+
+未经控制塞进 extras
+
+而忽略 Parcelable ClassLoader 问题。
+
+---
+
+# 四十四、Original Intent storage
+
+比较：
+
+## Extra
+
+把 Guest Intent 放进 Stub Intent extra。
+
+## In-memory mapping
+
+token/id → original intent。
+
+## Persistent launch record
+
+ID → registry/runtime store。
+
+比较：
+
+process death
+
+和：
+
+security。
+
+---
+
+# 四十五、Parcelable/ClassLoader
+
+Guest extras 可能包含：
+
+Guest-defined Parcelable。
+
+系统/Host classloader：
+
+无法解析。
+
+这是重大问题。
+
+设计：
+
+什么时候设置：
+
+Guest ClassLoader
+
+以及：
+
+是否避免 system_server 解包 Guest-specific Parcelable。
+
+---
+
+# 四十六、startActivityForResult
+
+虽然现代 API：
+
+Activity Result API
+
+存在，
+
+底层仍有 result routing。
+
+研究：
+
+Guest A → Guest B → result
+
+如何映射：
+
+Host token/resultTo/requestCode。
+
+---
+
+# 四十七、onNewIntent
+
+singleTop/singleTask：
+
+system 可能把 Intent 发给：
+
+现有 Stub。
+
+需要：
+
+路由成：
+
+对应 Guest Activity.onNewIntent。
+
+---
+
+# 四十八、launchMode
+
+必须研究：
+
+Guest `standard/singleTop/singleTask/singleInstance...`
+
+如果映射错误：
+
+task 行为会完全不同。
+
+不要第一版声称全部支持。
+
+---
+
+# 四十九、taskAffinity
+
+Guest manifest 可能有：
+
+custom taskAffinity。
+
+system不知道 Guest package。
+
+设计：
+
+logical task affinity
+
+是否通过 Stub pool 映射。
+
+---
+
+# 五十、Theme / translucent Activity
+
+Stub manifest 属性会影响：
+
+system 在 Guest 对象创建前
+
+做出的决策。
+
+例如：
+
+```text
+translucent
+floating
+noHistory
+excludeFromRecents
+screenOrientation
+```
+
+研究哪些必须：
+
+预编码进不同 Stub。
+
+---
+
+# 五十一、Manifest-dependent properties
+
+建立列表：
+
+哪些 Guest Activity manifest attribute：
+
+必须在 ATMS 创建 ActivityRecord 前知道。
+
+例如：
+
+```text
+launchMode
+taskAffinity
+screenOrientation
+theme?
+resizeableActivity
+supportsPictureInPicture
+excludeFromRecents
+noHistory
+documentLaunchMode
+```
+
+按实际 AOSP/官方文档研究。
+
+---
+
+# 五十二、Stub Pool explosion
+
+如果每种：
+
+launchMode × orientation × translucent × process
+
+都需要不同 Stub，
+
+数量会爆炸。
+
+研究现有技术通常如何控制组合。
+
+不要实现。
+
+---
+
+# 五十三、Process Model
+
+当前 Guest：
+
+仍在 Host process baseline。
+
+Activity 设计必须比较：
+
+```text
+same Host process
+sandbox process slots
+per-instance process
+```
+
+Activity Stub：
+
+manifest process
+
+可能提前固定。
+
+这是未来 process pool 设计的重要输入。
+
+---
+
+# 五十四、多实例
+
+同一个 Guest package：
+
+Instance A
+Instance B
+
+同时启动同一个 Guest Activity。
+
+需要：
+
+不同 VirtualActivityRecord。
+
+可能共享：
+
+Guest Package Revision
+
+但：
+
+Application/data/static state
+
+是否独立
+
+取决于之前 B1 结果。
+
+---
+
+# 五十五、Process death
+
+system 可能杀掉 Host process。
+
+随后：
+
+通过真实 Stub ActivityRecord
+
+尝试恢复 Activity。
+
+此时：
+
+in-memory Guest mapping 已丢失。
+
+这是 Activity virtualization 最大难点之一。
+
+必须设计：
+
+process restart recovery。
+
+---
+
+# 五十六、SavedInstanceState
+
+Guest `Bundle`：
+
+可能包含 Guest Parcelable。
+
+需要：
+
+Guest ClassLoader。
+
+同时：
+
+Host Stub state
+
+和：
+
+Guest state
+
+必须区分。
+
+---
+
+# 五十七、Recents
+
+system recents：
+
+默认记录：
+
+Host Stub。
+
+研究：
+
+最终产品能做到什么程度：
+
+label/icon
+task description
+intent
+relaunch
+
+哪些只是客户端可修改，
+
+哪些由 ATMS 决定。
+
+---
+
+# 五十八、Activity transitions
+
+先标：
+
+DEFERRED
+
+但列入兼容矩阵：
+
+* enter/exit animation
+* shared element
+* predictive back
+* transition API
+
+---
+
+# 五十九、Predictive Back
+
+现代 Android：
+
+Back handling 已变化。
+
+研究：
+
+Android 13+ predictive back
+
+对：
+
+Host Stub / Guest Activity
+
+的影响。
+
+---
+
+# 六十、OnBackInvokedDispatcher
+
+Guest Activity：
+
+如果调用：
+
+```text
+getOnBackInvokedDispatcher()
+```
+
+它与：
+
+Host Window/token
+
+绑定。
+
+加入风险矩阵。
+
+---
+
+# 六十一、Permission dialogs
+
+Guest Activity：
+
+请求 runtime permission。
+
+系统实际权限 owner：
+
+Host。
+
+先标：
+
+IDENTITY-SENSITIVE / DEFERRED。
+
+不要在 Activity 第一实验解决。
+
+---
+
+# 六十二、ActivityResultContracts
+
+先研究：
+
+Contract 最终可能调用：
+
+startActivityForResult
+permissions
+system activities。
+
+分类：
+
+later compatibility。
+
+---
+
+# 六十三、External Activity
+
+Guest：
+
+启动系统相机/浏览器等已安装真实 Activity。
+
+这与：
+
+Guest→Guest
+
+不同。
+
+设计未来 resolver：
+
+```text
+Guest virtual component?
+→ virtual route
+
+Real installed component?
+→ system route
+```
+
+---
+
+# 六十四、Implicit Intent
+
+Guest 发：
+
+implicit Intent。
+
+需要决定：
+
+Guest Registry
+
+与：
+
+real PMS
+
+的解析顺序。
+
+例如：
+
+```text
+Guest Activity matches
+Host/System Activity matches
+both match
+```
+
+现在只设计。
+
+---
+
+# 六十五、PackageManager dependency
+
+真正 Activity resolver：
+
+不能继续完全依赖 Host PackageManager。
+
+必须逐渐需要：
+
+Guest component registry。
+
+因此 Activity 设计必须输出：
+
+# Minimum Guest Component Registry Contract
+
+至少：
+
+```text
+ActivityInfo
+intent filters
+launchMode
+theme
+orientation
+taskAffinity
+exported
+enabled
+```
+
+---
+
+# 六十六、Manifest parsing gap
+
+当前 GuestPackageReader：
+
+是否已经解析这些 Activity 信息？
+
+检查。
+
+只读审计。
+
+不要本轮大改 parser。
+
+输出：
+
+AVAILABLE
+MISSING
+
+---
+
+# 六十七、Split APK
+
+task-16 后仍未验证。
+
+Activity：
+
+可能定义在 split/dynamic feature。
+
+第一阶段可以：
+
+base.apk Activity only。
+
+明确：
+
+SPLIT ACTIVITY = DEFERRED。
+
+---
+
+# 六十八、Native/WebView
+
+第一 Guest Activity 实验：
+
+不要选：
+
+WebView
+JNI
+复杂 SDK。
+
+设计一个：
+
+Controlled Guest Activity
+
+作为 test guest。
+
+但本轮不创建。
+
+---
+
+# 六十九、Test Guest Activity Spec
+
+创建：
+
+```text
+docs/experiments/EXP-ACTIVITY-TEST-GUEST-SPEC.md
+```
+
+未来第一 Activity：
+
+极简：
+
+```text
+GuestMainActivity extends Activity
+```
+
+包含：
+
+* Guest resource layout
+* Guest theme
+* TextView marker
+* lifecycle log
+* Intent extra
+* orientation marker
+
+不使用：
+
+WebView
+native
+PackageManager
+network
+permissions
+
+---
+
+# 七十、未来实验拆分
+
+不要做一个巨大：
+
+EXP-004。
+
+建议设计：
+
+## ACT-001
+
+Host Activity + Guest View baseline
+
+## ACT-002
+
+Guest Activity Java object instantiation
+
+## ACT-003
+
+Stub Activity system token baseline
+
+## ACT-004
+
+Stub → Guest Activity client substitution
+
+## ACT-005
+
+Guest lifecycle
+
+## ACT-006
+
+Guest→Guest navigation
+
+## ACT-007
+
+launchMode / onNewIntent
+
+## ACT-008
+
+process death restore
+
+可以调整。
+
+本轮给推荐顺序。
+
+---
+
+# 七十一、但是不要浪费时间在已知低价值路线
+
+如果外部资料和 AOSP 已经明确：
+
+某条 Public-only Route
+
+无法达到目标，
+
+可以直接标：
+
+COMPATIBILITY CEILING
+
+不需要为了“完整实验”实现它。
+
+---
+
+# 七十二、专利/provenance
+
+外部研究第三方 virtualization 项目：
+
+只提取：
+
+architecture patterns。
+
+不要复制源码。
+
+如果某方案可能对应：
+
+已知专利，
+
+记录：
+
+PATENT REVIEW CANDIDATE。
+
+不要自行判断侵权。
+
+---
+
+# 七十三、Play 不是本轮技术裁决条件
+
+每种路线单独记录：
+
+```text
+Play suitability
+```
+
+但：
+
+不能因为某路线可能 Play 风险高
+
+就不研究其技术能力。
+
+技术路线与产品发布路线：
+
+分开。
+
+---
+
+# 七十四、推荐路线必须允许非公开技术
+
+最后推荐时：
+
+不要因为：
+
+“Public API 更干净”
+
+就自动选 Public 路线。
+
+目标是：
+
+# 任意普通第三方 APK 的高兼容运行。
+
+所以要根据：
+
+* compatibility
+* maintainability
+* Android12–16
+* multi-instance
+* task fidelity
+* implementation complexity
+
+综合决定。
+
+---
+
+# 七十五、特别回答：Public-only 能走到哪
+
+最终必须给一句明确结论：
+
+```text
+Public-only Activity compatibility ceiling =
+L0 / L1 / L2 / L3 / ...
+```
+
+并说明原因。
+
+---
+
+# 七十六、特别回答：最值得实验的非公开路线
+
+只能推荐：
+
+1～2 条。
+
+例如可能：
+
+```text
+Stub + Instrumentation/ClientTransaction interception
+```
+
+或其他。
+
+必须基于调研。
+
+不要列十种后不做选择。
+
+---
+
+# 七十七、特别回答：Binder 是否现在必要
+
+判断：
+
+Activity 第一阶段：
+
+是否必须立刻：
+
+Binder intercept
+
+还是：
+
+Stub + client-side interception
+
+就可以先验证。
+
+这是下一轮实验范围的重要输入。
+
+---
+
+# 七十八、特别回答：Xposed-style Hook 是否必要
+
+判断：
+
+是：
+
+REQUIRED EARLY
+
+还是：
+
+OPTIONAL COMPATIBILITY TOOL
+
+还是：
+
+LATER。
+
+给理由。
+
+---
+
+# 七十九、特别回答：hidden API 是否不可避免
+
+针对目标：
+
+```text
+arbitrary third-party Activity
+```
+
+回答：
+
+```text
+LIKELY REQUIRED
+NOT REQUIRED
+UNKNOWN
+```
+
+列具体 candidate API/internal state。
+
+---
+
+# 八十、创建 Master Design
+
+创建：
+
+```text
+docs/design/ACTIVITY_RUNTIME_ARCHITECTURE.md
+```
+
+这是本轮主输出。
+
+---
+
+# 八十一、创建 Research Sources
+
+创建：
+
+```text
+docs/research/activity/README.md
+docs/research/activity/SOURCES.md
+```
+
+来源至少：
+
+* AOSP API31
+* AOSP API36
+* Android Developers task/back stack
+* 高质量外部插件/虚拟化资料
+
+每条记录：
+
+URL
+date
+Android version
+source type
+relevance。
+
+---
+
+# 八十二、创建 Decision Matrix
+
+```text
+docs/design/ACTIVITY_RUNTIME_DECISION_MATRIX.md
+```
+
+最后给：
+
+```text
+Preferred experimental route = PROPOSED
+Secondary route = PROPOSED
+Rejected routes
+Deferred routes
+```
+
+不是 FINAL。
+
+---
+
+# 八十三、不要修改代码
+
+本轮应该只修改：
+
+```text
+docs/
+```
+
+不要修改：
+
+```text
+app/src/
+test-guests/
+scripts/
+```
+
+---
+
+# 八十四、不要创建 ADR
+
+当前还只是设计。
+
+等第一条 Activity 路线：
+
+实际验证后
+
+再创建 ADR。
+
+---
+
+# 八十五、最终回传格式
+
+严格返回：
+
+## A. Activity Design Status
+
+```text
+READY
+NOT READY
+```
+
+---
+
+## B. Public-only Ceiling
+
+```text
+Level =
+Reason =
+```
+
+---
+
+## C. Android 12 Launch Chain
+
+简图。
+
+---
+
+## D. Android 16 Differences
+
+最重要变化。
+
+---
+
+## E. System vs Client State
+
+表：
+
+```text
+ActivityRecord
+Task
+Token
+ActivityInfo
+Context
+LoadedApk
+Window
+Lifecycle
+```
+
+---
+
+## F. Route Comparison
+
+至少：
+
+A～J。
+
+---
+
+## G. Preferred Route
+
+只能：
+
+```text
+PROPOSED
+```
+
+说明完整链：
+
+```text
+Guest Intent
+→ ...
+→ Guest Activity
+```
+
+---
+
+## H. Secondary Route
+
+说明。
+
+---
+
+## I. Rejected Routes
+
+以及原因。
+
+---
+
+## J. Stub Activity Requirements
+
+需要哪些类型 Stub。
+
+---
+
+## K. Manifest Attributes
+
+哪些必须在 Stub 选择前处理。
+
+---
+
+## L. Activity Context Strategy
+
+Guest Activity 如何获得：
+
+```text
+ClassLoader
+Resources
+Application
+Storage
+Theme
+```
+
+---
+
+## M. Token / Window Strategy
+
+真实 token 从哪里来。
+
+Guest 如何使用。
+
+---
+
+## N. ActivityInfo Strategy
+
+Host/Guest ActivityInfo
+
+如何共存。
+
+---
+
+## O. Intent Strategy
+
+Guest Intent
+Stub Intent
+恢复策略
+Parcelable/ClassLoader。
+
+---
+
+## P. Task / Back Stack
+
+设计概要。
+
+---
+
+## Q. launchMode
+
+设计概要。
+
+---
+
+## R. Lifecycle
+
+哪些由 system 驱动，
+
+哪些需要 translation/interception。
+
+---
+
+## S. Multi-instance
+
+同 package 多 instance
+
+如何避免混淆。
+
+---
+
+## T. Process Death
+
+如何恢复 Guest mapping。
+
+---
+
+## U. Package Registry Requirements
+
+当前已有字段
+
+vs
+
+缺失字段。
+
+---
+
+## V. Non-public Requirements
+
+分别列：
+
+```text
+Hidden API
+Instrumentation
+ActivityThread
+ClientTransaction
+Binder
+Hook
+Native
+```
+
+状态：
+
+```text
+REQUIRED
+LIKELY
+OPTIONAL
+DEFERRED
+NOT NEEDED
+```
+
+---
+
+## W. Binder Timing
+
+```text
+Needed for first experiment = YES / NO
+```
+
+理由。
+
+---
+
+## X. Hook Timing
+
+```text
+Xposed-style / method hook needed early =
+YES / NO / MAYBE
+```
+
+---
+
+## Y. Recommended Experiment Sequence
+
+最多 8 个。
+
+---
+
+## Z. First Experiment
+
+只设计：
+
+```text
+ACT-001 / equivalent
+```
+
+写：
+
+Question
+Hypothesis
+Scope
+Required technology
+Success criteria
+Negative controls
+
+不要执行。
+
+---
+
+## AA. External Sources
+
+至少 15 个高价值来源。
+
+---
+
+## AB. Patent / Provenance Notes
+
+需要关注的候选。
+
+不作法律结论。
+
+---
+
+## AC. Modified Files
+
+应只有：
+
+```text
+docs/
+```
+
+---
+
+## AD. Git
+
+```bash
+git status --short
+git diff --stat
+```
+
+---
+
+## AE. Next Step
+
+只能回答：
+
+```text
+Ready to execute first Activity experiment: YES / NO
+```
+
+最多 5 条理由。
+
+不要实现 Activity。
