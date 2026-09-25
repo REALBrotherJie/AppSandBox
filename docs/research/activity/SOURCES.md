@@ -29,5 +29,13 @@
 | A23 | https://github.com/android-hacker/VirtualXposed/wiki/How-does-VirtualXposed-work | 2019 | PROJECT reference | client hook pattern |
 | A24 | https://www.usenix.org/system/files/conference/usenixsecurity15/sec15-paper-backes.pdf | 2015 | PAPER | virtualization security |
 | A25 | https://www.cs.ucr.edu/~zhiyunq/pub/sigmetrics19_app_virtualization.pdf | 2019 | PAPER | identity/threat model |
+| A26 | https://android.googlesource.com/platform/frameworks/base/+/android-12.0.0_r1/core/java/android/app/servertransaction/ClientTransaction.java | API31 | PRIMARY AOSP | transaction envelope |
+| A27 | https://android.googlesource.com/platform/frameworks/base/+/android-12.0.0_r1/core/java/android/app/servertransaction/TransactionExecutor.java | API31 | PRIMARY AOSP | callback/lifecycle ordering |
+| A28 | https://android.googlesource.com/platform/frameworks/base/+/android-12.0.0_r1/core/java/android/app/AppComponentFactory.java | API31 | PRIMARY AOSP | instantiation delegation |
+| A29 | https://android.googlesource.com/platform/frameworks/base/+/android16-qpr2-release/core/java/android/app/Activity.java | API36 | PRIMARY AOSP | attach boundary |
+| A30 | https://android.googlesource.com/platform/frameworks/base/+/android16-qpr2-release/core/java/android/app/Instrumentation.java | API36 | PRIMARY AOSP | newActivity/call site contract |
+| A31 | https://android.googlesource.com/platform/frameworks/base/+/android16-qpr2-release/core/java/android/app/servertransaction/LaunchActivityItem.java | API36 | PRIMARY AOSP | launch item shape |
+| A32 | https://android.googlesource.com/platform/frameworks/base/+/android16-qpr2-release/core/java/android/app/servertransaction/ClientTransaction.java | API36 | PRIMARY AOSP | transaction envelope |
+| A33 | https://android.googlesource.com/platform/frameworks/base/+/android16-qpr2-release/core/java/android/app/servertransaction/TransactionExecutor.java | API36 | PRIMARY AOSP | callback/lifecycle ordering |
 
 Older project material is not CURRENT evidence for API31-36. API36 behavior must be confirmed against current AOSP and devices before implementation.

@@ -57,7 +57,7 @@ Intent 只传递 String primitive extras。没有传递 Guest Parcelable、Bundl
 | Observation | API31 | API36 |
 |---|---|---|
 | component | `com.example.appsandbox/.experiments.act003.Act003StubActivity` | same |
-| taskId | 54 | 12 |
+| taskId | 57 | 14 |
 | window | `com.android.internal.policy.PhoneWindow` | same |
 | lifecycle | onCreate, onStart, onResume, window focus | same |
 | decor window token | non-null | non-null |
@@ -105,11 +105,11 @@ hostSurvived=true
 
 ## API31
 
-设备 `7b670025`，Xiaomi Mi 10，API31，arm64-v8a，page size 4096。Production revision `4d1cc36a-a8dd-461b-9f37-54f7f10b7cd6`。有效映射、Host Stub carrier、Guest unattached object、直接启动拒绝、无效映射拒绝和 Host 存活均有设备证据。
+设备 `7b670025`，Xiaomi Mi 10，API31，arm64-v8a，page size 4096。Production revision `94030072-fc49-4300-876f-55e4c60f4aa4`。有效映射、Host Stub carrier、Guest unattached object、直接启动拒绝、无效映射拒绝和 Host 存活均有设备证据。
 
 ## API36
 
-设备 `emulator-5554`，sdk_gphone64_x86_64，API36，x86_64，page size 4096。Production revision `c9bf30cd-a493-41ae-955e-11a78c3179e3`。结果与 API31 一致。
+设备 `emulator-5554`，sdk_gphone64_x86_64，API36，x86_64，page size 4096。Production revision `60954901-80b3-497b-8ae6-c8946d00ed1a`。结果与 API31 一致。
 
 ## L0-L5
 
@@ -165,7 +165,8 @@ Direct Guest launch = REJECTED
 Host survived = true
 Production Activity runtime implemented = NO
 Binder/Hook/hidden API used = NO
-Ready for ACT-004A-POSITIVE = NO
+Ready for positive preflight/design = YES
+Ready for positive implementation = NO
 ```
 
 本结论只确认 public-only negative ceiling，不授权 positive substitution 或 attach 实现。
