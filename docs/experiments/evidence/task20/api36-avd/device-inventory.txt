@@ -1,0 +1,4 @@
+List of devices attached
+7b670025               device product:umi model:Mi_10 device:umi transport_id:38
+emulator-5554          device product:sdk_gphone64_x86_64 model:sdk_gphone64_x86_64 device:emu64xa transport_id:39
+

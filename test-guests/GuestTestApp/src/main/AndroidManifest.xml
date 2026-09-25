@@ -3,5 +3,7 @@
         android:label="GuestTestApp"
         android:name=".runtime.Exp003GuestApplication"
         android:theme="@style/Exp003GuestTheme"
-        android:appComponentFactory=".runtime.Exp003GuestComponentFactory" />
+        android:appComponentFactory=".runtime.Exp003GuestComponentFactory">
+        <activity android:name=".runtime.GuestMainActivity" android:exported="false" />
+    </application>
 </manifest>

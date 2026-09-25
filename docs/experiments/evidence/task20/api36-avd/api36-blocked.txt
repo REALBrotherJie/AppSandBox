@@ -1,0 +1,5 @@
+api36Available=false
+blockingReason=AVD did not reach adb device before timeout
+adbState=device
+ro.build.version.sdk=31
+processExited=True

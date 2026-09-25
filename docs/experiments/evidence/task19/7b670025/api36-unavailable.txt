@@ -1,0 +1,2 @@
+api36Available=false
+blockingReason=connected device API 31, expected API36

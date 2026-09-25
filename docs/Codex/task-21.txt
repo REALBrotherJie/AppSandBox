@@ -1,0 +1,196 @@
+继续负责当前 AppSandbox 项目。
+
+请先读取：
+docs/experiments/TASK-20-ACT001-API36-RESULT.md
+docs/experiments/TASK-17-ACTIVITY-DESIGN-RESULT.md
+docs/design/ACTIVITY_RUNTIME_ARCHITECTURE.md
+docs/design/ACTIVITY_RUNTIME_DECISION_MATRIX.md
+docs/experiments/ACTIVITY-RUNTIME-COMPATIBILITY-LEVELS.md
+docs/experiments/EXP-ACTIVITY-TEST-GUEST-SPEC.md
+docs/Codex/task-20.txt
+
+# Task-21: ACT-002 Guest Activity Java object construction
+
+当前基线：
+ACT-001 = CONFIRMED
+API31 L0 = CONFIRMED
+API36 L0 = CONFIRMED
+Guest Activity runtime = NOT IMPLEMENTED
+Stub carrier = NOT IMPLEMENTED
+Activity.attach = NOT IMPLEMENTED
+
+ACT-002 只研究：能否从 immutable、未安装的 Guest APK 中加载并构造一个 Guest Activity Java object。
+
+本轮不研究真实 Activity hosting。
+
+## 一、硬性禁止
+
+不要调用 Activity.attach。
+不要调用 Activity.onCreate/onStart/onResume/onPause/onStop/onDestroy。
+不要调用 setContentView 或向 Guest Activity 设置 Window。
+不要把 Guest Activity 放入 Host Activity content hierarchy。
+不要创建 Stub Activity 或 Stub pool。
+不要启动任何 Guest Activity。
+不要替换 Instrumentation。
+不要拦截 ActivityThread、ClientTransaction、Handler 或 Binder。
+不要替换 ServiceManager。
+不要使用 hidden API、内部反射、Hook、Xposed/LSPosed、native Binder 或 seccomp。
+不要修改 app/src/main/ production runtime。
+不要实现 Activity Context。
+不要伪造或读取 Activity token。
+不要宣称构造出的 Java object 拥有 ActivityRecord、Task、Window、token 或系统生命周期。
+不要进入 ACT-003。
+
+允许范围：
+app/src/debug/
+test-guests/GuestTestApp/src/main/java/.../runtime/
+scripts/task21-*.ps1
+docs/experiments/
+docs/experiments/evidence/task21/
+
+如果 Guest APK 当前只有 manifest 声明而没有实际 GuestMainActivity 类，可以补充一个最小测试类；该类只能用于构造实验，不能在本轮运行 framework lifecycle。
+
+## 二、实验问题
+
+必须回答：
+Q1：DexClassLoader 能否从 production GuestStore/base.apk 加载 GuestMainActivity.class？
+Q2：普通 public Java constructor 能否构造 Guest Activity object？
+Q3：public Instrumentation.newActivity 能否构造同一个 Guest Activity object？
+Q4：构造后哪些公开 Activity 属性可用，哪些因未 attach 而不可用？
+Q5：构造 Guest Activity object 是否改变系统安装状态、Host Activity、task 或 window？
+
+假设：
+H1：GuestMainActivity extends Activity 可以被 Guest ClassLoader 加载。
+H2：普通构造函数或 public Instrumentation.newActivity 可以创建 Java object。
+H3：未 attach 的 object 不具有有效 Activity Context、Window、token、ActivityRecord 或 system task identity。
+H4：构造 object 不会使 Guest package 被系统安装，也不会改变 Host Activity。
+
+## 三、测试 Guest 类要求
+
+如果新增 GuestMainActivity，保持最小化：
+public final class GuestMainActivity extends android.app.Activity { public GuestMainActivity() {} }
+
+可以添加静态 marker 或构造计数，但不要重写或主动调用生命周期，不要创建 View，不要读取 PackageManager，不要启动组件，不要访问网络、JNI、WebView、权限或系统服务，不要依赖 Application.onCreate。
+
+Manifest 声明可以保留用于 direct-launch negative control，但 APK 不能安装到系统。
+
+## 四、ACT-002 runner
+
+新增独立 debug-only runner，例如：
+app/src/debug/java/com/example/appsandbox/experiments/act002/Act002Runner.kt
+
+通过现有 debug 实验入口增加 mode=act002，不要把逻辑写入 MainActivity。
+
+runner 必须按以下顺序执行：
+1. GuestStore.latestRecord()。
+2. GuestArtifactVerifier.verify(record)，必须是 VALID。
+3. 确认 Guest APK 路径是 production revision，不是 task cache readonly copy。
+4. 创建 Guest DexClassLoader。
+5. 加载 com.example.appsandbox.testguest.runtime.GuestMainActivity。
+6. 检查 class load 成功、Activity assignability、Guest/Host classloader 差异和逻辑身份。
+7. 使用普通 public constructor 构造一个 object。
+8. 如 public API 可用，再单独使用 Instrumentation.newActivity 构造第二个 object；如果 API/签名不适用，记录 NOT EXECUTED，不得使用 hidden API 替代。
+9. 只对 object 做安全观察，不调用生命周期或 framework attach。
+
+安全观察可以包括：object class、object classloader、constructor success、object identity distinct，以及对 getApplication、getWindow、getIntent、isFinishing、isDestroyed 的 runCatching 结果。
+
+每个观察都要记录真实结果。不要把异常吞掉后写成成功。
+
+## 五、必须保留的负向控制
+
+1. Direct Guest launch：复用 ACT-001 的显式启动 com.example.appsandbox.testguest/.runtime.GuestMainActivity。预期仍为 ActivityNotFoundException 或其他明确拒绝，Guest package remains uninstalled，hostSurvived=true。
+2. System state：执行前后记录 pm path、Host package/component、Host taskId。必须证明构造 object 没有安装 Guest package、创建 Guest task、改变 Host task 或创建系统 Window。
+3. Wrong-class negative control：至少增加一个缺失类名或明确非 Activity 类的受控失败，清晰记录 ClassNotFoundException/ClassCastException。
+
+## 六、API31/API36 验证
+
+优先复用：API31 serial 7b670025；API36 serial emulator-5554。
+
+两端都使用 production GuestStore import，不得只在 JVM 完成。
+
+每个 API 记录 device/API/ABI/pageSize、revisionId、sha256、fileSize、verification、class load、assignableToActivity、constructor、Instrumentation.newActivity、pre/post pm path、direct launch 和 host survived。
+
+如果设备不可用，明确写 BLOCKED，不能用另一 API 的结果替代。
+
+## 七、结果分类
+
+ACT-002 = CONFIRMED / PARTIALLY CONFIRMED / REJECTED
+
+CONFIRMED：API31/API36 均能从 production Guest APK 加载并构造 Guest Activity object；未使用 attach/hidden API/Hook；负向控制通过；系统状态未改变。
+PARTIALLY CONFIRMED：只有一个 API 通过，或普通 constructor 通过但 Instrumentation.newActivity 未验证，或证据不完整。
+REJECTED：production artifact 无法加载 Guest Activity class，或构造必须依赖被禁止的 hidden API，或构造导致 Host/system state 异常。
+
+L0 由 ACT-001 保持 CONFIRMED；L1 不自动确认；L2 只能写 Java object construction observed，不能写 attached Activity；L3/L4 NOT TESTED；L5 NOT AVAILABLE。
+
+## 八、脚本与证据
+
+新增 scripts/task21-run.ps1。
+证据目录 docs/experiments/evidence/task21/<serial>/。
+至少包含 device.txt、act002.txt、act002-logcat.txt、act002-pm-path.txt、negative-control.txt。
+
+脚本必须检查 record SHA == built GuestTestApp SHA、verification=VALID、guest class load success、assignableToActivity=true、constructor result、Guest package remains uninstalled、direct launch != UNEXPECTED_SUCCESS 和 hostSurvived=true。
+
+## 九、构建与 Release 边界
+
+执行：
+./gradlew.bat :app:testDebugUnitTest --no-daemon
+./gradlew.bat :app:assembleDebug --no-daemon
+./gradlew.bat :app:assembleRelease --no-daemon
+./gradlew.bat :test-guests:GuestTestApp:assembleDebug --no-daemon
+git diff --check
+
+确认 Release 不包含 ExperimentActivity、Act001Runner、Act002Runner、act001、act002 或 task21 debug entry。
+
+不要把 AVD userdata、临时 APK、cache 或临时 logcat 加入 Git。
+
+## 十、结果文档
+
+创建 docs/experiments/TASK-21-ACT002-GUEST-ACTIVITY-OBJECT-RESULT.md。
+
+至少包含：Question、Hypothesis、Scope and non-goals、GuestMainActivity test input、Production artifact verification、Class loading、Activity assignability、普通 constructor、Instrumentation.newActivity、未 attach 属性观察、Direct Guest launch、System state pre/post、API31、API36、L0-L5、Scope compliance、Build/test、Modified files、Git status 和 Conclusion。
+
+结论必须明确写出：
+ACT-002 =
+Guest Activity Java object constructed = YES / NO
+Guest Activity attached = NO
+Guest lifecycle executed = NO
+Guest Activity token/window/task = NOT CLAIMED
+Production Activity runtime implemented = NO
+Stub/Hook/Binder/hidden API used = NO
+Ready for ACT-003 Manifest Stub token baseline = YES / NO
+
+## 十一、最终回传格式
+
+ACT-002 =
+API31 class load =
+API31 assignableToActivity =
+API31 constructor =
+API31 Instrumentation.newActivity =
+API36 class load =
+API36 assignableToActivity =
+API36 constructor =
+API36 Instrumentation.newActivity =
+Guest object attached =
+Guest lifecycle executed =
+Guest token/window/task =
+Guest system-installed =
+Direct Guest launch =
+Host survived =
+production Activity runtime change =
+Activity.attach =
+Stub Activity =
+Instrumentation replacement =
+ActivityThread/ClientTransaction interception =
+Binder interception =
+hidden API =
+Hook/native/seccomp =
+testDebugUnitTest =
+assembleDebug =
+assembleRelease =
+GuestTestApp assembleDebug =
+git diff --check =
+
+最后只能回答：
+Ready for ACT-003 Manifest Stub real token/task/window baseline: YES / NO
+
+只有 ACT-002 目标问题完成验证、且没有引入 attach/carrier 实现时，才可回答 YES。

@@ -1,0 +1,219 @@
+继续负责当前 AppSandbox 项目。
+
+请先读取：
+
+```text
+docs/experiments/TASK-17-ACTIVITY-DESIGN-RESULT.md
+docs/design/ACTIVITY_RUNTIME_ARCHITECTURE.md
+docs/design/ACTIVITY_RUNTIME_DECISION_MATRIX.md
+docs/experiments/TASK-18-ACT001-HOST-GUEST-VIEW-RESULT.md
+docs/Codex/task-18.txt
+```
+
+# Task-19: ACT-001 API36 收尾
+
+当前状态：
+
+```text
+ACT-001 = PARTIALLY CONFIRMED
+API31 L0 = CONFIRMED
+API36 L0 = NOT EXECUTED
+ACT-002 = NOT AUTHORIZED
+```
+
+本轮只做 ACT-001 收尾：
+
+1. 修复 `ExperimentActivity` 在 Activity 重建时读取错误报告文件的问题。
+2. 尝试在真实 API36 设备或模拟器上执行 ACT-001。
+3. 根据真实证据决定 ACT-001 是否升级为 `CONFIRMED`。
+
+若当前没有 API36 设备或模拟器，必须明确报告环境阻塞，不得伪造 API36 证据，也不得进入 ACT-002。
+
+## 硬性禁止
+
+```text
+不要实现 ACT-002。
+不要实例化 Guest Activity extends Activity。
+不要调用 Activity.attach。
+不要创建 Stub Activity 或 Stub pool。
+不要替换 Instrumentation。
+不要拦截 ActivityThread、ClientTransaction、Handler 或 Binder。
+不要替换 ServiceManager。
+不要使用 hidden API、内部反射、Hook、Xposed/LSPosed、native Binder 或 seccomp。
+不要修改 app/src/main/ production Activity runtime。
+不要把 L0 结果宣称为 L1/L2/L3/L4。
+```
+
+允许范围仅为：
+
+```text
+app/src/debug/
+scripts/task19-*.ps1
+docs/experiments/
+docs/experiments/evidence/task19/
+```
+
+## 一、修复报告路径
+
+当前 `ExperimentActivity.onCreate(state != null)` 固定读取：
+
+```text
+files/task15-$mode.txt
+```
+
+但 `mode=act001` 的完成报告写入：
+
+```text
+files/task18-act001.txt
+```
+
+做最小 debug-only 修复，使首次运行和重建运行都读取同一个报告文件；历史 task15/task16 模式保持原语义。
+
+必须用脚本、日志或 focused test 验证 `state != null` 时不会显示错误的 `No completed experiment`。这不是 Guest Activity lifecycle 测试。
+
+## 二、API36 验证
+
+优先复用 task15 的 API36 设备/模拟器方式，不创建无关设备配置。记录：
+
+```text
+serial
+ro.build.version.sdk
+ro.product.name/model
+CPU ABI
+page size（可用时）
+```
+
+必须使用 production GuestStore revision：
+
+```text
+GuestStore.latestRecord()
+→ GuestArtifactVerifier.verify = VALID
+→ 现有 public Controlled Context/resources 路径
+→ Guest layout/theme marker 显示在 Host Activity
+```
+
+不得以 task15/task18 cache readonly copy 作为主证据。可以重新导入 GuestTestApp，但要记录 revisionId、SHA-256、fileSize 和只读状态。
+
+执行前后验证：
+
+```text
+pm path com.example.appsandbox.testguest = empty
+```
+
+直接启动 `.runtime.GuestMainActivity` 必须被拒绝或安全失败，记录异常和 `hostSurvived=true`。
+
+## 三、证据与脚本
+
+新增：
+
+```text
+scripts/task19-run.ps1
+docs/experiments/evidence/task19/<serial>/
+```
+
+至少保存：
+
+```text
+device.txt
+act001-api36.txt
+act001-api36-logcat.txt
+act001-api36-pm-path.txt
+recreation.txt
+```
+
+证据必须能核对：
+
+```text
+record SHA == built GuestTestApp SHA
+verification=VALID
+guest.markerPresent=true
+guest.view.contextIsControlled=true
+host.package=com.example.appsandbox
+guest.systemInstalled=false
+directGuestLaunch != UNEXPECTED_SUCCESS
+hostSurvived=true
+```
+
+不要修改 task15/task18 历史脚本语义。
+
+## 四、构建回归
+
+执行并记录：
+
+```text
+./gradlew.bat :app:testDebugUnitTest --no-daemon
+./gradlew.bat :app:assembleDebug --no-daemon
+./gradlew.bat :app:assembleRelease --no-daemon
+./gradlew.bat :test-guests:GuestTestApp:assembleDebug --no-daemon
+git diff --check
+```
+
+确认 Release 不包含 `ExperimentActivity`、`Act001Runner` 或 task18/task19 debug entry；不要加入 build/cache/临时 APK。
+
+## 五、结果文档
+
+创建：
+
+```text
+docs/experiments/TASK-19-ACT001-API36-CLOSEOUT-RESULT.md
+```
+
+必须包含：修复前问题、最小修复、API36 设备可用性、API36 production artifact 验证、Guest View/context/resource、Host identity、direct launch negative control、重建结果、API31 引用、L0-L5 分类、构建测试、修改文件、Git 状态和结论。
+
+只有 API31/API36 都有真实证据、重建路径修复且验收通过时才可写：
+
+```text
+ACT-001 = CONFIRMED
+```
+
+否则写：
+
+```text
+ACT-001 = PARTIALLY CONFIRMED
+blocking reason = API36 unavailable / evidence incomplete / concrete reason
+```
+
+无论结果如何都必须写：
+
+```text
+Activity runtime implemented = NO
+Guest Activity object instantiated = NO
+Stub/Hook/Binder/hidden API used = NO
+```
+
+## 六、最终回传格式
+
+```text
+ACT-001 = CONFIRMED / PARTIALLY CONFIRMED
+report path issue fixed = YES / NO
+state restoration verified = YES / NO / BLOCKED
+API36 device available = YES / NO
+API36 serial =
+API36 verification =
+API36 marker =
+API36 guest installed =
+API36 direct launch =
+API36 host survived =
+production Activity runtime change =
+Guest Activity instantiation =
+Activity.attach =
+Stub Activity =
+Instrumentation replacement =
+ActivityThread/ClientTransaction interception =
+Binder interception =
+hidden API =
+Hook/native/seccomp =
+testDebugUnitTest =
+assembleDebug =
+assembleRelease =
+GuestTestApp assembleDebug =
+git diff --check =
+```
+
+最后只能回答：
+
+```text
+Ready for ACT-002 Guest Activity Java object construction: YES / NO
+```
+
+只有 ACT-001 在 API31/API36 均真实通过、且没有新的 L0 语义问题时才能回答 YES；否则回答 NO 并列出最多 5 条具体阻塞理由。

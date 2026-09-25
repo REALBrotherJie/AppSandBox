@@ -1,0 +1,376 @@
+继续负责当前 AppSandbox 项目。
+
+本任务由上一轮 Codex 审视生成。请先读取并遵守：
+
+```text
+docs/experiments/TASK-17-ACTIVITY-DESIGN-RESULT.md
+docs/design/ACTIVITY_RUNTIME_ARCHITECTURE.md
+docs/design/ACTIVITY_RUNTIME_DECISION_MATRIX.md
+docs/experiments/ACTIVITY-RUNTIME-COMPATIBILITY-LEVELS.md
+docs/experiments/EXP-ACTIVITY-TEST-GUEST-SPEC.md
+docs/experiments/TASK-16-GUESTSTORE-HARDENING-RESULT.md
+```
+
+当前基线：
+
+```text
+EXP-001 Code Loading = CONFIRMED
+EXP-002 Resources Option B = CONFIRMED
+EXP-003A Controlled Context C0 = CONFIRMED
+Application creation/onCreate minimal baseline = CONFIRMED
+C1 Context = CONFIRMED
+Multi-instance fundamentals = OBSERVED
+Production GuestStore immutable artifact = CONFIRMED
+API31/API36 production DCL path = CONFIRMED
+Activity runtime/carrier architecture = DESIGN ONLY
+```
+
+上一轮审视结论：
+
+```text
+task-17 只完成设计，没有修改 production Activity runtime。
+设计结论与当前仓库基本一致，没有发现越过 Activity 实现决策门的操作。
+下一步可以执行 ACT-001，但只能做 Host Activity + Guest View baseline。
+```
+
+# ACT-001 Host Activity + Guest View baseline
+
+本轮目标：验证在完全不实现 Guest Activity runtime 的情况下，宿主 Activity 能否使用当前 immutable Guest revision 加载并显示 Guest 资源/View，并明确记录系统看到的仍然是 Host Activity。
+
+这是 L0 实验，不是 L1/L2/L3/L4 Activity runtime。
+
+## 一、硬性禁止事项
+
+本轮禁止：
+
+```text
+不要实现 Stub Activity。
+不要创建 Stub Activity pool。
+不要实现 Guest Activity hosting。
+不要实例化 Guest Activity extends Activity。
+不要调用 Activity.attach。
+不要替换 Instrumentation。
+不要拦截 ActivityThread、ClientTransaction 或 Handler。
+不要拦截 Binder、替换 ServiceManager。
+不要使用 hidden API、反射访问 ActivityThread/ContextImpl/LoadedApk 内部字段。
+不要引入 Xposed/LSPosed/method hook/native Binder/seccomp。
+不要修改 production Activity runtime。
+不要宣称 Guest 获得真实 Activity token、ActivityRecord、Guest task identity 或 Guest Window token。
+不要把 Host Activity 身份伪装成 Guest 身份。
+```
+
+允许修改的范围仅限：
+
+```text
+app/src/debug/
+test-guests/GuestTestApp/（仅为测试输入补充必要 Activity/view/resource）
+scripts/task18-*.ps1
+docs/experiments/
+docs/research/（仅补充本实验事实）
+```
+
+除非发现编译阻塞，不得修改 `app/src/main/` 的 production runtime。
+
+## 二、实验问题与假设
+
+必须回答：
+
+```text
+Q1：Host Activity 能否从 immutable GuestStore revision 加载 Guest layout/theme/resource？
+Q2：Guest View 是否保持 Guest Context/Guest Resources，而宿主 Activity 仍是系统 Activity？
+Q3：公共 SDK 能观察到哪些 Host Activity/task/window 信息？
+Q4：直接启动未安装 Guest Activity 时，系统如何拒绝？
+```
+
+假设：
+
+```text
+H1：Guest layout/theme/resource 可以在 Host Activity 中显示。
+H2：View 的 context/resources 可以来自受控 Guest Context，但这不产生 Guest Activity。
+H3：系统可观察身份全部属于 com.example.appsandbox 的 Host Activity。
+H4：对未安装 Guest package 的显式 startActivity，系统拒绝或报告 ActivityNotFoundException；Host 不得崩溃。
+```
+
+## 三、实现要求
+
+### 1. 使用 production GuestStore artifact
+
+实验必须读取 `GuestStore.latestRecord()`，并在创建任何 `DexClassLoader` 或资源对象前调用 `GuestArtifactVerifier.verify(record)`。
+
+不得把正式 APK 复制到 task15/task18 cache 后再作为主要证据。可以为负向测试创建独立 debug 临时副本，但必须明确标注为 negative control，并在 finally 中清理。
+
+### 2. 增加独立 debug-only ACT-001 runner
+
+建议新增独立 runner，例如：
+
+```text
+app/src/debug/java/com/example/appsandbox/experiments/act001/Act001Runner.kt
+```
+
+通过现有 `ExperimentActivity` 增加 `mode=act001` 入口，或建立等价的 debug-only 入口。不要把实验逻辑塞进 `MainActivity`。
+
+runner 至少应：
+
+1. 读取并验证最新 Guest revision。
+2. 使用已有已确认的资源加载路径/Controlled Context，不引入新的隐藏 API 路径。
+3. 从 Guest APK 读取一个明确的 Guest layout、字符串、颜色或 theme marker。
+4. 将 Guest View 放入当前 Host Activity 的 content hierarchy，显示可见 marker。
+5. 记录 View、child View、inflater/context/resources 的归属信息。
+6. 记录 Host Activity 的公开身份和窗口/task 观察值。
+7. 捕获并记录直接启动未安装 Guest component 的异常，不得使宿主进程崩溃。
+
+### 3. 测试 Guest 输入
+
+如果当前 `GuestTestApp` 缺少可供 ACT-001 使用的最小 manifest/resource 输入，可以补充：
+
+```text
+一个明确的 Guest layout
+一个 Guest theme marker
+一个 Guest Activity 声明，仅用于“未安装 Guest direct launch”负向控制
+```
+
+不得在本轮真正运行该 Guest Activity，也不得把它安装到系统。
+
+测试 Guest 仍不得加入 service/provider/receiver/split/native/network 等无关能力。
+
+### 4. Direct Guest launch negative control
+
+构造指向测试 Guest package/component 的显式 Intent，调用 public `startActivity` 或等价 public API，并捕获结果。
+
+记录至少：
+
+```text
+guestPackage
+guestComponent
+guestInstalled=false
+launchResult=REJECTED / UNEXPECTED_SUCCESS
+exceptionClass
+exceptionMessage
+hostSurvived=true
+```
+
+如果设备或 API 版本表现不同，必须记录实际结果，不得把异常统一伪装成“成功”。
+
+### 5. Host identity observation
+
+只使用 public API 记录可观察值，例如：
+
+```text
+host.packageName
+host.componentName
+host.taskId
+host.window.class
+host.resources.packageName（或等价公开观察）
+guest.logical.packageName
+guest.logical.component（如果本轮有）
+```
+
+不能声称通过 public API 获得 token 的具体值，也不能把 `taskId` 推导为 Guest task identity。
+
+## 四、验收标准
+
+成功必须同时满足：
+
+```text
+1. production GuestStore revision 验证为 VALID。
+2. Guest marker/layout/theme 在 Host Activity 中可见。
+3. Guest View 使用受控 Guest Context/Resources 的证据可重复。
+4. Host Activity 仍由系统作为 com.example.appsandbox 的 Activity 管理。
+5. 没有创建 Guest Activity 对象。
+6. 没有使用 hidden API、Hook、Binder interception、Stub 或 Instrumentation replacement。
+7. 未安装 Guest direct launch 被明确拒绝或安全失败。
+8. Host process 在负向控制后存活。
+9. API31 和 API36 至少各有一次真实设备/模拟器验证，若设备不可用必须明确说明。
+```
+
+不要把“Guest View 显示成功”写成“Activity runtime 成功”。最终等级只能是：
+
+```text
+L0 CONFIRMED
+L1 NOT TESTED / NOT CLAIMED
+L2 NOT TESTED / NOT CLAIMED
+L3 NOT TESTED / NOT CLAIMED
+L4 NOT TESTED / NOT CLAIMED
+L5 NOT AVAILABLE
+```
+
+## 五、脚本与证据
+
+新增脚本使用：
+
+```text
+scripts/task18-run.ps1
+scripts/task18-emulator.ps1（只有确实需要时才新增）
+```
+
+不得修改 task15 历史脚本的语义。
+
+证据目录使用：
+
+```text
+docs/experiments/evidence/task18/<serial>/
+```
+
+至少保存：
+
+```text
+device.txt
+act001.txt
+act001-logcat.txt
+act001-pm-path.txt
+```
+
+脚本应验证：
+
+```text
+Guest package remains uninstalled
+production artifact SHA matches record
+VALID verification present
+Guest marker present
+hostSurvived=true
+direct Guest launch did not unexpectedly succeed
+```
+
+## 六、测试与构建
+
+至少运行并记录：
+
+```text
+./gradlew.bat :app:testDebugUnitTest --no-daemon
+./gradlew.bat :app:assembleDebug --no-daemon
+./gradlew.bat :app:assembleRelease --no-daemon
+./gradlew.bat :test-guests:GuestTestApp:assembleDebug --no-daemon
+```
+
+如果新增纯 JVM 测试，只测试本轮新增的可验证逻辑；不要为了 ACT-001 引入大型测试框架。
+
+必须确认 Release 构建不包含 debug-only ACT-001 runner 或实验入口。如果 Manifest merge 仍保留某组件，必须解释其原因和风险。
+
+## 七、结果文档
+
+创建：
+
+```text
+docs/experiments/TASK-18-ACT001-HOST-GUEST-VIEW-RESULT.md
+```
+
+结果文档至少包含：
+
+```text
+Question
+Hypothesis
+Scope and non-goals
+Guest input
+Production artifact verification
+Guest resource/context evidence
+Host identity evidence
+Direct uninstalled Guest launch negative control
+API31 result
+API36 result
+L0-L5 classification
+Security boundary
+Known limitations
+Modified files
+Build/test commands
+Git status
+Conclusion
+```
+
+结论必须明确写出：
+
+```text
+ACT-001 = CONFIRMED / PARTIALLY CONFIRMED / REJECTED
+Activity runtime implemented = NO
+Guest Activity object instantiated = NO
+Stub/Hook/Binder/hidden API used = NO
+Ready for ACT-002 = YES / NO
+```
+
+## 八、最终回传格式
+
+严格返回以下部分：
+
+### A. Status
+
+```text
+ACT-001 = CONFIRMED / PARTIALLY CONFIRMED / REJECTED
+```
+
+### B. Scope compliance
+
+逐项回答是否发生：
+
+```text
+production Activity runtime change =
+Stub Activity =
+Guest Activity instantiation =
+Activity.attach =
+Instrumentation replacement =
+ActivityThread/ClientTransaction interception =
+Binder interception =
+hidden API =
+Hook/native/seccomp =
+```
+
+### C. Guest resource result
+
+```text
+record revisionId =
+record sha256 =
+verification =
+marker =
+layout =
+theme =
+view context =
+view resources =
+```
+
+### D. Host identity result
+
+```text
+host package =
+host component =
+taskId =
+window class =
+guest system-installed =
+guest logical identity =
+```
+
+### E. Negative control
+
+```text
+direct Guest launch result =
+exception =
+host survived =
+```
+
+### F. Device evidence
+
+分别列 API31/API36，若未执行必须说明原因，不得填假数据。
+
+### G. Build
+
+```text
+testDebugUnitTest =
+assembleDebug =
+assembleRelease =
+GuestTestApp assembleDebug =
+```
+
+### H. Git
+
+```text
+git status --short
+git diff --stat
+git log -3 --oneline
+```
+
+### I. Next step
+
+只能回答：
+
+```text
+Ready for ACT-002 Guest Activity Java object construction: YES / NO
+```
+
+最多附带 5 条理由。不要在本轮实现 ACT-002、Stub、Activity.attach 或任何高兼容 Activity carrier。

@@ -1,0 +1,57 @@
+--------- beginning of main
+09-25 05:14:47.597  9813  9813 I Task15  : mode=act002 PID=9813 runCount=1 API=36
+09-25 05:14:47.957  9813  9813 I Task15  : imported=/data/user/0/com.example.appsandbox/files/guests/f6d29d69-1880-4685-ab5a-d6a5f2d53ed0/base.apk sha256=6b3c0d1758be4f01156a7e74620614f09add22412f088ebfaa6a3fe209a7ade3
+09-25 05:14:47.995  9813  9813 I Task15  : record.revisionId=639841a8-f447-4f65-b281-037baab3fc6a
+09-25 05:14:47.995  9813  9813 I Task15  : record.sha256=6b3c0d1758be4f01156a7e74620614f09add22412f088ebfaa6a3fe209a7ade3
+09-25 05:14:47.995  9813  9813 I Task15  : record.fileSize=49300
+09-25 05:14:47.995  9813  9813 I Task15  : artifact.path=/data/user/0/com.example.appsandbox/files/guests/f6d29d69-1880-4685-ab5a-d6a5f2d53ed0/base.apk
+09-25 05:14:47.995  9813  9813 I Task15  : artifact.canRead=true
+09-25 05:14:47.995  9813  9813 I Task15  : artifact.canWrite=false
+09-25 05:14:47.995  9813  9813 I Task15  : verification=VALID
+09-25 05:14:47.995  9813  9813 I Task15  : system.pre.guestInstalled=false
+09-25 05:14:47.995  9813  9813 I Task15  : system.pre.hostPackage=com.example.appsandbox
+09-25 05:14:47.995  9813  9813 I Task15  : system.pre.hostComponent=com.example.appsandbox/.experiments.v1.ExperimentActivity
+09-25 05:14:47.995  9813  9813 I Task15  : system.pre.hostTaskId=9
+09-25 05:14:47.995  9813  9813 I Task15  : classLoad=SUCCESS
+09-25 05:14:47.995  9813  9813 I Task15  : guestClass=com.example.appsandbox.testguest.runtime.GuestMainActivity
+09-25 05:14:47.995  9813  9813 I Task15  : guestClassLoader=dalvik.system.DexClassLoader[DexPathList[[zip file "/data/user/0/com.example.appsandbox/files/guests/f6d29d69-1880-4685-ab5a-d6a5f2d53ed0/base.apk"],nativeLibraryDirectories=[/system/lib64, /system_ext/lib64]]]
+09-25 05:14:47.995  9813  9813 I Task15  : guestClassLoaderIsGuest=true
+09-25 05:14:47.995  9813  9813 I Task15  : hostClassLoader=dalvik.system.PathClassLoader[DexPathList[[zip file "/data/app/~~wqqnJL_Zfe6CNLO7XCfBFQ==/com.example.appsandbox-YqktoReh55bMip2Hzmf5Tw==/base.apk"],nativeLibraryDirectories=[/data/app/~~wqqnJL_Zfe6CNLO7XCfBFQ==/com.example.appsandbox-YqktoReh55bMip2Hzmf5Tw==/lib/x86_64, /system/lib64, /system_ext/lib64]]]
+09-25 05:14:47.995  9813  9813 I Task15  : guestLoaderDiffersFromHost=true
+09-25 05:14:47.995  9813  9813 I Task15  : assignableToActivity=true
+09-25 05:14:47.995  9813  9813 I Task15  : constructor=SUCCESS
+09-25 05:14:47.995  9813  9813 I Task15  : constructor.objectClass=com.example.appsandbox.testguest.runtime.GuestMainActivity
+09-25 05:14:47.995  9813  9813 I Task15  : constructor.objectClassLoader=dalvik.system.DexClassLoader[DexPathList[[zip file "/data/user/0/com.example.appsandbox/files/guests/f6d29d69-1880-4685-ab5a-d6a5f2d53ed0/base.apk"],nativeLibraryDirectories=[/system/lib64, /system_ext/lib64]]]
+09-25 05:14:47.995  9813  9813 I Task15  : instrumentation.newActivity=SUCCESS
+09-25 05:14:47.995  9813  9813 I Task15  : instrumentation.objectClass=com.example.appsandbox.testguest.runtime.GuestMainActivity
+09-25 05:14:47.995  9813  9813 I Task15  : objects.distinct=true
+09-25 05:14:47.995  9813  9813 I Task15  : constructionCount=2
+09-25 05:14:47.995  9813  9813 I Task15  : constructor.getApplication=VALUE:null
+09-25 05:14:47.995  9813  9813 I Task15  : constructor.getWindow=VALUE:null
+09-25 05:14:47.995  9813  9813 I Task15  : constructor.getIntent=VALUE:null
+09-25 05:14:47.995  9813  9813 I Task15  : constructor.isFinishing=VALUE:false
+09-25 05:14:47.995  9813  9813 I Task15  : constructor.isDestroyed=VALUE:false
+09-25 05:14:47.995  9813  9813 I Task15  : constructor.getPackageName=EXCEPTION:java.lang.NullPointerException:Attempt to invoke virtual method 'java.lang.String android.content.Context.getPackageName()' on a null object reference
+09-25 05:14:47.995  9813  9813 I Task15  : instrumentation.getApplication=VALUE:null
+09-25 05:14:47.995  9813  9813 I Task15  : instrumentation.getWindow=VALUE:null
+09-25 05:14:47.995  9813  9813 I Task15  : instrumentation.getIntent=VALUE:null
+09-25 05:14:47.995  9813  9813 I Task15  : instrumentation.isFinishing=VALUE:false
+09-25 05:14:47.995  9813  9813 I Task15  : instrumentation.isDestroyed=VALUE:false
+09-25 05:14:47.995  9813  9813 I Task15  : instrumentation.getPackageName=EXCEPTION:java.lang.NullPointerException:Attempt to invoke virtual method 'java.lang.String android.content.Context.getPackageName()' on a null object reference
+09-25 05:14:47.995  9813  9813 I Task15  : negative.missingClass=java.lang.ClassNotFoundException:Didn't find class "com.example.appsandbox.testguest.runtime.MissingActivity" on path: DexPathList[[zip file "/data/user/0/com.example.appsandbox/files/guests/f6d29d69-1880-4685-ab5a-d6a5f2d53ed0/base.apk"],nativeLibraryDirectories=[/system/lib64, /system_ext/lib64]]
+09-25 05:14:47.995  9813  9813 I Task15  : negative.nonActivityCast=java.lang.ClassCastException:class com.example.appsandbox.testguest.runtime.GuestProbe cannot be cast to android.app.Activity
+09-25 05:14:47.995  9813  9813 I Task15  : directGuestLaunch=REJECTED
+09-25 05:14:47.995  9813  9813 I Task15  : directGuestExceptionClass=android.content.ActivityNotFoundException
+09-25 05:14:47.995  9813  9813 I Task15  : directGuestExceptionMessage=Unable to find explicit activity class {com.example.appsandbox.testguest/com.example.appsandbox.testguest.runtime.GuestMainActivity}; have you declared this activity in your AndroidManifest.xml, or does your intent not match its declared <intent-filter>?
+09-25 05:14:47.995  9813  9813 I Task15  : system.post.guestInstalled=false
+09-25 05:14:47.995  9813  9813 I Task15  : system.post.hostPackage=com.example.appsandbox
+09-25 05:14:47.995  9813  9813 I Task15  : system.post.hostComponent=com.example.appsandbox/.experiments.v1.ExperimentActivity
+09-25 05:14:47.995  9813  9813 I Task15  : system.post.hostTaskId=9
+09-25 05:14:47.995  9813  9813 I Task15  : system.hostComponentUnchanged=true
+09-25 05:14:47.995  9813  9813 I Task15  : system.hostTaskIdUnchanged=true
+09-25 05:14:47.995  9813  9813 I Task15  : guest.attached=false
+09-25 05:14:47.995  9813  9813 I Task15  : guest.lifecycleExecuted=false
+09-25 05:14:47.995  9813  9813 I Task15  : guest.tokenWindowTask=NOT_CLAIMED
+09-25 05:14:47.995  9813  9813 I Task15  : hostSurvived=true
+09-25 05:14:47.995  9813  9813 I Task15  : conclusion=ACT-002_CONFIRMED_JAVA_OBJECT_ONLY
+09-25 05:14:47.995  9813  9813 I Task15  : END hostSurvived=true

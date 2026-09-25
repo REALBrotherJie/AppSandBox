@@ -1,0 +1,15 @@
+system.pre.guestInstalled=false
+system.pre.hostPackage=com.example.appsandbox
+system.pre.hostComponent=com.example.appsandbox/.experiments.v1.ExperimentActivity
+system.pre.hostTaskId=49
+negative.missingClass=java.lang.ClassNotFoundException:Didn't find class "com.example.appsandbox.testguest.runtime.MissingActivity" on path: DexPathList[[zip file "/data/user/0/com.example.appsandbox/files/guests/839dad14-c464-4128-9b8a-a7eb3276e23b/base.apk"],nativeLibraryDirectories=[/system/lib64, /system_ext/lib64]]
+negative.nonActivityCast=java.lang.ClassCastException:class com.example.appsandbox.testguest.runtime.GuestProbe cannot be cast to android.app.Activity
+directGuestLaunch=REJECTED
+directGuestExceptionClass=android.content.ActivityNotFoundException
+directGuestExceptionMessage=Unable to find explicit activity class {com.example.appsandbox.testguest/com.example.appsandbox.testguest.runtime.GuestMainActivity}; have you declared this activity in your AndroidManifest.xml?
+system.post.guestInstalled=false
+system.post.hostPackage=com.example.appsandbox
+system.post.hostComponent=com.example.appsandbox/.experiments.v1.ExperimentActivity
+system.post.hostTaskId=49
+hostSurvived=true
+END hostSurvived=true

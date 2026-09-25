@@ -10,6 +10,8 @@ import com.example.appsandbox.experiments.exp001.Exp001Runner
 import com.example.appsandbox.experiments.exp002.Exp002Runner
 import com.example.appsandbox.experiments.exp003a.Exp003aRunner
 import com.example.appsandbox.experiments.exp003b0.Exp003b0Runner
+import com.example.appsandbox.experiments.act001.Act001Runner
+import com.example.appsandbox.experiments.act002.Act002Runner
 import dalvik.system.DexClassLoader
 import java.io.File
 import java.security.MessageDigest
@@ -20,7 +22,10 @@ class ExperimentActivity : Activity() {
         super.onCreate(state)
         val mode = intent.getStringExtra("mode") ?: "v1"
         if (state != null) {
-            val report = File(filesDir, "task15-$mode.txt")
+            val report = reportFile(mode)
+            if (mode == "act001" && report.exists()) {
+                File(filesDir, "task19-recreation.txt").writeText("stateRestored=true\nreport=${report.name}\nreportContainsConclusion=${report.readText().contains("conclusion=ACT-001_CONFIRMED_L0")}")
+            }
             setContentView(android.widget.TextView(this).apply { text = if (report.exists()) report.readText() else "No completed experiment" })
             return
         }
@@ -34,7 +39,12 @@ class ExperimentActivity : Activity() {
             val store = GuestStore(this)
             val record = if (intent.getBooleanExtra("import", false)) {
                 val reader = GuestPackageReader(this)
-                store.importApk(File(filesDir, "task15-input.apk").inputStream()) { path ->
+                val inputName = when (mode) {
+                    "act001" -> "task18-input.apk"
+                    "act002" -> "task21-input.apk"
+                    else -> "task15-input.apk"
+                }
+                store.importApk(File(filesDir, inputName).inputStream()) { path ->
                     reader.read(path, File(path).parentFile!!.name)
                 }
             } else requireNotNull(store.latestRecord())
@@ -64,6 +74,10 @@ class ExperimentActivity : Activity() {
                 load("writable", apk)
                 val copy = readonly(apk)
                 load("readonly", copy)
+            } else if (mode == "act001") {
+                line(Act001Runner.run(this, record))
+            } else if (mode == "act002") {
+                line(Act002Runner.run(this, record))
             } else if (mode == "production-exp001") {
                 line("production.canRead=${apk.canRead()} canWrite=${apk.canWrite()} size=${apk.length()}")
                 line("production.reopenForWrite=${runCatching { java.io.FileOutputStream(apk, true).use { } ; "UNEXPECTED_SUCCESS" }.getOrElse { "${it.javaClass.name}:${it.message}" }}")
@@ -87,8 +101,18 @@ class ExperimentActivity : Activity() {
             }
         } catch (e: Throwable) { line("FAILED=${e.javaClass.name}:${e.message}"); Log.e("Task15", "Failure", e) }
         line("END hostSurvived=true")
-        File(filesDir, "${if (mode == "production-exp001") "task16" else "task15"}-$mode.txt").writeText(out.toString())
+        reportFile(mode).writeText(out.toString())
         setContentView(android.widget.TextView(this).apply { text = out.toString() })
+        if (mode == "act001" && intent.getBooleanExtra("recreate", false)) {
+            window.decorView.postDelayed({ recreate() }, 500L)
+        }
+    }
+    private fun reportFile(mode: String): File = File(filesDir, "${reportPrefix(mode)}-$mode.txt")
+    private fun reportPrefix(mode: String): String = when (mode) {
+        "act001" -> "task18"
+        "act002" -> "task21"
+        "production-exp001", "writable-negative" -> "task16"
+        else -> "task15"
     }
     private fun readonly(apk: File): File {
         val destination = File(cacheDir, "task15/${java.util.UUID.randomUUID()}/base.apk")

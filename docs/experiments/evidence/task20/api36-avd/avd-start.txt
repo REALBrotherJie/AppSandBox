@@ -1,0 +1,4 @@
+pid=44808
+avd=Pixel_3a_API_36_extension_level_19_x86_64
+data=C:\Users\Mayn\AppData\Local\Temp\appsandbox-task20-api36-avd-v2
+args=-avd Pixel_3a_API_36_extension_level_19_x86_64 -sysdir "D:/Company/Install/Android/SDK/system-images/android-36/google_apis/x86_64" -datadir "C:\Users\Mayn\AppData\Local\Temp\appsandbox-task20-api36-avd-v2" -data "C:\Users\Mayn\AppData\Local\Temp\appsandbox-task20-api36-avd-v2/userdata.img" -encryption-key "C:\Users\Mayn\AppData\Local\Temp\appsandbox-task20-api36-avd-v2/encryptionkey.img" -skin 1080x1920 -no-window -no-audio -no-snapshot -no-boot-anim -cores 2 -gpu swiftshader_indirect -feature -Vulkan

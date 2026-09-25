@@ -1,0 +1,3 @@
+stateRestored=true
+report=task18-act001.txt
+reportContainsConclusion=true
