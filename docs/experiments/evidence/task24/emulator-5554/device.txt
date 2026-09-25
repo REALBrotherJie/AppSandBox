@@ -1,0 +1,7 @@
+serial=emulator-5554
+api=36
+product=sdk_gphone64_x86_64
+model=sdk_gphone64_x86_64
+abi=x86_64,arm64-v8a
+pageSize=4096
+guestApkSha256=6b3c0d1758be4f01156a7e74620614f09add22412f088ebfaa6a3fe209a7ade3

@@ -1,0 +1,22 @@
+mode=act004a-invalid PID=11408 runCount=1 API=36
+imported=/data/user/0/com.example.appsandbox/files/guests/161c958f-47ec-40d4-a9e2-9ff5b6c35ffa/base.apk sha256=6b3c0d1758be4f01156a7e74620614f09add22412f088ebfaa6a3fe209a7ade3
+record.guestPackage=com.example.appsandbox.testguest
+record.guestComponent=com.example.appsandbox.testguest.runtime.GuestMainActivity
+record.revisionId=60954901-80b3-497b-8ae6-c8946d00ed1a
+record.sha256=6b3c0d1758be4f01156a7e74620614f09add22412f088ebfaa6a3fe209a7ade3
+record.actualSha256=6b3c0d1758be4f01156a7e74620614f09add22412f088ebfaa6a3fe209a7ade3
+record.fileSize=49300
+artifact.path=/data/user/0/com.example.appsandbox/files/guests/161c958f-47ec-40d4-a9e2-9ff5b6c35ffa/base.apk
+artifact.canWrite=false
+verification=VALID
+launchId=MISSING
+instanceId=82354d84-0358-4991-861c-b287e2ae648d
+originalAction=com.example.appsandbox.debug.ACT003
+mapping.phase=RECEIVED
+mappingResult=REJECTED
+mapping.phase=REJECTED_BEFORE_CLASS_LOAD
+guestObjectCreated=false
+guest.attached=false
+guest.lifecycleExecuted=false
+hostSurvived=true
+END hostSurvived=true

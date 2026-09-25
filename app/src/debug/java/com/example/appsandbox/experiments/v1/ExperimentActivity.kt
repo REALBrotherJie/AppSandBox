@@ -13,6 +13,7 @@ import com.example.appsandbox.experiments.exp003b0.Exp003b0Runner
 import com.example.appsandbox.experiments.act001.Act001Runner
 import com.example.appsandbox.experiments.act002.Act002Runner
 import com.example.appsandbox.experiments.act003.Act003Runner
+import com.example.appsandbox.experiments.act004a.Act004aNegativeRunner
 import dalvik.system.DexClassLoader
 import java.io.File
 import java.security.MessageDigest
@@ -44,6 +45,7 @@ class ExperimentActivity : Activity() {
                     "act001" -> "task18-input.apk"
                     "act002" -> "task21-input.apk"
                     "act003", "act003-invalid" -> "task22-input.apk"
+                    "act004a-negative", "act004a-invalid" -> "task24-input.apk"
                     else -> "task15-input.apk"
                 }
                 store.importApk(File(filesDir, inputName).inputStream()) { path ->
@@ -82,6 +84,8 @@ class ExperimentActivity : Activity() {
                 line(Act002Runner.run(this, record))
             } else if (mode == "act003" || mode == "act003-invalid") {
                 line(Act003Runner.run(this, record, mode == "act003-invalid"))
+            } else if (mode == "act004a-negative" || mode == "act004a-invalid") {
+                line(Act004aNegativeRunner.run(this, record, mode == "act004a-invalid"))
             } else if (mode == "production-exp001") {
                 line("production.canRead=${apk.canRead()} canWrite=${apk.canWrite()} size=${apk.length()}")
                 line("production.reopenForWrite=${runCatching { java.io.FileOutputStream(apk, true).use { } ; "UNEXPECTED_SUCCESS" }.getOrElse { "${it.javaClass.name}:${it.message}" }}")
@@ -116,6 +120,7 @@ class ExperimentActivity : Activity() {
         "act001" -> "task18"
         "act002" -> "task21"
         "act003", "act003-invalid" -> "task22"
+        "act004a-negative", "act004a-invalid" -> "task24"
         "production-exp001", "writable-negative" -> "task16"
         else -> "task15"
     }

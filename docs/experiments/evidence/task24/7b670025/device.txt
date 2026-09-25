@@ -1,0 +1,7 @@
+serial=7b670025
+api=31
+product=umi
+model=Mi 10
+abi=arm64-v8a,armeabi-v7a,armeabi
+pageSize=4096
+guestApkSha256=6b3c0d1758be4f01156a7e74620614f09add22412f088ebfaa6a3fe209a7ade3

@@ -1,0 +1,26 @@
+record.guestComponent=com.example.appsandbox.testguest.runtime.GuestMainActivity
+mapping.phase=RECEIVED
+mapping.phase=MAPPED
+mapping.phase=CLASS_LOADED
+guest.class=com.example.appsandbox.testguest.runtime.GuestMainActivity
+guest.classLoader=dalvik.system.DexClassLoader[DexPathList[[zip file "/data/user/0/com.example.appsandbox/files/guests/161c958f-47ec-40d4-a9e2-9ff5b6c35ffa/base.apk"],nativeLibraryDirectories=[/system/lib64, /system_ext/lib64]]]
+guest.classLoaderIsDex=true
+guest.classLoaderDiffersFromHost=true
+mapping.phase=OBJECT_CREATED
+guestObjectCreated=true
+guest.constructor.class=com.example.appsandbox.testguest.runtime.GuestMainActivity
+guest.instrumentation.class=com.example.appsandbox.testguest.runtime.GuestMainActivity
+guest.objectsDistinct=true
+identity.hostClass=com.example.appsandbox.experiments.v1.ExperimentActivity
+identity.hostDiffersFromGuest=true
+guest.getApplication=VALUE:null
+guest.getWindow=VALUE:null
+guest.getIntent=VALUE:null
+guest.getPackageName=EXCEPTION:java.lang.NullPointerException:Attempt to invoke virtual method 'java.lang.String android.content.Context.getPackageName()' on a null object reference
+mapping.phase=UNATTACHED
+guest.attached=false
+guest.lifecycleExecuted=false
+guest.tokenWindowTask=NOT_CLAIMED
+guest.inHostContentHierarchy=false
+guest.systemInstalled.before=false
+guest.systemInstalled.after=false
