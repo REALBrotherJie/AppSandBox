@@ -1,0 +1,8 @@
+guest.systemInstalled.before=false
+directGuestLaunch=REJECTED
+directGuestExceptionClass=android.content.ActivityNotFoundException
+guest.systemInstalled.after=false
+hostSurvived=true
+END hostSurvived=true
+hostSurvived=true
+hostSurvived=true

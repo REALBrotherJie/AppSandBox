@@ -1,0 +1,404 @@
+继续负责当前 AppSandbox 项目。
+
+日期：2026-09-25。
+
+请先读取：
+
+```text
+docs/experiments/TASK-21-ACT002-GUEST-ACTIVITY-OBJECT-RESULT.md
+docs/experiments/TASK-20-ACT001-API36-RESULT.md
+docs/experiments/TASK-17-ACTIVITY-DESIGN-RESULT.md
+docs/design/ACTIVITY_RUNTIME_ARCHITECTURE.md
+docs/design/ACTIVITY_RUNTIME_DECISION_MATRIX.md
+docs/experiments/ACTIVITY-RUNTIME-COMPATIBILITY-LEVELS.md
+docs/Codex/task-21.txt
+```
+
+# Task-22: ACT-003 Manifest Stub real Host token/task/window baseline
+
+当前确认状态：
+
+```text
+ACT-001 Host Activity + Guest View = CONFIRMED on API31/API36
+ACT-002 Guest Activity Java object construction = CONFIRMED on API31/API36
+Guest Activity attached = NO
+Guest lifecycle executed = NO
+Manifest Stub carrier = NOT IMPLEMENTED
+Production Activity runtime = NOT IMPLEMENTED
+```
+
+ACT-003 只验证：
+
+```text
+一个声明在 Host debug manifest 中的标准 Activity，
+由 Android 正常启动后，
+能否获得系统管理的 Host Activity component、task、Window 和公开可观察的非空 window token。
+```
+
+这里的 token/task/window 全部属于 Host Stub，不属于 Guest。
+
+## 零、先收敛当前工作区
+
+当前工作区累计包含 task-18 至 task-21 的未提交改动。开始 ACT-003 前：
+
+1. 检查这些改动只包含已经审视通过的 ACT-001/ACT-002 debug runner、测试 Guest、脚本、结果和证据。
+2. 运行 `git diff --check` 和必要构建。
+3. 不得删除、回滚或覆盖已有证据。
+4. 创建一个独立 checkpoint commit，建议：
+
+```text
+test(activity): confirm guest view and object baselines
+```
+
+5. 不要 push。
+6. ACT-003 使用第二个独立 commit，避免把 L0/L2 证据与 Stub carrier 混成一个提交。
+
+如果发现不属于 task-18 至 task-21 的用户改动，不得提交或回滚，需在最终结果中说明。
+
+## 一、硬性禁止
+
+```text
+不要实例化 GuestMainActivity。
+不要调用 Activity.attach。
+不要把 Guest Activity 替换进 Stub。
+不要调用 Guest lifecycle。
+不要创建 Stub pool。
+不要实现 launchMode 映射。
+不要实现 Guest ActivityInfo registry。
+不要实现 Guest-to-Guest navigation、result、back stack translation。
+不要替换 Instrumentation。
+不要拦截 ActivityThread、ClientTransaction、Handler 或 Binder。
+不要替换 ServiceManager。
+不要使用 hidden API、内部反射、Hook、Xposed/LSPosed、native Binder 或 seccomp。
+不要修改 app/src/main/ production Activity runtime。
+不要把 Host Stub token 宣称为 Guest token。
+不要进入 ACT-004。
+```
+
+## 二、允许实现的最小 Stub
+
+只允许新增一个 debug-only standard Activity，例如：
+
+```text
+app/src/debug/java/com/example/appsandbox/experiments/act003/Act003StubActivity.kt
+```
+
+并仅在 `app/src/debug/AndroidManifest.xml` 声明：
+
+```text
+android:exported=false
+standard launchMode（默认或显式 standard）
+Host debug theme
+不设置 Guest taskAffinity
+不设置 Guest package/process/theme/orientation
+```
+
+不要创建 standard/singleTop/singleTask 等 Stub 池；ACT-003 只验证一个 standard Host Stub。
+
+Stub 页面使用 Host 资源或代码创建的简单 Host TextView marker。不得加载 Guest View，也不得实例化 Guest Activity。
+
+## 三、启动链
+
+通过现有 debug `ExperimentActivity` 增加 `mode=act003`，由它在应用内部启动非 exported 的 `Act003StubActivity`。
+
+启动 Intent 只允许携带 Host-safe primitive 数据：
+
+```text
+launchId：随机或单调唯一字符串
+logicalGuestPackage：com.example.appsandbox.testguest
+logicalGuestComponent：GuestMainActivity
+revisionId
+```
+
+不得放入 Guest Parcelable、Guest Bundle class、ActivityInfo、Binder token 或任意反序列化对象。
+
+本轮不需要 production VirtualActivityRecord。可以使用 debug-only 简单数据或 Intent primitive extra。
+
+## 四、Stub 必须记录的公开状态
+
+仅使用 public API 记录：
+
+```text
+packageName
+componentName
+taskId
+isTaskRoot
+application != null
+baseContext != null
+intent.action
+launchId
+logical Guest package/component
+window.class
+window.decorView.class
+window.decorView.windowToken != null
+window.decorView.applicationWindowToken != null（若公开 API 可用）
+window attributes type
+current configuration/orientation
+```
+
+`View.getWindowToken()` 可以用于验证公开可观察的非空 token，但：
+
+```text
+不要反射 token 内部。
+不要打印 Binder 实现细节。
+不要比较或伪造 system_server token。
+结论必须写 Host Stub window token。
+```
+
+window token 应在 decor 已 attach 后观察，例如 `decorView.post`、获得 window focus 后或其他公开生命周期点。不得因为 onCreate 过早返回 null 就使用 hidden API。
+
+## 五、生命周期观察边界
+
+允许记录 Host Stub 自身由系统调用的：
+
+```text
+onCreate
+onStart
+onResume
+onWindowFocusChanged
+onPause
+onStop
+onDestroy
+```
+
+这是 Host Stub lifecycle 证据，不是 Guest lifecycle translation。
+
+不要手动调用任何生命周期方法。
+
+为了生成稳定证据，可以在 token/window 观察完成后通过 public `finish()` 结束 Stub；如需要返回结果，只能使用 Host primitive result。
+
+## 六、system_server/ADB 外部证据
+
+在 Stub 可见期间，由脚本保存公开诊断：
+
+```text
+adb shell dumpsys activity activities
+adb shell dumpsys window windows（可取得时）
+```
+
+必须从输出中确认：
+
+```text
+resumed/top component 是 Host Act003StubActivity
+task 记录的是 Host package/component
+Guest package 仍未安装
+没有 Guest ActivityRecord
+```
+
+不要把 dumpsys 中未稳定的内部字段做成生产依赖；它只作为实验观察证据。
+
+## 七、负向控制
+
+至少包含：
+
+### 1. Direct Guest launch
+
+直接启动未安装 Guest Activity 仍必须被拒绝：
+
+```text
+ActivityNotFoundException 或明确失败
+hostSurvived=true
+```
+
+### 2. Guest object absence
+
+记录：
+
+```text
+GuestMainActivity constructionCount 未增加，或等价证据
+Guest Activity object instantiated=false
+```
+
+注意：如读取 constructionCount 需要加载 Guest class，就会产生类加载副作用。优先使用 ACT-003 runner 本身没有调用 Guest loader/constructor 的代码和日志证据；不要为了证明未构造而额外构造或加载 Guest Activity。
+
+### 3. Missing/invalid launchId
+
+使用内部 debug 路径启动一次缺失或无效 launchId 的 Stub。Stub 必须 fail closed：
+
+```text
+不加载 Guest
+不崩溃 Host process
+写出明确 INVALID_LAUNCH_ID
+finish()
+```
+
+不得允许外部 App 直接启动 Stub；`exported=false` 必须保持。
+
+## 八、API31/API36 验证
+
+在以下设备执行：
+
+```text
+API31: 7b670025
+API36: emulator-5554
+```
+
+每端至少记录：
+
+```text
+device/API/ABI/pageSize
+Host build SHA 或版本信息
+Guest revisionId/SHA（仅作为 logical mapping 输入）
+launchId
+Stub component
+taskId
+isTaskRoot
+window class
+decor windowToken non-null
+applicationWindowToken non-null/NOT AVAILABLE
+lifecycle order
+dumpsys top/resumed Host component
+pre/post Guest pm path
+direct Guest launch result
+invalid launchId result
+host survived
+```
+
+Guest APK 继续通过 production GuestStore 导入并验证，但 ACT-003 不得从它实例化 Guest Activity。
+
+## 九、结果分类
+
+只允许：
+
+```text
+ACT-003 = CONFIRMED
+ACT-003 = PARTIALLY CONFIRMED
+ACT-003 = REJECTED
+```
+
+`CONFIRMED` 条件：
+
+```text
+API31/API36 均正常启动 debug Manifest Stub。
+系统/ADB 证据均显示 Host Stub component。
+公开 decor windowToken 在 attach 后非空。
+Host taskId/window/lifecycle 可观察。
+Guest package 未安装，direct Guest launch 被拒绝。
+没有实例化或 attach Guest Activity。
+invalid launchId fail closed。
+```
+
+`PARTIALLY CONFIRMED`：仅一个 API 通过、token/window 观察不完整、dumpsys 证据缺失或设备不可用。
+
+`REJECTED`：Stub 无法通过正常系统路径启动，或必须依赖本轮禁止的机制。
+
+等级必须写：
+
+```text
+L0 CONFIRMED by ACT-001
+L2 Java object construction observed by ACT-002
+L3 NOT CONFIRMED；本轮只确认 Host Stub carrier baseline
+L4 NOT TESTED
+L5 NOT AVAILABLE
+```
+
+## 十、脚本与证据
+
+新增：
+
+```text
+scripts/task22-run.ps1
+docs/experiments/evidence/task22/<serial>/
+```
+
+至少保存：
+
+```text
+device.txt
+act003.txt
+act003-logcat.txt
+act003-pm-path.txt
+act003-dumpsys-activity.txt
+act003-dumpsys-window.txt
+invalid-launch-id.txt
+direct-guest-launch.txt
+```
+
+脚本必须校验 Host Stub component、非空公开 windowToken、Guest 未安装、direct launch 未意外成功、invalid launchId 被拒绝和 Host 存活。
+
+## 十一、构建与 Release 边界
+
+执行：
+
+```text
+./gradlew.bat :app:testDebugUnitTest --no-daemon
+./gradlew.bat :app:assembleDebug --no-daemon
+./gradlew.bat :app:assembleRelease --no-daemon
+./gradlew.bat :test-guests:GuestTestApp:assembleDebug --no-daemon
+git diff --check
+```
+
+确认 Release 不包含：
+
+```text
+ExperimentActivity
+Act001Runner
+Act002Runner
+Act003StubActivity
+act001/act002/act003
+task22 debug entry
+```
+
+## 十二、结果文档与提交
+
+创建：
+
+```text
+docs/experiments/TASK-22-ACT003-MANIFEST-STUB-BASELINE-RESULT.md
+```
+
+必须包含：Question、Hypothesis、Scope、Stub manifest、launch extras、Host lifecycle、Host token/window/task observation、dumpsys evidence、invalid launchId、direct Guest launch、Guest absence、API31、API36、L0-L5、Scope compliance、Build、Modified files、Git 和 Conclusion。
+
+完成并验证后创建第二个独立 commit，建议：
+
+```text
+test(activity): validate manifest stub carrier baseline
+```
+
+不要 push。
+
+## 十三、最终回传格式
+
+```text
+ACT-003 =
+API31 Stub launch =
+API31 Host component =
+API31 taskId =
+API31 decor windowToken =
+API31 dumpsys Host record =
+API36 Stub launch =
+API36 Host component =
+API36 taskId =
+API36 decor windowToken =
+API36 dumpsys Host record =
+Host lifecycle system-driven =
+invalid launchId =
+Guest Activity instantiated =
+Guest Activity attached =
+Guest lifecycle executed =
+Guest system-installed =
+Direct Guest launch =
+Host survived =
+production Activity runtime change =
+Instrumentation replacement =
+ActivityThread/ClientTransaction interception =
+Binder interception =
+hidden API =
+Hook/native/seccomp =
+testDebugUnitTest =
+assembleDebug =
+assembleRelease =
+GuestTestApp assembleDebug =
+git diff --check =
+checkpoint commit =
+ACT-003 commit =
+pushed = false
+```
+
+最后只能回答：
+
+```text
+Ready for ACT-004 Stub transaction to Guest Activity substitution design: YES / NO
+```
+
+即使 ACT-003 成功，也只允许进入 ACT-004 的设计/实验任务，不得在本轮进行 Guest substitution。
