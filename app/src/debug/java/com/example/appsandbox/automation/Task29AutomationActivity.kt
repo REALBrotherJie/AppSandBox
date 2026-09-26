@@ -5,11 +5,11 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.TextView
 import com.example.appsandbox.MainActivity
-import com.example.appsandbox.GuestWorkspaceActivity
 import com.example.appsandbox.imports.GuestImportCoordinator
 import com.example.appsandbox.imports.GuestImportPhase
 import com.example.appsandbox.storage.GuestInstanceStore
 import com.example.appsandbox.storage.GuestStore
+import com.example.appsandbox.workspace.GuestWorkspaceLauncher
 import java.io.File
 
 class Task29AutomationActivity : Activity() {
@@ -17,14 +17,24 @@ class Task29AutomationActivity : Activity() {
         super.onCreate(state)
         intent.getStringExtra(EXTRA_INSTANCE)?.let { id ->
             val resolved = GuestInstanceStore(this).list().singleOrNull { it.instanceId.startsWith(id, ignoreCase = true) }?.instanceId ?: id
-            startActivity(Intent(this, GuestWorkspaceActivity::class.java).putExtra(GuestWorkspaceActivity.EXTRA_INSTANCE_ID, resolved))
+            GuestWorkspaceLauncher.open(this, resolved)
             finish(); return
         }
         intent.getStringExtra(EXTRA_PACKAGE)?.let { packageName ->
             val ordinal = intent.getIntExtra(EXTRA_INSTANCE_ORDINAL, 0)
             val resolved = GuestInstanceStore(this).list().filter { it.guestPackageName == packageName }.sortedBy { it.createdAt }[ordinal].instanceId
-            startActivity(Intent(this, GuestWorkspaceActivity::class.java).putExtra(GuestWorkspaceActivity.EXTRA_INSTANCE_ID, resolved))
+            GuestWorkspaceLauncher.open(this, resolved)
             finish(); return
+        }
+        intent.getStringExtra(EXTRA_STALE_INSTANCE)?.let { instanceId ->
+            startActivity(GuestWorkspaceLauncher.intent(this, instanceId))
+            finish(); return
+        }
+        intent.getStringExtra(EXTRA_CREATE_PACKAGE)?.let { packageName ->
+            val revision = GuestStore(this).recordsForPackage(packageName).maxBy { it.importedAt }
+            val created = GuestInstanceStore(this).create(revision)
+            setContentView(TextView(this).apply { text = "SUCCESS: created ${created.instanceId}"; textSize = 18f })
+            return
         }
         intent.getStringExtra(EXTRA_DELETE_REVISION)?.let { prefix ->
             val store = GuestStore(this); val revision = store.records().single { it.revisionId.startsWith(prefix, true) }
@@ -50,5 +60,5 @@ class Task29AutomationActivity : Activity() {
             finish()
         }
     }
-    companion object { const val EXTRA_APK = "stagedApk"; const val EXTRA_INSTANCE = "instanceId"; const val EXTRA_PACKAGE = "packageName"; const val EXTRA_INSTANCE_ORDINAL = "instanceOrdinal"; const val EXTRA_DELETE_REVISION = "deleteRevision"; const val EXTRA_TRY_DELETE_REVISION = "tryDeleteRevision" }
+    companion object { const val EXTRA_APK = "stagedApk"; const val EXTRA_INSTANCE = "instanceId"; const val EXTRA_PACKAGE = "packageName"; const val EXTRA_INSTANCE_ORDINAL = "instanceOrdinal"; const val EXTRA_STALE_INSTANCE = "staleInstanceId"; const val EXTRA_CREATE_PACKAGE = "createPackage"; const val EXTRA_DELETE_REVISION = "deleteRevision"; const val EXTRA_TRY_DELETE_REVISION = "tryDeleteRevision" }
 }

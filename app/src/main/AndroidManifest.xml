@@ -12,6 +12,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".GuestWorkspaceActivity" android:exported="false" />
+        <activity
+            android:name=".GuestWorkspaceActivity"
+            android:documentLaunchMode="intoExisting"
+            android:exported="false"
+            android:launchMode="standard" />
     </application>
 </manifest>

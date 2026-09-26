@@ -1,6 +1,7 @@
 package com.example.appsandbox
 
 import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
 import android.widget.LinearLayout
@@ -15,6 +16,7 @@ import com.example.appsandbox.storage.GuestInstanceStore
 import com.example.appsandbox.storage.GuestArtifactVerifier
 import com.example.appsandbox.storage.GuestStore
 import com.example.appsandbox.storage.GuestInstanceBinding
+import com.example.appsandbox.workspace.GuestWorkspaceLaunchPolicy
 import dalvik.system.DexClassLoader
 import java.io.File
 
@@ -24,10 +26,28 @@ class GuestWorkspaceActivity : Activity() {
     private lateinit var guestRoot: LinearLayout
     private lateinit var store: GuestInstanceStore
     private lateinit var contract: GuestViewContract
+    private var resumedOnce = false
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = GuestInstanceStore(this)
-        val found = intent.getStringExtra(EXTRA_INSTANCE_ID)?.let { store.get(it) }
+        reload(intent)
+    }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        reload(intent)
+    }
+    override fun onResume() {
+        super.onResume()
+        if (resumedOnce) reload(intent) else resumedOnce = true
+    }
+    private fun reload(source: Intent) {
+        val spec = runCatching {
+            GuestWorkspaceLaunchPolicy.validate(source.getStringExtra(EXTRA_INSTANCE_ID), source.dataString)
+        }.getOrElse { show("Workspace intent is invalid: ${it.message}"); return }
+        val found = runCatching { store.get(spec.instanceId) }.getOrElse {
+            show("Instance unavailable or registry is corrupted"); return
+        }
         if (found == null) { show("Instance unavailable or registry is corrupted"); return }
         val revision = runCatching { GuestStore(this).findRevision(found.guestRevisionId) }.getOrNull()
         val bindingError = revision?.let { GuestInstanceBinding.validate(found, it) }
@@ -47,6 +67,7 @@ class GuestWorkspaceActivity : Activity() {
             show("Guest contract version changed. Restore the original revision."); return
         }
         instance = found
+        title = "${instance.guestPackageName} ${instance.instanceId.take(8)}"
         buildUi(); render()
     }
     private fun buildUi() {
@@ -58,9 +79,10 @@ class GuestWorkspaceActivity : Activity() {
             actions.addView(Button(this).apply { text = "Increment"; setOnClickListener { writeCounter(counter() + 1); render() } })
             actions.addView(Button(this).apply { text = "Reset"; setOnClickListener { writeCounter(0); render() } })
         }
+        actions.addView(Button(this).apply { text = "Close workspace"; setOnClickListener { finishAndRemoveTask() } })
         actions.addView(Button(this).apply { text = "Delete current instance"; setOnClickListener {
             android.app.AlertDialog.Builder(this@GuestWorkspaceActivity).setTitle("Delete current instance?").setNegativeButton("Cancel", null)
-                .setPositiveButton("Confirm delete instance") { _, _ -> runCatching { store.delete(instance.instanceId) }.onSuccess { finish() }.onFailure { show(it.message ?: "Unable to delete instance") } }.show()
+                .setPositiveButton("Confirm delete instance") { _, _ -> runCatching { store.delete(instance.instanceId) }.onSuccess { finishAndRemoveTask() }.onFailure { show(it.message ?: "Unable to delete instance") } }.show()
         } })
         guestRoot = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(state); root.addView(actions); root.addView(guestRoot, LinearLayout.LayoutParams(-1, 0, 1f)); setContentView(root)

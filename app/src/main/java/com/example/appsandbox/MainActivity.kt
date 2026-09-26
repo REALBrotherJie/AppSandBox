@@ -16,6 +16,7 @@ import com.example.appsandbox.imports.GuestImportPhase
 import com.example.appsandbox.imports.GuestImportSession
 import com.example.appsandbox.storage.GuestStore
 import com.example.appsandbox.storage.GuestInstanceStore
+import com.example.appsandbox.workspace.GuestWorkspaceLauncher
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
@@ -141,7 +142,7 @@ class MainActivity : AppCompatActivity() {
             val row = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.HORIZONTAL }
             row.addView(android.widget.Button(this).apply {
                 text = "Open ${instance.guestPackageName} r:${instance.guestRevisionId.take(8)} i:${instance.instanceId.take(8)}"
-                setOnClickListener { startActivity(Intent(this@MainActivity, GuestWorkspaceActivity::class.java).putExtra(GuestWorkspaceActivity.EXTRA_INSTANCE_ID, instance.instanceId)) }
+                setOnClickListener { runCatching { GuestWorkspaceLauncher.open(this@MainActivity, instance.instanceId) }.onFailure { showWorkspaceError(it.message ?: "Unable to open workspace") } }
             }, android.widget.LinearLayout.LayoutParams(0, -2, 1f))
             row.addView(android.widget.Button(this).apply {
                 text = "Delete instance ${instance.instanceId.take(8)}"
