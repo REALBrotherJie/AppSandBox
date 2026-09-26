@@ -1,6 +1,7 @@
 package com.example.appsandbox
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
@@ -17,6 +18,7 @@ import com.example.appsandbox.storage.GuestArtifactVerifier
 import com.example.appsandbox.storage.GuestStore
 import com.example.appsandbox.storage.GuestInstanceBinding
 import com.example.appsandbox.workspace.GuestWorkspaceLaunchPolicy
+import com.example.appsandbox.workspace.GuestWorkspaceTaskPolicy
 import dalvik.system.DexClassLoader
 import java.io.File
 
@@ -26,7 +28,6 @@ class GuestWorkspaceActivity : Activity() {
     private lateinit var guestRoot: LinearLayout
     private lateinit var store: GuestInstanceStore
     private lateinit var contract: GuestViewContract
-    private var resumedOnce = false
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = GuestInstanceStore(this)
@@ -39,7 +40,7 @@ class GuestWorkspaceActivity : Activity() {
     }
     override fun onResume() {
         super.onResume()
-        if (resumedOnce) reload(intent) else resumedOnce = true
+        reload(intent)
     }
     private fun reload(source: Intent) {
         val spec = runCatching {
@@ -67,7 +68,9 @@ class GuestWorkspaceActivity : Activity() {
             show("Guest contract version changed. Restore the original revision."); return
         }
         instance = found
-        title = "${instance.guestPackageName} ${instance.instanceId.take(8)}"
+        val recentsLabel = GuestWorkspaceTaskPolicy.recentsLabel(instance.guestPackageName, instance.instanceId)
+        title = recentsLabel
+        setTaskDescription(ActivityManager.TaskDescription(recentsLabel))
         buildUi(); render()
     }
     private fun buildUi() {

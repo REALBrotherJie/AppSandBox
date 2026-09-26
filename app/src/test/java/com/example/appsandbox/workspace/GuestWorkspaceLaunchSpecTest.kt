@@ -29,6 +29,16 @@ class GuestWorkspaceLaunchSpecTest {
         assertEquals(idA, GuestWorkspaceLaunchPolicy.validate(idA, "appsandbox://workspace/$idA").instanceId)
     }
 
+    @Test fun recentsLabelSeparatesPackageAndInstance() {
+        assertEquals("com.example.alpha / 11111111", GuestWorkspaceTaskPolicy.recentsLabel("com.example.alpha", idA))
+        assertFalse(
+            GuestWorkspaceTaskPolicy.recentsLabel("com.example.alpha", idA) ==
+                GuestWorkspaceTaskPolicy.recentsLabel("com.example.alpha", idB)
+        )
+        assertEquals("Open", GuestWorkspaceTaskPolicy.actionLabel(false))
+        assertEquals("Focus", GuestWorkspaceTaskPolicy.actionLabel(true))
+    }
+
     private fun expectRejected(action: () -> Unit) {
         try { action(); fail("expected rejection") }
         catch (_: IllegalArgumentException) {}

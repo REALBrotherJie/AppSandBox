@@ -75,6 +75,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (::errorText.isInitialized) {
+            refreshLibrary()
+            refreshInstances()
+        }
+    }
+
     @Deprecated("The project targets the platform SAF callback used in this first phase.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -141,7 +149,7 @@ class MainActivity : AppCompatActivity() {
         records.forEach { instance ->
             val row = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.HORIZONTAL }
             row.addView(android.widget.Button(this).apply {
-                text = "Open ${instance.guestPackageName} r:${instance.guestRevisionId.take(8)} i:${instance.instanceId.take(8)}"
+                text = "${GuestWorkspaceLauncher.actionLabel(this@MainActivity, instance.instanceId)} ${instance.guestPackageName} i:${instance.instanceId.take(8)}"
                 setOnClickListener { runCatching { GuestWorkspaceLauncher.open(this@MainActivity, instance.instanceId) }.onFailure { showWorkspaceError(it.message ?: "Unable to open workspace") } }
             }, android.widget.LinearLayout.LayoutParams(0, -2, 1f))
             row.addView(android.widget.Button(this).apply {
@@ -180,6 +188,23 @@ class MainActivity : AppCompatActivity() {
                     .onFailure { showWorkspaceError(it.message ?: "Unable to delete revision") }
             } })
             row.addView(actions); list.addView(row)
+            instances.filter { it.guestRevisionId == record.revisionId }.forEach { instance ->
+                val instanceRow = android.widget.LinearLayout(this).apply {
+                    orientation = android.widget.LinearLayout.HORIZONTAL
+                    setPadding(24, 0, 0, 0)
+                }
+                instanceRow.addView(TextView(this).apply {
+                    text = "Instance ${instance.instanceId.take(8)}"
+                }, android.widget.LinearLayout.LayoutParams(0, -2, 1f))
+                instanceRow.addView(android.widget.Button(this).apply {
+                    text = GuestWorkspaceLauncher.actionLabel(this@MainActivity, instance.instanceId)
+                    setOnClickListener {
+                        runCatching { GuestWorkspaceLauncher.open(this@MainActivity, instance.instanceId) }
+                            .onFailure { showWorkspaceError(it.message ?: "Unable to open workspace") }
+                    }
+                })
+                list.addView(instanceRow)
+            }
         }
     }
 
