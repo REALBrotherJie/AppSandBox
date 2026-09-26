@@ -10,6 +10,7 @@ import com.example.appsandbox.model.GuestInstanceRecord
 import com.example.appsandbox.packageinfo.GuestPackageReader
 import com.example.appsandbox.storage.GuestInstanceStore
 import com.example.appsandbox.storage.GuestArtifactVerifier
+import com.example.appsandbox.storage.GuestStore
 import dalvik.system.DexClassLoader
 import java.io.File
 
@@ -23,6 +24,11 @@ class GuestWorkspaceActivity : Activity() {
         store = GuestInstanceStore(this)
         val found = intent.getStringExtra(EXTRA_INSTANCE_ID)?.let { store.get(it) }
         if (found == null) { show("Instance unavailable or registry is corrupted"); return }
+        val revision = runCatching { GuestStore(this).findRevision(found.guestRevisionId) }.getOrNull()
+        if (revision == null || revision.packageName != found.guestPackageName || revision.apkPath != found.guestApkPath || !revision.sha256.equals(found.guestSha256, true)) {
+            show("Guest revision binding is unavailable or inconsistent. Restore the original revision.")
+            return
+        }
         val artifact = File(found.guestApkPath)
         if (!artifact.isFile || !GuestArtifactVerifier.sha256(artifact).equals(found.guestSha256, true)) {
             show("Guest revision is missing or changed. Re-import the supported Guest before using this instance.")
@@ -38,6 +44,10 @@ class GuestWorkspaceActivity : Activity() {
         val actions = LinearLayout(this)
         actions.addView(Button(this).apply { text = "Increment"; setOnClickListener { writeCounter(counter() + 1); render() } })
         actions.addView(Button(this).apply { text = "Reset"; setOnClickListener { writeCounter(0); render() } })
+        actions.addView(Button(this).apply { text = "Delete current instance"; setOnClickListener {
+            android.app.AlertDialog.Builder(this@GuestWorkspaceActivity).setTitle("Delete current instance?").setNegativeButton("Cancel", null)
+                .setPositiveButton("Confirm delete instance") { _, _ -> runCatching { store.delete(instance.instanceId) }.onSuccess { finish() }.onFailure { show(it.message ?: "Unable to delete instance") } }.show()
+        } })
         guestRoot = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(state); root.addView(actions); root.addView(guestRoot, LinearLayout.LayoutParams(-1, 0, 1f)); setContentView(root)
     }

@@ -34,11 +34,12 @@ class MainActivity : AppCompatActivity() {
         importedRecord = runCatching { GuestStore(this).latestRecord() }.onFailure { showWorkspaceError("Guest revision 状态不可用: ${it.message}") }.getOrNull()
         importSession = GuestImportSession(importedRecord)
         importedRecord?.let { renderImportedRecord(it) }
+        refreshLibrary()
         intent.getStringExtra(EXTRA_IMPORT_RESULT)?.let { showWorkspaceError(it) }
         findViewById<android.view.View>(R.id.createInstanceButton).setOnClickListener { createInstance() }
         refreshInstances()
         val experimentButton = findViewById<android.view.View>(R.id.runExperimentButton)
-        if (BuildConfig.DEBUG) {
+        if (BuildConfig.DEBUG && !intent.getBooleanExtra(EXTRA_AUTOMATION, false)) {
             experimentButton.visibility = android.view.View.VISIBLE
             experimentButton.setOnClickListener { runExp001() }
             experimentButton.setOnLongClickListener {
@@ -114,6 +115,7 @@ class MainActivity : AppCompatActivity() {
             val reader = GuestPackageReader(this)
             importedRecord = record
             renderImportedRecord(record)
+            refreshLibrary()
             refreshInstances()
         } catch (error: Exception) {
             Log.e(importTag, "Import rejected", error)
@@ -126,8 +128,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun createInstance() {
-        val record = importedRecord ?: run { showWorkspaceError("Import a supported Guest APK first"); return }
-        runCatching { GuestInstanceStore(this).create(record) }.onSuccess { refreshInstances() }
+        val record = importedRecord ?: run { showWorkspaceError("Select a supported Guest revision first"); return }
+        runCatching { GuestInstanceStore(this).create(record) }.onSuccess { refreshInstances(); refreshLibrary() }
             .onFailure { showWorkspaceError(it.message ?: "Unable to create instance") }
     }
 
@@ -138,11 +140,11 @@ class MainActivity : AppCompatActivity() {
         records.forEach { instance ->
             val row = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.HORIZONTAL }
             row.addView(android.widget.Button(this).apply {
-                text = "Open ${instance.instanceId.take(8)}"
+                text = "Open ${instance.guestPackageName} r:${instance.guestRevisionId.take(8)} i:${instance.instanceId.take(8)}"
                 setOnClickListener { startActivity(Intent(this@MainActivity, GuestWorkspaceActivity::class.java).putExtra(GuestWorkspaceActivity.EXTRA_INSTANCE_ID, instance.instanceId)) }
             }, android.widget.LinearLayout.LayoutParams(0, -2, 1f))
             row.addView(android.widget.Button(this).apply {
-                text = "Delete"
+                text = "Delete instance ${instance.instanceId.take(8)}"
                 setOnClickListener {
                     androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
                         .setTitle("Delete instance?")
@@ -150,7 +152,7 @@ class MainActivity : AppCompatActivity() {
                         .setNegativeButton("Cancel", null)
                         .setPositiveButton("Delete") { _, _ ->
                             runCatching { GuestInstanceStore(this@MainActivity).delete(instance.instanceId) }
-                                .onSuccess { refreshInstances() }
+                                .onSuccess { refreshInstances(); refreshLibrary() }
                                 .onFailure { showWorkspaceError(it.message ?: "Unable to delete instance") }
                         }.show()
                 }
@@ -160,6 +162,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showWorkspaceError(message: String) { errorText.text = message; errorText.visibility = android.view.View.VISIBLE }
+
+    private fun refreshLibrary() {
+        val list = findViewById<android.widget.LinearLayout>(R.id.guestLibraryList) ?: return
+        list.removeAllViews()
+        val instances = runCatching { GuestInstanceStore(this).list() }.getOrElse { emptyList() }
+        val revisions = runCatching { GuestStore(this).records() }.getOrElse { showWorkspaceError("Guest Library is corrupted: ${it.message}"); return }
+        revisions.sortedByDescending { it.importedAt }.forEach { record ->
+            val row = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.VERTICAL; setPadding(0, 8, 0, 8) }
+            row.addView(TextView(this).apply { text = "${record.appLabel} | ${record.packageName}\nversion=${record.versionName ?: "?"} revision=${record.revisionId.take(8)} contract=v1" })
+            val actions = android.widget.LinearLayout(this)
+            actions.addView(android.widget.Button(this).apply { text = if (record.revisionId == importedRecord?.revisionId) "Selected ${record.revisionId.take(8)}" else "Select ${record.revisionId.take(8)}"; setOnClickListener { importedRecord = record; renderImportedRecord(record); refreshLibrary() } })
+            actions.addView(android.widget.Button(this).apply { text = "Delete revision ${record.revisionId.take(8)}"; setOnClickListener {
+                runCatching { GuestStore(this@MainActivity).deleteRevision(record.revisionId, GuestInstanceStore(this@MainActivity).list()) }
+                    .onSuccess { if (importedRecord?.revisionId == record.revisionId) importedRecord = null; refreshLibrary(); refreshInstances() }
+                    .onFailure { showWorkspaceError(it.message ?: "Unable to delete revision") }
+            } })
+            row.addView(actions); list.addView(row)
+        }
+    }
 
     private fun renderImportedRecord(record: com.example.appsandbox.model.GuestPackageRecord) {
         val reader = GuestPackageReader(this)
@@ -173,7 +194,7 @@ class MainActivity : AppCompatActivity() {
         summary.visibility = android.view.View.VISIBLE
     }
 
-    companion object { const val EXTRA_IMPORT_RESULT = "importResult" }
+    companion object { const val EXTRA_IMPORT_RESULT = "importResult"; const val EXTRA_AUTOMATION = "automation" }
 
     private fun queryDisplayName(uri: Uri): String? {
         if (uri.scheme != "content") return uri.lastPathSegment

@@ -73,13 +73,18 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:text="Supported Guest workspaces"
+            android:text="Guest Library"
             android:textStyle="bold" />
+        <LinearLayout
+            android:id="@+id/guestLibraryList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
         <Button
             android:id="@+id/createInstanceButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Create instance" />
+            android:text="Create instance from selected revision" />
         <LinearLayout
             android:id="@+id/workspaceList"
             android:layout_width="match_parent"

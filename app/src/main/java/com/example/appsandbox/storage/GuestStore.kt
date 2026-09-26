@@ -64,6 +64,18 @@ class GuestStore(private val context: Context) {
         (0 until records.length()).map { parse(records.getJSONObject(it)) }
     }
 
+    fun findRevision(revisionId: String): GuestPackageRecord? = records().firstOrNull { it.revisionId == revisionId }
+    fun recordsForPackage(packageName: String): List<GuestPackageRecord> = records().filter { it.packageName == packageName }
+    fun deleteRevision(revisionId: String, instances: List<com.example.appsandbox.model.GuestInstanceRecord>): Boolean = synchronized(LOCK) {
+        val current = records()
+        val target = current.firstOrNull { it.revisionId == revisionId } ?: return false
+        val next = GuestRevisionPolicy.remove(current, instances, revisionId)
+        writeRecordsAtomically(next)
+        val directory = File(target.apkPath).parentFile
+        if (directory?.deleteRecursively() == false) { writeRecordsAtomically(current); error("Unable to delete Guest revision artifact") }
+        true
+    }
+
     private fun writeReadOnlyBeforeContent(source: InputStream, destination: File, digest: MessageDigest): Long {
         destination.parentFile!!.mkdirs()
         val output = FileOutputStream(destination)
@@ -90,13 +102,17 @@ class GuestStore(private val context: Context) {
     }
 
     private fun appendRecordAtomically(record: GuestPackageRecord) {
+        val records = (if (registry.exists()) records() else emptyList()).toMutableList().apply { add(record) }
+        writeRecordsAtomically(records)
+    }
+
+    private fun writeRecordsAtomically(records: List<GuestPackageRecord>) {
         root.mkdirs()
-        val records = if (registry.exists()) readRegistry() else JSONArray()
-        records.put(record.toJson())
+        val array = JSONArray(records.map { it.toJson() })
         val atomic = AtomicFile(registry)
         val stream = atomic.startWrite()
         try {
-            stream.writer(Charsets.UTF_8).use { it.write(JSONObject().put("schemaVersion", 2).put("records", records).toString(2)) }
+            stream.writer(Charsets.UTF_8).use { it.write(JSONObject().put("schemaVersion", 2).put("records", array).toString(2)) }
             atomic.finishWrite(stream)
         } catch (error: Throwable) { atomic.failWrite(stream); throw error }
     }
