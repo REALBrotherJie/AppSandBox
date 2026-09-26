@@ -21,7 +21,8 @@ class Task29AutomationActivity : Activity() {
             finish(); return
         }
         intent.getStringExtra(EXTRA_PACKAGE)?.let { packageName ->
-            val resolved = GuestInstanceStore(this).list().single { it.guestPackageName == packageName }.instanceId
+            val ordinal = intent.getIntExtra(EXTRA_INSTANCE_ORDINAL, 0)
+            val resolved = GuestInstanceStore(this).list().filter { it.guestPackageName == packageName }.sortedBy { it.createdAt }[ordinal].instanceId
             startActivity(Intent(this, GuestWorkspaceActivity::class.java).putExtra(GuestWorkspaceActivity.EXTRA_INSTANCE_ID, resolved))
             finish(); return
         }
@@ -41,7 +42,7 @@ class Task29AutomationActivity : Activity() {
         val text = when {
             result == null -> "FAILURE: missing staged APK"
             result.phase != GuestImportPhase.SUCCESS -> "${result.phase}: ${result.message}"
-            else -> "SUCCESS: imported supported Guest contract v1"
+            else -> "SUCCESS: imported supported Guest contract v${result.record?.contractVersion}"
         }
         setContentView(TextView(this).apply { this.text = text; textSize = 18f; setPadding(32, 32, 32, 32) })
         if (result?.phase == GuestImportPhase.SUCCESS) {
@@ -49,5 +50,5 @@ class Task29AutomationActivity : Activity() {
             finish()
         }
     }
-    companion object { const val EXTRA_APK = "stagedApk"; const val EXTRA_INSTANCE = "instanceId"; const val EXTRA_PACKAGE = "packageName"; const val EXTRA_DELETE_REVISION = "deleteRevision"; const val EXTRA_TRY_DELETE_REVISION = "tryDeleteRevision" }
+    companion object { const val EXTRA_APK = "stagedApk"; const val EXTRA_INSTANCE = "instanceId"; const val EXTRA_PACKAGE = "packageName"; const val EXTRA_INSTANCE_ORDINAL = "instanceOrdinal"; const val EXTRA_DELETE_REVISION = "deleteRevision"; const val EXTRA_TRY_DELETE_REVISION = "tryDeleteRevision" }
 }

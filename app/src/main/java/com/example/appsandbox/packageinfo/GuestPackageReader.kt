@@ -4,6 +4,10 @@ import android.content.Context
 import android.content.pm.PackageInfo
 import android.os.Build
 import android.util.Log
+import com.example.appsandbox.contract.GuestActionSpecParser
+import com.example.appsandbox.contract.GuestContractVersions
+import com.example.appsandbox.contract.GuestContractResources
+import com.example.appsandbox.contract.GuestViewContract
 import com.example.appsandbox.model.ComponentSummary
 import com.example.appsandbox.model.GuestPackageRecord
 import java.io.File
@@ -12,6 +16,7 @@ class GuestPackageReader(private val context: Context) {
     companion object {
         const val CONTRACT_VERSION = "com.example.appsandbox.guest.CONTRACT_VERSION"
         const val VIEW_LAYOUT = "com.example.appsandbox.guest.VIEW_LAYOUT"
+        const val ACTION_SPEC = "com.example.appsandbox.guest.ACTION_SPEC"
     }
     fun validate(apkPath: String): PackageInfo {
         val packageManager = context.packageManager
@@ -71,14 +76,10 @@ class GuestPackageReader(private val context: Context) {
         } ?: error("The selected file is not a readable APK")
 
         val appInfo = info.applicationInfo ?: error("APK has no application information")
-        val metadata = appInfo.metaData ?: error("Unsupported Guest: missing View contract")
-        require(metadata.getInt(CONTRACT_VERSION, 0) == 1) { "Unsupported Guest: contract version" }
-        val layoutName = metadata.getString(VIEW_LAYOUT)
-        require(!layoutName.isNullOrBlank()) { "Unsupported Guest: missing View layout" }
         appInfo.sourceDir = apkPath
         appInfo.publicSourceDir = apkPath
         val guestResources = packageManager.getResourcesForApplication(appInfo)
-        require(guestResources.getIdentifier(layoutName, "layout", info.packageName) != 0) { "Unsupported Guest: layout resource not found" }
+        val contract = readContract(appInfo, guestResources, info.packageName)
         val label = packageManager.getApplicationLabel(appInfo).toString()
         val record = GuestPackageRecord(
             internalGuestId = guestId,
@@ -95,9 +96,35 @@ class GuestPackageReader(private val context: Context) {
                 info.services?.size ?: 0,
                 info.receivers?.size ?: 0,
                 info.providers?.size ?: 0
-            )
+            ),
+            contractVersion = contract.version
         )
         Log.i(tag, "Parsed ${record.packageName} from $apkPath")
         return record
+    }
+
+    fun readContract(apkPath: String): GuestViewContract {
+        val info = readApplicationInfo(apkPath)
+        return readContract(info, context.packageManager.getResourcesForApplication(info), info.packageName)
+    }
+
+    private fun readContract(
+        appInfo: android.content.pm.ApplicationInfo,
+        resources: android.content.res.Resources,
+        packageName: String
+    ): GuestViewContract {
+        val metadata = appInfo.metaData ?: error("Unsupported Guest: missing View contract")
+        val version = metadata.getInt(CONTRACT_VERSION, 0)
+        GuestContractVersions.requireSupported(version)
+        val layoutName = metadata.getString(VIEW_LAYOUT)
+        require(!layoutName.isNullOrBlank()) { "Unsupported Guest: missing View layout" }
+        GuestContractResources.requirePresent(resources.getIdentifier(layoutName, "layout", packageName), "layout")
+        if (version == 1) return GuestViewContract(1, layoutName, null, emptyList())
+        val specName = metadata.getString(ACTION_SPEC)
+        require(!specName.isNullOrBlank()) { "Unsupported Guest: missing action specification" }
+        val specId = GuestContractResources.requirePresent(resources.getIdentifier(specName, "raw", packageName), "action specification")
+        val text = resources.openRawResource(specId).bufferedReader().use { it.readText() }
+        val (stateView, actions) = GuestActionSpecParser.parse(text)
+        return GuestViewContract(2, layoutName, stateView, actions)
     }
 }

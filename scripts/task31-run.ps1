@@ -13,8 +13,8 @@ A @('install','-r',$hostApk);A @('shell','pm','clear','com.example.appsandbox');
 Import '/data/data/com.example.appsandbox/files/a.apk';Tap 'Create instance from selected revision'
 Import '/data/data/com.example.appsandbox/files/b.apk';Tap 'Create instance from selected revision'
 $x=Xml;if($x -notmatch 'com.example.appsandbox.testguest' -or $x -notmatch 'com.example.appsandbox.independentguest'){throw 'two packages missing'}
-$ma=[regex]::Match($x,'GuestTestApp[^\"]*revision=([A-F0-9]{8}) contract=v1','IgnoreCase');if(!$ma.Success){throw 'Guest A revision missing'}
-OpenPackage 'com.example.appsandbox.testguest';if((Xml)-notmatch'GUEST_A_MARKER_1D1C4B6A'){throw 'Guest A marker missing'};Tap 'Increment'
+$ma=[regex]::Match($x,'GuestTestApp[^\"]*revision=([A-F0-9]{8}) contract=v2','IgnoreCase');if(!$ma.Success){throw 'Guest A revision missing'}
+OpenPackage 'com.example.appsandbox.testguest';if((Xml)-notmatch'GUEST_A_MARKER_1D1C4B6A'){throw 'Guest A marker missing'};Tap 'Guest Increment'
 OpenPackage 'com.example.appsandbox.independentguest';if((Xml)-notmatch'INDEPENDENT_GUEST_MARKER_B'){throw 'Guest B marker missing'};Tap 'Increment';Tap 'Increment'
 A @('shell','am','force-stop','com.example.appsandbox');OpenPackage 'com.example.appsandbox.testguest';if((Xml)-notmatch'Counter: 1'){throw 'A counter lost'}
 A @('shell','am','start','-S','-W','-n','com.example.appsandbox/.automation.Task29AutomationActivity','--es','tryDeleteRevision',$ma.Groups[1].Value)|Out-Null;Start-Sleep -Seconds 1;if((Xml)-notmatch'BLOCKED: Delete instances using this revision first'){throw 'reference protection missing'}

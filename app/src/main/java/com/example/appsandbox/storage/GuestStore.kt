@@ -121,7 +121,7 @@ class GuestStore(private val context: Context) {
         val summary = value.getJSONObject("componentSummary")
         return GuestPackageRecord(
             internalGuestId = value.getString("internalGuestId"), packageName = value.getString("packageName"), versionName = value.optString("versionName").ifEmpty { null }, versionCode = value.getLong("versionCode"), apkPath = value.getString("apkPath"), appLabel = value.getString("appLabel"), importedAt = value.getLong("importedAt"),
-            componentSummary = ComponentSummary(summary.getInt("activityCount"), summary.getInt("serviceCount"), summary.getInt("receiverCount"), summary.getInt("providerCount")), revisionId = value.optString("revisionId", value.getString("internalGuestId")), sha256 = value.optString("sha256").ifEmpty { null }, fileSize = value.optLong("fileSize", -1), schemaVersion = value.optInt("schemaVersion", 1)
+            componentSummary = ComponentSummary(summary.getInt("activityCount"), summary.getInt("serviceCount"), summary.getInt("receiverCount"), summary.getInt("providerCount")), revisionId = value.optString("revisionId", value.getString("internalGuestId")), sha256 = value.optString("sha256").ifEmpty { null }, fileSize = value.optLong("fileSize", -1), schemaVersion = value.optInt("schemaVersion", 1), contractVersion = value.optInt("contractVersion", 1)
         )
     }
 

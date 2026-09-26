@@ -8,4 +8,24 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="GUEST_A_MARKER_1D1C4B6A" />
+    <TextView
+        android:id="@+id/guest_counter"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Counter: 0" />
+    <Button
+        android:id="@+id/guest_increment"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Guest Increment" />
+    <Button
+        android:id="@+id/guest_reset"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Guest Reset" />
+    <Button
+        android:id="@+id/guest_toggle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Guest Toggle" />
 </LinearLayout>

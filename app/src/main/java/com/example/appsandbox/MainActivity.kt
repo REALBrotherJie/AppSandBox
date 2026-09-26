@@ -170,7 +170,7 @@ class MainActivity : AppCompatActivity() {
         val revisions = runCatching { GuestStore(this).records() }.getOrElse { showWorkspaceError("Guest Library is corrupted: ${it.message}"); return }
         revisions.sortedByDescending { it.importedAt }.forEach { record ->
             val row = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.VERTICAL; setPadding(0, 8, 0, 8) }
-            row.addView(TextView(this).apply { text = "${record.appLabel} | ${record.packageName}\nversion=${record.versionName ?: "?"} revision=${record.revisionId.take(8)} contract=v1" })
+            row.addView(TextView(this).apply { text = "${record.appLabel} | ${record.packageName}\nversion=${record.versionName ?: "?"} revision=${record.revisionId.take(8)} contract=v${record.contractVersion}" })
             val actions = android.widget.LinearLayout(this)
             actions.addView(android.widget.Button(this).apply { text = if (record.revisionId == importedRecord?.revisionId) "Selected ${record.revisionId.take(8)}" else "Select ${record.revisionId.take(8)}"; setOnClickListener { importedRecord = record; renderImportedRecord(record); refreshLibrary() } })
             actions.addView(android.widget.Button(this).apply { text = "Delete revision ${record.revisionId.take(8)}"; setOnClickListener {
@@ -189,8 +189,8 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.appLabel).text = record.appLabel
         findViewById<TextView>(R.id.packageName).text = record.packageName
         findViewById<TextView>(R.id.version).text = "Version: ${record.versionName ?: "(none)"} (${record.versionCode})"
-        findViewById<TextView>(R.id.componentCounts).text = "Revision: ${record.revisionId.take(8)}  Supported contract: v1"
-        findViewById<TextView>(R.id.importStatus).text = "Imported successfully; supported Guest contract v1"
+        findViewById<TextView>(R.id.componentCounts).text = "Revision: ${record.revisionId.take(8)}  Supported contract: v${record.contractVersion}"
+        findViewById<TextView>(R.id.importStatus).text = "Imported successfully; supported Guest contract v${record.contractVersion}"
         summary.visibility = android.view.View.VISIBLE
     }
 

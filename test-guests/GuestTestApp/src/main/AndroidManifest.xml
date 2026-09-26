@@ -4,8 +4,9 @@
         android:name=".runtime.Exp003GuestApplication"
         android:theme="@style/Exp003GuestTheme"
         android:appComponentFactory=".runtime.Exp003GuestComponentFactory">
-        <meta-data android:name="com.example.appsandbox.guest.CONTRACT_VERSION" android:value="1" />
+        <meta-data android:name="com.example.appsandbox.guest.CONTRACT_VERSION" android:value="2" />
         <meta-data android:name="com.example.appsandbox.guest.VIEW_LAYOUT" android:value="exp002_test_layout" />
+        <meta-data android:name="com.example.appsandbox.guest.ACTION_SPEC" android:value="guest_actions" />
         <activity android:name=".runtime.GuestMainActivity" android:exported="false" />
     </application>
 </manifest>

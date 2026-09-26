@@ -1,0 +1,23 @@
+param([Parameter(Mandatory=$true)][string]$Serial)
+$ErrorActionPreference='Stop'; $adb='D:/Company/Install/Android/SDK/platform-tools/adb.exe'; $root=Split-Path $PSScriptRoot -Parent
+$report=Join-Path $root "build/reports/task33/$Serial"; New-Item -ItemType Directory -Force $report|Out-Null
+function A([string[]]$v){& $adb -s $Serial @v 2>&1|Tee-Object -FilePath (Join-Path $report 'adb-last.txt');if($LASTEXITCODE -ne 0){throw "adb failed: $v"}}
+function Xml{A @('shell','uiautomator','dump','/sdcard/t33.xml')|Out-Null;A @('pull','/sdcard/t33.xml',(Join-Path $report 'ui.xml'))|Out-Null;Get-Content -Raw (Join-Path $report 'ui.xml')}
+function AssertXml([string]$pattern,[string]$message){if((Xml)-notmatch $pattern){throw $message}}
+function Tap([string]$prefix){$x=Xml;$p='text="('+[regex]::Escape($prefix)+'[^"]*)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"';$m=[regex]::Match($x,$p,[System.Text.RegularExpressions.RegexOptions]::IgnoreCase);if(!$m.Success){throw "UI not found: $prefix"};$cx=([int]$m.Groups[2].Value+[int]$m.Groups[4].Value)/2;$cy=([int]$m.Groups[3].Value+[int]$m.Groups[5].Value)/2;A @('shell','input','tap',"$cx","$cy")|Out-Null;Start-Sleep -Milliseconds 500}
+function Import([string]$path){A @('shell','am','start','-S','-W','-n','com.example.appsandbox/.automation.Task29AutomationActivity','--es','stagedApk',$path)|Out-Null;Start-Sleep -Seconds 1}
+function OpenPackage([string]$packageName,[int]$ordinal=0){A @('shell','am','start','-S','-W','-n','com.example.appsandbox/.automation.Task29AutomationActivity','--es','packageName',$packageName,'--ei','instanceOrdinal',"$ordinal")|Out-Null;Start-Sleep -Seconds 1}
+$api=(& $adb -s $Serial shell getprop ro.build.version.sdk).Trim();if($Serial -eq '7b670025' -and $api -ne '31'){throw "API $api"};if($Serial -eq 'emulator-5554' -and $api -ne '36'){throw "API $api"}
+$hostApk=Join-Path $root 'app/build/outputs/apk/debug/app-debug.apk';$v2=Join-Path $root 'test-guests/GuestTestApp/build/outputs/apk/debug/GuestTestApp-debug.apk';$v1=Join-Path $root 'test-guests/IndependentGuest/build/outputs/apk/debug/IndependentGuest-debug.apk'
+A @('install','-r',$hostApk);A @('shell','pm','clear','com.example.appsandbox');A @('push',$v2,'/data/local/tmp/v2.apk');A @('push',$v1,'/data/local/tmp/v1.apk');A @('shell','run-as','com.example.appsandbox','mkdir','-p','files');A @('shell','run-as','com.example.appsandbox','cp','/data/local/tmp/v2.apk','files/v2.apk');A @('shell','run-as','com.example.appsandbox','cp','/data/local/tmp/v1.apk','files/v1.apk')
+Import '/data/data/com.example.appsandbox/files/v2.apk';Tap 'Create instance from selected revision';Tap 'Create instance from selected revision'
+Import '/data/data/com.example.appsandbox/files/v1.apk';Tap 'Create instance from selected revision'
+$library=Xml;if($library -notmatch 'com.example.appsandbox.testguest[^\"]*contract=v2' -or $library -notmatch 'com.example.appsandbox.independentguest[^\"]*contract=v1'){throw 'v1/v2 library contract status missing'}
+OpenPackage 'com.example.appsandbox.testguest' 0;AssertXml 'contract=v2' 'v2 workspace missing';AssertXml 'GUEST_A_MARKER_1D1C4B6A' 'v2 marker missing';AssertXml 'Guest Increment' 'Guest actions missing'
+Tap 'Guest Increment';AssertXml 'Counter: 1' 'increment failed';Tap 'Guest Toggle';AssertXml 'Counter: 0' 'toggle-to-zero failed';Tap 'Guest Toggle';AssertXml 'Counter: 1' 'toggle-to-one failed';Tap 'Guest Reset';AssertXml 'Counter: 0' 'reset failed';Tap 'Guest Increment'
+OpenPackage 'com.example.appsandbox.testguest' 1;AssertXml 'Counter: 0' 'second instance leaked state';Tap 'Guest Increment';Tap 'Guest Increment';AssertXml 'Counter: 2' 'second instance count failed'
+A @('shell','am','force-stop','com.example.appsandbox');OpenPackage 'com.example.appsandbox.testguest' 0;AssertXml 'Counter: 1' 'restart lost first instance state';Tap 'Delete current instance';Tap 'Confirm delete instance'
+OpenPackage 'com.example.appsandbox.testguest' 0;AssertXml 'Counter: 2' 'remaining v2 instance changed after deletion';Tap 'Guest Reset';Tap 'Guest Toggle';AssertXml 'Counter: 1' 'remaining v2 action failed after deletion'
+OpenPackage 'com.example.appsandbox.independentguest' 0;AssertXml 'contract=v1' 'v1 workspace missing';AssertXml 'INDEPENDENT_GUEST_MARKER_B' 'v1 marker missing';Tap 'Increment';AssertXml 'Counter: 1' 'v1 Host action regressed'
+if(((& $adb -s $Serial shell pm path com.example.appsandbox.testguest)-join'') -or ((& $adb -s $Serial shell pm path com.example.appsandbox.independentguest)-join'')){throw 'Guest installed'}
+"contractV2=PASS`ndeclarativeActions=PASS`ninstanceIsolation=PASS`nrestart=PASS`ndeleteIsolation=PASS`ncontractV1=PASS`nguestInstalled=false"|Set-Content (Join-Path $report 'result.txt')

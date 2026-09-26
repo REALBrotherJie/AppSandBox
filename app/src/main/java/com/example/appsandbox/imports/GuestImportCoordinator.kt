@@ -13,7 +13,7 @@ class GuestImportCoordinator(private val context: Context) {
             val reader = GuestPackageReader(context)
             reader.validate(source.path)
             val record = GuestStore(context).importApk(FileInputStream(source)) { path -> reader.read(path, source.nameWithoutExtension) }
-            GuestImportState(GuestImportPhase.SUCCESS, record, "Guest contract v1 已通过")
+            GuestImportState(GuestImportPhase.SUCCESS, record, "Guest contract v${record.contractVersion} 已通过")
         } catch (error: Throwable) {
             val message = error.message ?: "APK 无效"
             val unsupported = message.contains("Unsupported Guest", true) || message.contains("contract", true)

@@ -27,7 +27,8 @@ data class GuestPackageRecord(
     val revisionId: String = internalGuestId,
     val sha256: String? = null,
     val fileSize: Long = -1L,
-    val schemaVersion: Int = 1
+    val schemaVersion: Int = 1,
+    val contractVersion: Int = 1
 ) {
     fun toJson() = JSONObject()
         .put("internalGuestId", internalGuestId)
@@ -42,4 +43,5 @@ data class GuestPackageRecord(
         .put("sha256", sha256)
         .put("fileSize", fileSize)
         .put("schemaVersion", schemaVersion)
+        .put("contractVersion", contractVersion)
 }
