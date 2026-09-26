@@ -60,3 +60,7 @@ Run separately on API31 Xiaomi Mi 10 and API36 emulator-5554. Capture device/API
 ## Decision
 
 The smallest useful next experiment is `ACT-004B-P0 observation-only internal surface probe`. API31 and API36 require separate descriptors. Binder, Hook and Root/Xposed are not needed. Hidden/internal access is needed only to attempt observation and may legitimately fail closed. P1 and P2 remain unauthorized.
+
+## ACT-004B-P0 actual result
+
+API31 and API36 both completed declaration-only discovery and external Host fallback checks. Both results are `STATIC_SURFACE_ONLY`: classes and declarations were found, but no runtime `ClientTransaction`, `LaunchActivityItem`, `ActivityClientRecord` or `TransactionExecutor` instance was observed. No transaction mutation, internal invocation, Guest construction, attach or lifecycle occurred. P1 and P2 remain unauthorized.
