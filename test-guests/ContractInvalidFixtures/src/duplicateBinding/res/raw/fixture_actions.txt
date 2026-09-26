@@ -1,0 +1,4 @@
+schema=1
+state=guest_counter|counter
+action=guest_increment|counter.increment|counter
+action=guest_increment|counter.reset|counter

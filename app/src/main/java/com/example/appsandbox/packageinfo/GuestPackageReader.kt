@@ -4,12 +4,11 @@ import android.content.Context
 import android.content.pm.PackageInfo
 import android.os.Build
 import android.util.Log
-import com.example.appsandbox.contract.GuestActionSpecParser
-import com.example.appsandbox.contract.GuestContractVersions
-import com.example.appsandbox.contract.GuestContractResources
 import com.example.appsandbox.contract.GuestViewContract
 import com.example.appsandbox.model.ComponentSummary
 import com.example.appsandbox.model.GuestPackageRecord
+import com.example.appsandbox.packageinfo.validation.GuestContractRejection
+import com.example.appsandbox.packageinfo.validation.GuestContractValidation
 import java.io.File
 
 class GuestPackageReader(private val context: Context) {
@@ -115,16 +114,23 @@ class GuestPackageReader(private val context: Context) {
     ): GuestViewContract {
         val metadata = appInfo.metaData ?: error("Unsupported Guest: missing View contract")
         val version = metadata.getInt(CONTRACT_VERSION, 0)
-        GuestContractVersions.requireSupported(version)
-        val layoutName = metadata.getString(VIEW_LAYOUT)
-        require(!layoutName.isNullOrBlank()) { "Unsupported Guest: missing View layout" }
-        GuestContractResources.requirePresent(resources.getIdentifier(layoutName, "layout", packageName), "layout")
+        GuestContractValidation.requireSupportedVersion(version)
+        val layoutName = GuestContractValidation.requireMetadata(
+            metadata.getString(VIEW_LAYOUT),
+            GuestContractRejection.MISSING_LAYOUT
+        )
+        val layoutId = resources.getIdentifier(layoutName, "layout", packageName)
+        GuestContractValidation.requireResource(layoutId, GuestContractRejection.MISSING_LAYOUT_RESOURCE)
         if (version == 1) return GuestViewContract(1, layoutName, null, emptyList())
-        val specName = metadata.getString(ACTION_SPEC)
-        require(!specName.isNullOrBlank()) { "Unsupported Guest: missing action specification" }
-        val specId = GuestContractResources.requirePresent(resources.getIdentifier(specName, "raw", packageName), "action specification")
+        val specName = GuestContractValidation.requireMetadata(
+            metadata.getString(ACTION_SPEC),
+            GuestContractRejection.MISSING_ACTION_SPEC
+        )
+        val specId = resources.getIdentifier(specName, "raw", packageName)
+        GuestContractValidation.requireResource(specId, GuestContractRejection.MISSING_ACTION_RESOURCE)
         val text = resources.openRawResource(specId).bufferedReader().use { it.readText() }
-        val (stateView, actions) = GuestActionSpecParser.parse(text)
+        val (stateView, actions) = GuestContractValidation.parseActionSpec(text)
+        GuestContractValidation.validateLayout(resources, layoutId, stateView, actions)
         return GuestViewContract(2, layoutName, stateView, actions)
     }
 }

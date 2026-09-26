@@ -1,0 +1,4 @@
+schema=1
+unknown=value
+state=guest_counter|counter
+action=guest_increment|counter.increment|counter
