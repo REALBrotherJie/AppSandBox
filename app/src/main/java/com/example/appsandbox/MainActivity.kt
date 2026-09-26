@@ -11,10 +11,12 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.appsandbox.packageinfo.GuestPackageReader
+import com.example.appsandbox.imports.GuestImportCoordinator
+import com.example.appsandbox.imports.GuestImportPhase
+import com.example.appsandbox.imports.GuestImportSession
 import com.example.appsandbox.storage.GuestStore
 import com.example.appsandbox.storage.GuestInstanceStore
 import java.io.File
-import java.io.FileInputStream
 
 class MainActivity : AppCompatActivity() {
     private val importTag = "AppSandbox.Import"
@@ -22,13 +24,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var summary: android.view.View
     private lateinit var errorText: TextView
     private var importedRecord: com.example.appsandbox.model.GuestPackageRecord? = null
+    private lateinit var importSession: GuestImportSession
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         summary = findViewById(R.id.guestSummary)
         errorText = findViewById(R.id.errorText)
-        importedRecord = GuestStore(this).latestRecord()
+        importedRecord = runCatching { GuestStore(this).latestRecord() }.onFailure { showWorkspaceError("Guest revision 状态不可用: ${it.message}") }.getOrNull()
+        importSession = GuestImportSession(importedRecord)
+        importedRecord?.let { renderImportedRecord(it) }
+        intent.getStringExtra(EXTRA_IMPORT_RESULT)?.let { showWorkspaceError(it) }
         findViewById<android.view.View>(R.id.createInstanceButton).setOnClickListener { createInstance() }
         refreshInstances()
         val experimentButton = findViewById<android.view.View>(R.id.runExperimentButton)
@@ -49,6 +55,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         findViewById<android.view.View>(R.id.importApkButton).setOnClickListener {
+            importSession.selecting()
             startActivityForResult(
                 Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                     addCategory(Intent.CATEGORY_OPENABLE)
@@ -70,12 +77,16 @@ class MainActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == openApk && resultCode == Activity.RESULT_OK) {
-            data?.data?.let { importUri(it) }
+            data?.data?.let { importUri(it) } ?: run { importSession.canceled(); findViewById<TextView>(R.id.importStatus).text = importSession.state.message }
+        } else if (requestCode == openApk) {
+            importSession.canceled(); findViewById<TextView>(R.id.importStatus).text = importSession.state.message
         }
     }
 
     private fun importUri(uri: Uri) {
         errorText.visibility = android.view.View.GONE
+        importSession.importing()
+        findViewById<TextView>(R.id.importStatus).text = "Importing..."
         var temporary: File? = null
         try {
             val resolver = contentResolver
@@ -90,23 +101,19 @@ class MainActivity : AppCompatActivity() {
             resolver.openInputStream(uri)?.use { input ->
                 temporary.outputStream().use { output -> input.copyTo(output) }
             } ?: error("Unable to open the selected document")
+            val result = GuestImportCoordinator(this).importFile(temporary)
+            importSession.complete(result)
+            if (result.phase != GuestImportPhase.SUCCESS || result.record == null) {
+                val message = result.message ?: "APK import failed"
+                findViewById<TextView>(R.id.importStatus).text = message
+                errorText.text = message
+                errorText.visibility = android.view.View.VISIBLE
+                return
+            }
+            val record = result.record
             val reader = GuestPackageReader(this)
-            reader.validate(temporary.absolutePath)
-            val record = GuestStore(this).importApk(
-                FileInputStream(temporary)
-            ) { path -> reader.read(path, FileIds.fromPath(path)) }
-            val info = reader.read(record.apkPath, record.internalGuestId)
             importedRecord = record
-            val appInfo = reader.readApplicationInfo(record.apkPath)
-            findViewById<ImageView>(R.id.appIcon).setImageDrawable(packageManager.getApplicationIcon(appInfo))
-            findViewById<TextView>(R.id.appLabel).text = record.appLabel
-            findViewById<TextView>(R.id.packageName).text = record.packageName
-            findViewById<TextView>(R.id.version).text = "Version: ${record.versionName ?: "(none)"} (${record.versionCode})"
-            findViewById<TextView>(R.id.componentCounts).text =
-                "Activities: ${info.componentSummary.activityCount}  Services: ${info.componentSummary.serviceCount}\n" +
-                    "Receivers: ${info.componentSummary.receiverCount}  Providers: ${info.componentSummary.providerCount}"
-            findViewById<TextView>(R.id.importStatus).text = "Imported successfully"
-            summary.visibility = android.view.View.VISIBLE
+            renderImportedRecord(record)
             refreshInstances()
         } catch (error: Exception) {
             Log.e(importTag, "Import rejected", error)
@@ -153,6 +160,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showWorkspaceError(message: String) { errorText.text = message; errorText.visibility = android.view.View.VISIBLE }
+
+    private fun renderImportedRecord(record: com.example.appsandbox.model.GuestPackageRecord) {
+        val reader = GuestPackageReader(this)
+        val appInfo = reader.readApplicationInfo(record.apkPath)
+        findViewById<ImageView>(R.id.appIcon).setImageDrawable(packageManager.getApplicationIcon(appInfo))
+        findViewById<TextView>(R.id.appLabel).text = record.appLabel
+        findViewById<TextView>(R.id.packageName).text = record.packageName
+        findViewById<TextView>(R.id.version).text = "Version: ${record.versionName ?: "(none)"} (${record.versionCode})"
+        findViewById<TextView>(R.id.componentCounts).text = "Revision: ${record.revisionId.take(8)}  Supported contract: v1"
+        findViewById<TextView>(R.id.importStatus).text = "Imported successfully; supported Guest contract v1"
+        summary.visibility = android.view.View.VISIBLE
+    }
+
+    companion object { const val EXTRA_IMPORT_RESULT = "importResult" }
 
     private fun queryDisplayName(uri: Uri): String? {
         if (uri.scheme != "content") return uri.lastPathSegment
@@ -253,9 +274,4 @@ class MainActivity : AppCompatActivity() {
             errorText.visibility = android.view.View.VISIBLE
         }
     }
-}
-
-private object FileIds {
-    fun fromPath(path: String): String = java.io.File(path).parentFile?.name
-        ?: error("Unable to determine guest storage id")
 }

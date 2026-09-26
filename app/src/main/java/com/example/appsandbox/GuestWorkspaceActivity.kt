@@ -9,6 +9,7 @@ import com.example.appsandbox.experiments.GuestWorkspaceContext
 import com.example.appsandbox.model.GuestInstanceRecord
 import com.example.appsandbox.packageinfo.GuestPackageReader
 import com.example.appsandbox.storage.GuestInstanceStore
+import com.example.appsandbox.storage.GuestArtifactVerifier
 import dalvik.system.DexClassLoader
 import java.io.File
 
@@ -22,6 +23,11 @@ class GuestWorkspaceActivity : Activity() {
         store = GuestInstanceStore(this)
         val found = intent.getStringExtra(EXTRA_INSTANCE_ID)?.let { store.get(it) }
         if (found == null) { show("Instance unavailable or registry is corrupted"); return }
+        val artifact = File(found.guestApkPath)
+        if (!artifact.isFile || !GuestArtifactVerifier.sha256(artifact).equals(found.guestSha256, true)) {
+            show("Guest revision is missing or changed. Re-import the supported Guest before using this instance.")
+            return
+        }
         instance = found
         buildUi(); render()
     }
