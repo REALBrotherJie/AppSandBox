@@ -7,7 +7,7 @@ $adb = 'D:/Company/Install/Android/SDK/platform-tools/adb.exe'
 $root = Split-Path $PSScriptRoot -Parent
 $hostApk = "$root/app/build/outputs/apk/debug/app-debug.apk"
 $guestApk = "$root/test-guests/GuestTestApp/build/outputs/apk/debug/GuestTestApp-debug.apk"
-$evidence = Join-Path $root "docs/experiments/evidence/task27/$Serial"
+$evidence = Join-Path $root "build/reports/task27/$Serial"
 New-Item -ItemType Directory -Force $evidence | Out-Null
 function A([string[]]$argv) { & $adb -s $Serial @argv; if ($LASTEXITCODE -ne 0) { throw "adb failed: $argv" } }
 function Read-App([string]$name) { (& $adb -s $Serial shell run-as com.example.appsandbox cat "files/$name") -join "`n" }

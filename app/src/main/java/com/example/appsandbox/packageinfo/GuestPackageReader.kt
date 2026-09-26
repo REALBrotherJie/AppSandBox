@@ -9,16 +9,20 @@ import com.example.appsandbox.model.GuestPackageRecord
 import java.io.File
 
 class GuestPackageReader(private val context: Context) {
+    companion object {
+        const val CONTRACT_VERSION = "com.example.appsandbox.guest.CONTRACT_VERSION"
+        const val VIEW_LAYOUT = "com.example.appsandbox.guest.VIEW_LAYOUT"
+    }
     fun validate(apkPath: String): PackageInfo {
         val packageManager = context.packageManager
         val info = if (Build.VERSION.SDK_INT >= 33) {
             packageManager.getPackageArchiveInfo(
                 apkPath,
-                android.content.pm.PackageManager.PackageInfoFlags.of(0)
+                android.content.pm.PackageManager.PackageInfoFlags.of(android.content.pm.PackageManager.GET_META_DATA.toLong())
             )
         } else {
             @Suppress("DEPRECATION")
-            packageManager.getPackageArchiveInfo(apkPath, 0)
+            packageManager.getPackageArchiveInfo(apkPath, android.content.pm.PackageManager.GET_META_DATA)
         } ?: error("Selected file is not a readable APK")
         require(!info.packageName.isNullOrBlank()) { "Selected APK has no package name" }
         Log.i(tag, "Validated APK package=${info.packageName} path=$apkPath")
@@ -29,13 +33,13 @@ class GuestPackageReader(private val context: Context) {
     fun readApplicationInfo(apkPath: String): android.content.pm.ApplicationInfo {
         val packageManager = context.packageManager
         val info = if (Build.VERSION.SDK_INT >= 33) {
-            packageManager.getPackageArchiveInfo(
-                apkPath,
-                android.content.pm.PackageManager.PackageInfoFlags.of(0)
-            )
+                packageManager.getPackageArchiveInfo(
+                    apkPath,
+                    android.content.pm.PackageManager.PackageInfoFlags.of(android.content.pm.PackageManager.GET_META_DATA.toLong())
+                )
         } else {
             @Suppress("DEPRECATION")
-            packageManager.getPackageArchiveInfo(apkPath, 0)
+            packageManager.getPackageArchiveInfo(apkPath, android.content.pm.PackageManager.GET_META_DATA)
         } ?: error("The selected file is not a readable APK")
         return info.applicationInfo?.also {
             it.sourceDir = apkPath
@@ -49,7 +53,7 @@ class GuestPackageReader(private val context: Context) {
             packageManager.getPackageArchiveInfo(
                 apkPath,
                 android.content.pm.PackageManager.PackageInfoFlags.of(
-                    android.content.pm.PackageManager.GET_ACTIVITIES.toLong() or
+                    android.content.pm.PackageManager.GET_META_DATA.toLong() or android.content.pm.PackageManager.GET_ACTIVITIES.toLong() or
                         android.content.pm.PackageManager.GET_SERVICES.toLong() or
                         android.content.pm.PackageManager.GET_RECEIVERS.toLong() or
                         android.content.pm.PackageManager.GET_PROVIDERS.toLong()
@@ -59,7 +63,7 @@ class GuestPackageReader(private val context: Context) {
             @Suppress("DEPRECATION")
             packageManager.getPackageArchiveInfo(
                 apkPath,
-                android.content.pm.PackageManager.GET_ACTIVITIES or
+                    android.content.pm.PackageManager.GET_META_DATA or android.content.pm.PackageManager.GET_ACTIVITIES or
                     android.content.pm.PackageManager.GET_SERVICES or
                     android.content.pm.PackageManager.GET_RECEIVERS or
                     android.content.pm.PackageManager.GET_PROVIDERS
@@ -67,6 +71,9 @@ class GuestPackageReader(private val context: Context) {
         } ?: error("The selected file is not a readable APK")
 
         val appInfo = info.applicationInfo ?: error("APK has no application information")
+        val metadata = appInfo.metaData ?: error("Unsupported Guest: missing View contract")
+        require(metadata.getInt(CONTRACT_VERSION, 0) == 1) { "Unsupported Guest: contract version" }
+        require(!metadata.getString(VIEW_LAYOUT).isNullOrBlank()) { "Unsupported Guest: missing View layout" }
         appInfo.sourceDir = apkPath
         appInfo.publicSourceDir = apkPath
         val label = packageManager.getApplicationLabel(appInfo).toString()

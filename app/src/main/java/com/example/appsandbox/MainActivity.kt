@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.appsandbox.packageinfo.GuestPackageReader
 import com.example.appsandbox.storage.GuestStore
+import com.example.appsandbox.storage.GuestInstanceStore
 import java.io.File
 import java.io.FileInputStream
 
@@ -28,6 +29,8 @@ class MainActivity : AppCompatActivity() {
         summary = findViewById(R.id.guestSummary)
         errorText = findViewById(R.id.errorText)
         importedRecord = GuestStore(this).latestRecord()
+        findViewById<android.view.View>(R.id.createInstanceButton).setOnClickListener { createInstance() }
+        refreshInstances()
         val experimentButton = findViewById<android.view.View>(R.id.runExperimentButton)
         if (BuildConfig.DEBUG) {
             experimentButton.visibility = android.view.View.VISIBLE
@@ -104,6 +107,7 @@ class MainActivity : AppCompatActivity() {
                     "Receivers: ${info.componentSummary.receiverCount}  Providers: ${info.componentSummary.providerCount}"
             findViewById<TextView>(R.id.importStatus).text = "Imported successfully"
             summary.visibility = android.view.View.VISIBLE
+            refreshInstances()
         } catch (error: Exception) {
             Log.e(importTag, "Import rejected", error)
             errorText.text = error.message ?: "APK import failed"
@@ -113,6 +117,42 @@ class MainActivity : AppCompatActivity() {
             temporary?.delete()
         }
     }
+
+    private fun createInstance() {
+        val record = importedRecord ?: run { showWorkspaceError("Import a supported Guest APK first"); return }
+        runCatching { GuestInstanceStore(this).create(record) }.onSuccess { refreshInstances() }
+            .onFailure { showWorkspaceError(it.message ?: "Unable to create instance") }
+    }
+
+    private fun refreshInstances() {
+        val list = findViewById<android.widget.LinearLayout>(R.id.workspaceList) ?: return
+        list.removeAllViews()
+        val records = runCatching { GuestInstanceStore(this).list() }.getOrElse { showWorkspaceError(it.message ?: "Instance registry is corrupted"); return }
+        records.forEach { instance ->
+            val row = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.HORIZONTAL }
+            row.addView(android.widget.Button(this).apply {
+                text = "Open ${instance.instanceId.take(8)}"
+                setOnClickListener { startActivity(Intent(this@MainActivity, GuestWorkspaceActivity::class.java).putExtra(GuestWorkspaceActivity.EXTRA_INSTANCE_ID, instance.instanceId)) }
+            }, android.widget.LinearLayout.LayoutParams(0, -2, 1f))
+            row.addView(android.widget.Button(this).apply {
+                text = "Delete"
+                setOnClickListener {
+                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Delete instance?")
+                        .setMessage(instance.instanceId)
+                        .setNegativeButton("Cancel", null)
+                        .setPositiveButton("Delete") { _, _ ->
+                            runCatching { GuestInstanceStore(this@MainActivity).delete(instance.instanceId) }
+                                .onSuccess { refreshInstances() }
+                                .onFailure { showWorkspaceError(it.message ?: "Unable to delete instance") }
+                        }.show()
+                }
+            })
+            list.addView(row)
+        }
+    }
+
+    private fun showWorkspaceError(message: String) { errorText.text = message; errorText.visibility = android.view.View.VISIBLE }
 
     private fun queryDisplayName(uri: Uri): String? {
         if (uri.scheme != "content") return uri.lastPathSegment

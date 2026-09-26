@@ -1,6 +1,0 @@
-serial=emulator-5554
-api=36
-abi=x86_64,arm64-v8a
-pageSize=4096
-hostApkSha256=c1d36baf90427d47a0327adfedfb1dd3cd8fc1c2bfb2df296f3a194812037c8a
-guestApkSha256=6b3c0d1758be4f01156a7e74620614f09add22412f088ebfaa6a3fe209a7ade3

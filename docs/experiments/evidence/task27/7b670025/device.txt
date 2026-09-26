@@ -1,6 +1,0 @@
-serial=7b670025
-api=31
-abi=arm64-v8a,armeabi-v7a,armeabi
-pageSize=4096
-hostApkSha256=c1d36baf90427d47a0327adfedfb1dd3cd8fc1c2bfb2df296f3a194812037c8a
-guestApkSha256=6b3c0d1758be4f01156a7e74620614f09add22412f088ebfaa6a3fe209a7ade3

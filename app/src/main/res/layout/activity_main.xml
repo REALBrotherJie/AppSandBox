@@ -68,5 +68,22 @@
             android:layout_marginTop="16dp"
             android:textColor="#B00020"
             android:visibility="gone" />
+        <TextView
+            android:id="@+id/workspaceTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Supported Guest workspaces"
+            android:textStyle="bold" />
+        <Button
+            android:id="@+id/createInstanceButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Create instance" />
+        <LinearLayout
+            android:id="@+id/workspaceList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
     </LinearLayout>
 </ScrollView>
