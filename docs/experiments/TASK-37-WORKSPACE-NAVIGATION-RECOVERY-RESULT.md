@@ -16,12 +16,12 @@ Task-37 completes product navigation and recovery on top of the Task-34 document
 
 ## Verification
 
-The focused device workflow is `scripts/task37-run.ps1`. It writes transient command/UI/task dumps below `build/reports/task37/<serial>/`; these are not tracked as evidence.
+The focused device workflow is `scripts/task37-run.ps1`. It writes transient command/UI/task dumps below `build/reports/task37/<serial>/<run>/`; these are not tracked as evidence.
 
 | API | Serial | Result |
 | --- | --- | --- |
-| 31 | `7b670025` | PARTIAL: workspace launch, Focus behavior, task labels, and manual recovery checks observed; full scripted run was blocked by intermittent MIUI task/uiautomator state churn while switching document tasks |
-| 36 | `emulator-5554` | PASS |
+| 31 | `7b670025` | PASS: three clean, complete runs after stopped-task recovery fix |
+| 36 | `emulator-5554` | PASS: complete combined-code run |
 
 Covered flows:
 
@@ -34,12 +34,35 @@ Covered flows:
 - delete and stale-task fail-closed behavior
 - Guest package remains uninstalled and no Guest ActivityRecord is created
 
+## API31 Recovery
+
+Before the fix, a clean run reached Recents, then `AppTask.startActivity` after
+force-stop caused a MIUI framework `DisplayContent.layoutAndAssignWindowLayersIfNeeded()`
+null failure and returned to Launcher. This was a real navigation failure, not
+just UI dump churn. `GuestWorkspaceLauncher.open` now starts the same validated
+document intent for both new and existing tasks; `intoExisting` matches its URI.
+
+Three post-fix runs each began with `pm clear` and passed the entire workflow:
+
+| Run | A taskId | B taskId | Final B taskId | Result |
+| --- | ---: | ---: | ---: | --- |
+| `run1` | 596 | 599 | 603 | PASS |
+| `run2` | 615 | 618 | 622 | PASS |
+| `run3` | 634 | 637 | 641 | PASS |
+
+Each run checked the document URI against its instance identity, reused A's
+taskId on repeat-open, found distinct A/B tasks, confirmed the workspace
+Activity and Recents labels, restored counters A=1/B=2 after force-stop,
+and ended on B's document with B=2 in the foreground UI. Guest installation
+and Guest ActivityRecord checks were negative. MIUI can assign a new taskId
+when a stopped document is recreated; the document URI and persisted instance
+identity remain stable.
+
 ## Local checks
 
 - `:app:testDebugUnitTest`: PASS
-- `:app:assembleDebug`: PASS
+- `:app:assembleDebug` and `:app:assembleRelease`: PASS
 - `git diff --check`: PASS
 
-The API31 device showed the expected workspace task label in `dumpsys` (`com.example.appsandbox.testguest / <instance-prefix>`) and exposed both document tasks in recents during successful portions of the run. Its MIUI launcher intermittently removed the focused document from the activity dump during automation, then restored the workspace on a subsequent UI dump; the result is recorded as partial rather than PASS.
-
-The required session-requirements file `docs/Codex/00_SESSION_REQUIREMENTS.md` was not present in the provided worktree. No files under `docs/Codex` were modified.
+The combined build, Guest fixtures, and Task-35/36 device matrix are recorded
+in `TASK-38-PARALLEL-INTEGRATION-RESULT.md`. No `docs/Codex` file was modified.

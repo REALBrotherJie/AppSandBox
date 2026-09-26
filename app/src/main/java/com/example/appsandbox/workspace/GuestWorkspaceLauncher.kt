@@ -36,14 +36,7 @@ object GuestWorkspaceLauncher {
 
     fun open(context: Context, instanceId: String) {
         requireNotNull(GuestInstanceStore(context).get(instanceId)) { "Instance unavailable or registry is corrupted" }
-        existingTask(context, instanceId)?.let { task ->
-            if (task.taskInfo.isRunning) {
-                task.moveToFront()
-            } else {
-                task.startActivity(context, intent(context, instanceId), null)
-            }
-            return
-        }
+        // Document matching also restores stopped tasks without OEM AppTask calls.
         context.startActivity(intent(context, instanceId))
     }
 }

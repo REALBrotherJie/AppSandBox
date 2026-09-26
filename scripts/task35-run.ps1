@@ -4,6 +4,8 @@ $adb='D:/Company/Install/Android/SDK/platform-tools/adb.exe'
 $root=Split-Path $PSScriptRoot -Parent
 $report=Join-Path $root "build/reports/task35/$Serial"
 New-Item -ItemType Directory -Force $report | Out-Null
+Remove-Item -LiteralPath (Join-Path $report 'result.txt') -ErrorAction SilentlyContinue
+"status=RUNNING`nserial=$Serial" | Set-Content (Join-Path $report 'result.txt')
 
 function A([string[]]$v) {
     $out=& $adb -s $Serial @v 2>&1
@@ -34,13 +36,20 @@ function AssertXml([string]$pattern,[string]$message) {
     WaitXml $pattern $message | Out-Null
 }
 function Tap([string]$prefix) {
-    $x=WaitXml ([regex]::Escape($prefix)) "UI not found: $prefix"
     $p='text="('+[regex]::Escape($prefix)+'[^"]*)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"'
-    $m=[regex]::Match($x,$p,[System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-    if(!$m.Success){throw "UI bounds not found: $prefix"}
-    $cx=([int]$m.Groups[2].Value+[int]$m.Groups[4].Value)/2
-    $cy=([int]$m.Groups[3].Value+[int]$m.Groups[5].Value)/2
-    A @('shell','input','tap',"$cx","$cy") | Out-Null
+    for($attempt=0;$attempt -lt 6;$attempt++) {
+        $x=Xml
+        $m=[regex]::Match($x,$p,[System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if($m.Success) {
+            $cx=([int]$m.Groups[2].Value+[int]$m.Groups[4].Value)/2
+            $cy=([int]$m.Groups[3].Value+[int]$m.Groups[5].Value)/2
+            A @('shell','input','tap',"$cx","$cy") | Out-Null
+            return
+        }
+        A @('shell','input','swipe','540','1700','540','500','450') | Out-Null
+        Start-Sleep -Milliseconds 400
+    }
+    throw "UI bounds not found after bounded scroll: $prefix"
 }
 function Import([string]$path) {
     A @('shell','am','start','-S','-W','-n','com.example.appsandbox/.automation.Task29AutomationActivity','--es','stagedApk',$path) | Out-Null
@@ -51,8 +60,16 @@ function CreateInstance {
     AssertXml 'Guest Library' 'create-instance host did not return'
 }
 function OpenPackage([string]$packageName,[int]$ordinal=0) {
-    A @('shell','am','start','-W','--activity-clear-task','-n','com.example.appsandbox/.automation.Task29AutomationActivity','--es','packageName',$packageName,'--ei','instanceOrdinal',"$ordinal") | Out-Null
-    Start-Sleep -Milliseconds 500
+    for($launch=0;$launch -lt 3;$launch++) {
+        A @('shell','am','start','-W','--activity-clear-task','-n','com.example.appsandbox/.automation.Task29AutomationActivity','--es','packageName',$packageName,'--ei','instanceOrdinal',"$ordinal") | Out-Null
+        for($poll=0;$poll -lt 10;$poll++) {
+            $activities=(A @('shell','dumpsys','activity','activities')) -join "`n"
+            if($activities -match 'ResumedActivity: ActivityRecord\{[^\r\n]*com\.example\.appsandbox/\.GuestWorkspaceActivity' -and
+               (Xml) -match 'instance=[0-9a-f-]{36}') { return }
+            Start-Sleep -Milliseconds 400
+        }
+    }
+    throw "workspace did not reach foreground: $packageName ordinal=$ordinal"
 }
 function OpenStale([string]$id) {
     A @('shell','am','start','-W','--activity-clear-task','-n','com.example.appsandbox/.automation.Task29AutomationActivity','--es','staleInstanceId',$id) | Out-Null
@@ -166,6 +183,11 @@ function RunTask34 {
 $api=(& $adb -s $Serial shell getprop ro.build.version.sdk).Trim()
 if($Serial -eq '7b670025' -and $api -ne '31'){throw "API $api"}
 if($Serial -eq 'emulator-5554' -and $api -ne '36'){throw "API $api"}
-RunTask33
-RunTask34
-"task33=PASS`ntask34=PASS`nserial=$Serial" | Set-Content (Join-Path $report 'result.txt')
+try {
+    RunTask33
+    RunTask34
+    "status=PASS`ntask33=PASS`ntask34=PASS`nserial=$Serial" | Set-Content (Join-Path $report 'result.txt')
+} catch {
+    "status=FAIL`nserial=$Serial`nerror=$($_.Exception.Message)" | Set-Content (Join-Path $report 'result.txt')
+    throw
+}

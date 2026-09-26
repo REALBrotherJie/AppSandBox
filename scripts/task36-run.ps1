@@ -5,6 +5,13 @@ $adb = 'D:/Company/Install/Android/SDK/platform-tools/adb.exe'
 $root = Split-Path $PSScriptRoot -Parent
 $report = Join-Path $root "build/reports/task36/$Serial"
 New-Item -ItemType Directory -Force $report | Out-Null
+$result = Join-Path $report 'result.txt'
+Remove-Item -LiteralPath $result -ErrorAction SilentlyContinue
+"status=RUNNING`nserial=$Serial" | Set-Content $result
+trap {
+    "status=FAIL`nserial=$Serial`nerror=$($_.Exception.Message)" | Set-Content $result
+    throw
+}
 
 function A([string[]]$argv) {
     $previous = $ErrorActionPreference
@@ -19,14 +26,14 @@ function A([string[]]$argv) {
 function UiXml {
     $local = Join-Path $report 'ui.xml'
     for ($attempt = 0; $attempt -lt 5; $attempt++) {
+        A @('shell', 'rm', '-f', '/sdcard/task36.xml') | Out-Null
         $previous = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
         & $adb -s $Serial shell uiautomator dump /sdcard/task36.xml 2>&1 | Out-Null
-        $dumpExitCode = $LASTEXITCODE
         & $adb -s $Serial pull /sdcard/task36.xml $local 2>&1 | Out-Null
         $pullExitCode = $LASTEXITCODE
         $ErrorActionPreference = $previous
-        if ($dumpExitCode -eq 0 -and $pullExitCode -eq 0 -and (Test-Path -LiteralPath $local)) {
+        if ($pullExitCode -eq 0 -and (Test-Path -LiteralPath $local)) {
             $xml = Get-Content -Raw $local
             if ($xml -match '<hierarchy') { return $xml }
         }
@@ -36,19 +43,36 @@ function UiXml {
 }
 
 function AssertUi([string]$pattern, [string]$message) {
-    if ((UiXml) -notmatch $pattern) { throw $message }
+    for ($attempt = 0; $attempt -lt 8; $attempt++) {
+        try { if ((UiXml) -match $pattern) { return } } catch {}
+        Start-Sleep -Milliseconds 500
+    }
+    throw $message
 }
 
 function Tap([string]$prefix, [int]$index = 0) {
-    $xml = UiXml
     $pattern = 'text="(' + [regex]::Escape($prefix) + '[^"]*)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"'
-    $matches = [regex]::Matches($xml, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-    if ($matches.Count -le $index) { throw "UI not found: $prefix index=$index" }
-    $match = $matches[$index]
-    $x = ([int]$match.Groups[2].Value + [int]$match.Groups[4].Value) / 2
-    $y = ([int]$match.Groups[3].Value + [int]$match.Groups[5].Value) / 2
-    A @('shell', 'input', 'tap', "$x", "$y") | Out-Null
-    Start-Sleep -Milliseconds 600
+    for ($attempt = 0; $attempt -lt 8; $attempt++) {
+        $xml = UiXml
+        $matches = [regex]::Matches($xml, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if ($matches.Count -gt $index) {
+            $match = $matches[$index]
+            $x = ([int]$match.Groups[2].Value + [int]$match.Groups[4].Value) / 2
+            $y = ([int]$match.Groups[3].Value + [int]$match.Groups[5].Value) / 2
+            if ($y -gt 0) {
+                A @('shell', 'input', 'tap', "$x", "$y") | Out-Null
+                Start-Sleep -Milliseconds 600
+                return
+            }
+        }
+        $screen = [regex]::Match($xml, '<node[^>]*bounds="\[0,0\]\[(\d+),(\d+)\]"')
+        if (!$screen.Success) { throw 'UI screen bounds unavailable' }
+        $center = [int]$screen.Groups[1].Value / 2
+        $height = [int]$screen.Groups[2].Value
+        A @('shell', 'input', 'swipe', "$center", "$([int]($height * 0.8))", "$center", "$([int]($height * 0.3))", '300') | Out-Null
+        Start-Sleep -Milliseconds 400
+    }
+    throw "UI not found after scrolling: $prefix index=$index"
 }
 
 function ImportApk([string]$path) {
@@ -62,7 +86,28 @@ function ImportApk([string]$path) {
 
 function LaunchMain {
     A @('shell', 'am', 'start', '-S', '-W', '-n', 'com.example.appsandbox/.MainActivity') | Out-Null
-    Start-Sleep -Seconds 1
+    for ($poll = 0; $poll -lt 10; $poll++) {
+        $activities = (A @('shell', 'dumpsys', 'activity', 'activities')) -join "`n"
+        if ($activities -match 'ResumedActivity: ActivityRecord\{[^\r\n]*com\.example\.appsandbox/\.MainActivity') {
+            try { if ((UiXml) -match 'Guest Library') { return } } catch {}
+        }
+        Start-Sleep -Milliseconds 400
+    }
+    throw 'MainActivity did not reach foreground'
+}
+
+function OpenPackage([string]$packageName) {
+    for ($launch = 0; $launch -lt 3; $launch++) {
+        A @('shell', 'am', 'start', '-S', '-W', '-n', 'com.example.appsandbox/.automation.Task29AutomationActivity', '--es', 'packageName', $packageName, '--ei', 'instanceOrdinal', '0') | Out-Null
+        for ($poll = 0; $poll -lt 10; $poll++) {
+            $activities = (A @('shell', 'dumpsys', 'activity', 'activities')) -join "`n"
+            if ($activities -match 'ResumedActivity: ActivityRecord\{[^\r\n]*com\.example\.appsandbox/\.GuestWorkspaceActivity') {
+                try { if ((UiXml) -match 'instance=[0-9a-f-]{36}') { return } } catch {}
+            }
+            Start-Sleep -Milliseconds 400
+        }
+    }
+    throw "workspace did not reach foreground: $packageName"
 }
 
 function RunAs([string[]]$argv) {
@@ -80,8 +125,17 @@ function AssertBaseline([string]$expectedRegistry, [string]$label) {
     if ($actual -ne $expectedRegistry) { throw "$label changed the Guest registry" }
     $revisionCount = [regex]::Matches($actual, '"revisionId"').Count
     if ($revisionCount -ne 2) { throw "$label left $revisionCount revisions; expected 2" }
-    if ((RunAs @('find', 'files/guests/staging', '-type', 'f', '-print')).Trim()) {
-        throw "$label left staged files"
+    if ((RunAs @('find', 'files/guests/staging', '-mindepth', '1', '-print')).Trim()) {
+        throw "$label left staging residue"
+    }
+    if ((RunAs @('find', 'files/guests', '-type', 'f', '-print')) -ne $baselineGuestFiles) {
+        throw "$label changed committed Guest artifacts"
+    }
+    if ((RunAs @('find', 'files/guest-instances', '-type', 'f', '-print')) -ne $baselineInstanceFiles) {
+        throw "$label changed instance or state files"
+    }
+    if ((RunAs @('cat', 'files/guest-instances/registry.properties')) -ne $baselineInstanceRegistry) {
+        throw "$label changed the instance registry"
     }
 }
 
@@ -138,6 +192,9 @@ Tap 'Create instance from selected revision'
 $baselineRegistry = Registry
 if ([regex]::Matches($baselineRegistry, '"revisionId"').Count -ne 2) { throw 'v1/v2 baseline did not create exactly two revisions' }
 AssertLibrary
+$baselineGuestFiles = RunAs @('find', 'files/guests', '-type', 'f', '-print')
+$baselineInstanceFiles = RunAs @('find', 'files/guest-instances', '-type', 'f', '-print')
+$baselineInstanceRegistry = RunAs @('cat', 'files/guest-instances/registry.properties')
 
 foreach ($fixture in $fixtures.Keys) {
     $source = Join-Path $root "test-guests/ContractInvalidFixtures/build/outputs/apk/$fixture/debug/ContractInvalidFixtures-$fixture-debug.apk"
@@ -152,19 +209,17 @@ foreach ($fixture in $fixtures.Keys) {
 }
 
 A @('shell', 'am', 'force-stop', 'com.example.appsandbox') | Out-Null
-A @('shell', 'am', 'start', '-S', '-W', '-n', 'com.example.appsandbox/.automation.Task29AutomationActivity', '--es', 'packageName', 'com.example.appsandbox.testguest', '--ei', 'instanceOrdinal', '0') | Out-Null
-Start-Sleep -Seconds 1
+OpenPackage 'com.example.appsandbox.testguest'
 AssertUi 'contract=v2' 'v2 workspace unavailable after negative imports'
 Tap 'Guest Increment'
 AssertUi 'Counter: 1' 'v2 action unavailable after negative imports'
 A @('shell', 'input', 'keyevent', '3') | Out-Null
 
-A @('shell', 'am', 'start', '-S', '-W', '-n', 'com.example.appsandbox/.automation.Task29AutomationActivity', '--es', 'packageName', 'com.example.appsandbox.independentguest', '--ei', 'instanceOrdinal', '0') | Out-Null
-Start-Sleep -Seconds 1
+OpenPackage 'com.example.appsandbox.independentguest'
 AssertUi 'contract=v1' 'v1 workspace unavailable after negative imports'
 Tap 'Increment'
 AssertUi 'Counter: 1' 'v1 action unavailable after negative imports'
 
 if ((& $adb -s $Serial shell pm path com.example.appsandbox.testguest) -join '') { throw 'GuestTestApp must not be installed' }
 if ((& $adb -s $Serial shell pm path com.example.appsandbox.independentguest) -join '') { throw 'IndependentGuest must not be installed' }
-"unknownVersion=PASS`nmissingLayout=PASS`nmissingActionRaw=PASS`nunknownField=PASS`nunknownAction=PASS`nduplicateBinding=PASS`ninvalidId=PASS`ninvalidStateKey=PASS`nwrongButtonType=PASS`nwrongTextViewType=PASS`nnoLibraryOrRevisionLeak=PASS`nv1v2StillUsable=PASS`napi=$api`nguestPackagesInstalled=false" | Set-Content (Join-Path $report 'result.txt')
+"status=PASS`nunknownVersion=PASS`nmissingLayout=PASS`nmissingActionRaw=PASS`nunknownField=PASS`nunknownAction=PASS`nduplicateBinding=PASS`ninvalidId=PASS`ninvalidStateKey=PASS`nwrongButtonType=PASS`nwrongTextViewType=PASS`nnoLibraryOrRevisionLeak=PASS`nnoInstanceOrStateLeak=PASS`nv1v2StillUsable=PASS`napi=$api`nguestPackagesInstalled=false" | Set-Content $result

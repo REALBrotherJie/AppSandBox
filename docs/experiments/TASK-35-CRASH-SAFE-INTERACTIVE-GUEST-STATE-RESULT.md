@@ -1,94 +1,44 @@
 # TASK-35 Crash-Safe Interactive Guest State Result
 
-日期：2026-09-26
+Date: 2026-09-26
 
-## Scope
+## Result
 
-Contract v2 counter state now uses an instance-local `GuestStateStore` behind
-`GuestViewSession`. The store keeps the existing `counter()` and `execute()`
-API while adding:
+Contract v2 counter state uses an instance-local `GuestStateStore` behind
+`GuestViewSession`, preserving the `counter()` and `execute()` API. Writes are
+serialized per instance with a JVM lock and lock file, forced to a temporary
+file, then atomically replaced. A valid backup repairs a missing or corrupt
+primary; dual corruption fails closed. Schema, range, SHA-256 checksum, and
+symbolic-link validation reject invalid state and paths. Persistence failures
+reach the binder failure path instead of silently resetting the counter.
 
-- strict schema, range, and SHA-256 checksum validation;
-- per-instance JVM serialization plus a lock file for concurrent Host
-  sessions/processes;
-- forced temporary writes followed by atomic state-file replacement;
-- backup rotation before replacing an existing valid primary;
-- recovery from a valid backup when the primary is missing or corrupt;
-- fail-closed behavior when no valid state remains;
-- rejection of symbolic-link roots, directories, state files, lock files,
-  backup files, and temporary files.
+State files live under `<instanceRoot>/files/counter.txt` with `.bak`, `.tmp`,
+and `.lock` companions.
 
-The state files are scoped below the supplied instance root:
+## Verification
 
-```text
-<instanceRoot>/files/counter.txt
-<instanceRoot>/files/counter.txt.bak
-<instanceRoot>/files/counter.txt.tmp
-<instanceRoot>/files/counter.txt.lock
-```
+JVM tests cover concurrent updates from independent sessions, reset/toggle
+contention, atomic cleanup, stale temporary files, backup recovery, dual
+corruption, symbolic-link rejection, and separate instance roots.
 
-`GuestViewSession` does not catch persistence failures or substitute zero, so
-the existing binder failure path can disable actions and report the failure.
+`scripts/task35-run.ps1` repeats Task-33 and Task-34 device flows; raw output
+stays in ignored `build/reports/task35/<serial>/`.
 
-## Tests
-
-JVM coverage includes:
-
-- concurrent increments from independent sessions with no lost updates;
-- reset/toggle contention without partial files;
-- backup recovery and primary repair;
-- dual corruption fail closed;
-- stale temporary-file handling;
-- atomic commit cleanup;
-- instance-root/state-file symbolic-link rejection;
-- concurrent independence of separate instance roots.
-
-## Device Regression
-
-`scripts/task35-run.ps1` runs equivalent Task-33 and Task-34 workflows with
-bounded UI polling, without changing their production or fixture files. Raw
-UI/ADB output remains under ignored `build/reports/task35/<serial>/`.
-
-| API | Serial | Result |
+| API | Serial | Original Task-35 result |
 | --- | --- | --- |
 | 31 | `7b670025` | PASS: Task-33 and Task-34 regression |
 | 36 | `emulator-5554` | PASS: Task-33 and Task-34 regression |
 
-The regression confirms v2 increment/reset/toggle, restart persistence,
-two-instance isolation, deletion isolation, concurrent Host workspace
-identity, repeat-open reuse, and absence of installed Guest packages or
-Guest Activity records.
+The device regression covered v2 increment/reset/toggle, restart persistence,
+two-instance and deletion isolation, concurrent document identity, repeat-open
+reuse, and no installed Guest package or Guest ActivityRecord.
 
-## Build
-
-Passed:
-
-```text
-:app:testDebugUnitTest
-:app:assembleDebug
-:app:assembleRelease
-:test-guests:GuestTestApp:assembleDebug
-:test-guests:IndependentGuest:assembleDebug
-git diff --check
-```
-
-Release and Host activity boundaries were unchanged. No Guest fixture,
-Manifest, `GuestWorkspaceActivity`, `MainActivity`, `GuestPackageReader`,
-workspace launcher, or `docs/Codex` file was modified.
-
-## Modified Files
-
-```text
-app/src/main/java/com/example/appsandbox/contract/GuestViewSession.kt
-app/src/main/java/com/example/appsandbox/contract/state/GuestStateStore.kt
-app/src/test/java/com/example/appsandbox/contract/state/GuestStateStoreTest.kt
-scripts/task35-run.ps1
-docs/experiments/TASK-35-CRASH-SAFE-INTERACTIVE-GUEST-STATE-RESULT.md
-```
+Original Task-35 build checks passed: `:app:testDebugUnitTest`,
+`:app:assembleDebug`, `:app:assembleRelease`, both valid Guest debug APKs, and
+`git diff --check`. Release and Host activity boundaries were unchanged.
 
 ## Conclusion
 
-Task-35 is complete. Contract v2 state updates are serialized per instance,
-crash-recoverable through a durable temporary write and backup, and fail
-closed when recovery cannot produce a validated state. Separate instance
-roots remain isolated.
+Task-35 completed crash-recoverable, serialized state updates with fail-closed
+recovery. Separate instance roots remain isolated. Task-38 records the later
+combined-code regression result separately.
