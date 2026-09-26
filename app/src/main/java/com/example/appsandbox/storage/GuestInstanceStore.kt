@@ -11,12 +11,15 @@ class GuestInstanceStoreException(val state: InstanceStoreState, message: String
 
 class GuestInstanceStore private constructor(private val root: File, private val registry: GuestInstanceRegistry) {
     constructor(context: Context) : this(File(context.filesDir, "guest-instances"), GuestInstanceRegistry(File(context.filesDir, "guest-instances")))
+    internal constructor(root: File, ops: InstanceFileOps = DefaultInstanceFileOps()) : this(root, GuestInstanceRegistry(root, ops))
 
     fun create(record: GuestPackageRecord, instanceId: String = UUID.randomUUID().toString(), now: Long = System.currentTimeMillis()): GuestInstanceRecord {
         require(UUID_PATTERN.matches(instanceId)) { "invalid instanceId" }
         if (record.revisionId.isBlank() || record.sha256.isNullOrBlank()) throw GuestInstanceStoreException(InstanceStoreState.MISSING_REVISION, "unverified Guest revision")
         check(GuestArtifactVerifier.verify(record).state == ArtifactState.VALID) { "Guest revision is not valid" }
-        val dataRoot = File(root, instanceId); check(dataRoot.mkdirs() || dataRoot.isDirectory) { "cannot create instance root" }
+        val dataRoot = File(root, instanceId)
+        if (dataRoot.exists() || dataRoot.isSymbolicLink()) throw GuestInstanceStoreException(InstanceStoreState.INVALID_PATH, "instance root already exists")
+        check(dataRoot.mkdirs()) { "cannot create instance root" }
         val canonical = dataRoot.canonicalFile
         if (canonical.parentFile != root.canonicalFile || dataRoot.isSymbolicLink()) { dataRoot.deleteRecursively(); throw GuestInstanceStoreException(InstanceStoreState.INVALID_PATH, "instance root escaped") }
         val result = GuestInstanceRecord(instanceId, record.revisionId, record.packageName, record.apkPath, record.sha256!!, canonical.path, now, now)

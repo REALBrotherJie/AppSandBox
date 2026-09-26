@@ -52,7 +52,9 @@ class GuestInstanceRegistry(private val root: File, private val ops: InstanceFil
 
     private fun readUnlocked(): List<GuestInstanceRecord> {
         if (!registry.exists() && !backup.exists()) return emptyList()
-        return runCatching { parse(registry) }.getOrElse { parse(backup) }
+        val primary = runCatching { parse(registry) }
+        if (primary.isSuccess) return primary.getOrThrow()
+        return runCatching { parse(backup) }.getOrElse { throw GuestInstanceStoreException(InstanceStoreState.CORRUPT, "Instance registry and backup are corrupt") }
     }
 
     private fun serialize(records: List<GuestInstanceRecord>): String = StringWriter().also { w -> Properties().apply {
