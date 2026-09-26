@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-## Result
+## Scope
 
 Contract v2 counter state uses an instance-local `GuestStateStore` behind
 `GuestViewSession`, preserving the `counter()` and `execute()` API. Writes are
@@ -13,32 +13,32 @@ symbolic-link validation reject invalid state and paths. Persistence failures
 reach the binder failure path instead of silently resetting the counter.
 
 State files live under `<instanceRoot>/files/counter.txt` with `.bak`, `.tmp`,
-and `.lock` companions.
+and `.lock` companions. Persistence failures reach the binder failure path
+instead of silently resetting the counter.
 
 ## Verification
 
-JVM tests cover concurrent updates from independent sessions, reset/toggle
-contention, atomic cleanup, stale temporary files, backup recovery, dual
-corruption, symbolic-link rejection, and separate instance roots.
+`GuestStateStoreTest` covers concurrent updates, reset/toggle contention,
+backup repair, dual corruption, stale temporary files, symbolic-link rejection,
+separate-root isolation, concurrent mixed actions, and failed temporary writes.
+All 9 Store tests and the full `:app:testDebugUnitTest` suite pass.
 
-`scripts/task35-run.ps1` repeats Task-33 and Task-34 device flows; raw output
-stays in ignored `build/reports/task35/<serial>/`.
+`scripts/task35-run.ps1` writes fresh `RUNNING/FAIL/PASS` results and keeps raw
+UI/task output under ignored `build/reports/task35/<serial>/`.
 
-| API | Serial | Original Task-35 result |
+| API | Serial | Task-35 result |
 | --- | --- | --- |
-| 31 | `7b670025` | PASS: Task-33 and Task-34 regression |
-| 36 | `emulator-5554` | PASS: Task-33 and Task-34 regression |
+| 31 | `7b670025` | PASS: fresh Task-33 and Task-34 run on canonical main |
+| 36 | `emulator-5554` | PASS: fresh Task-33 and Task-34 run on canonical main |
 
-The device regression covered v2 increment/reset/toggle, restart persistence,
-two-instance and deletion isolation, concurrent document identity, repeat-open
-reuse, and no installed Guest package or Guest ActivityRecord.
+The flows covered v2 actions, restart persistence, A/B isolation, deletion
+isolation, document identity, write failure, dual corruption, and no installed
+Guest package or Guest ActivityRecord.
 
-Original Task-35 build checks passed: `:app:testDebugUnitTest`,
-`:app:assembleDebug`, `:app:assembleRelease`, both valid Guest debug APKs, and
-`git diff --check`. Release and Host activity boundaries were unchanged.
+Canonical main also passed the Task-36 ten-fixture matrix and Task-37 workspace
+recovery smoke on both APIs. Release manifest boundaries remain unchanged.
 
 ## Conclusion
 
 Task-35 completed crash-recoverable, serialized state updates with fail-closed
-recovery. Separate instance roots remain isolated. Task-38 records the later
-combined-code regression result separately.
+recovery. Separate instance roots remain isolated.

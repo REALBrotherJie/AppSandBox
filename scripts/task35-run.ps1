@@ -51,9 +51,34 @@ function Tap([string]$prefix) {
     }
     throw "UI bounds not found after bounded scroll: $prefix"
 }
+function TapCreateInstance {
+    $prefix='Create instance from selected revision'
+    for($i=0;$i -lt 12;$i++) {
+        $x=Xml
+        $p='text="('+[regex]::Escape($prefix)+'[^"]*)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"'
+        $m=[regex]::Match($x,$p,[System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if($m.Success) {
+            $cx=([int]$m.Groups[2].Value+[int]$m.Groups[4].Value)/2
+            $cy=([int]$m.Groups[3].Value+[int]$m.Groups[5].Value)/2
+            A @('shell','input','tap',"$cx","$cy") | Out-Null
+            return
+        }
+        A @('shell','input','swipe','540','1850','540','700','300') | Out-Null
+        Start-Sleep -Milliseconds 300
+    }
+    throw "UI not found: $prefix"
+}
 function Import([string]$path) {
     A @('shell','am','start','-S','-W','-n','com.example.appsandbox/.automation.Task29AutomationActivity','--es','stagedApk',$path) | Out-Null
-    AssertXml 'Imported successfully; supported Guest contract v[12]|SUCCESS: imported supported Guest contract v[12]' 'import did not complete'
+    for($i=0;$i -lt 20;$i++) {
+        $x=Xml
+        if($x -match 'Imported successfully; supported Guest contract v[12]|SUCCESS: imported supported Guest contract v[12]'){return}
+        if($i -eq 4 -or $i -eq 9 -or $i -eq 14) {
+            A @('shell','am','start','-W','-n','com.example.appsandbox/.MainActivity') | Out-Null
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    throw 'import did not complete'
 }
 function CreateInstance {
     A @('shell','am','start','-S','-W','-n','com.example.appsandbox/.automation.Task29AutomationActivity','--es','createPackage','com.example.appsandbox.testguest') | Out-Null
@@ -65,7 +90,7 @@ function OpenPackage([string]$packageName,[int]$ordinal=0) {
         for($poll=0;$poll -lt 10;$poll++) {
             $activities=(A @('shell','dumpsys','activity','activities')) -join "`n"
             if($activities -match 'ResumedActivity: ActivityRecord\{[^\r\n]*com\.example\.appsandbox/\.GuestWorkspaceActivity' -and
-               (Xml) -match 'instance=[0-9a-f-]{36}') { return }
+               (Xml) -match 'instance=[0-9a-f-]{36}' -and (Xml) -match [regex]::Escape("package=$packageName")) { return }
             Start-Sleep -Milliseconds 400
         }
     }
@@ -112,10 +137,10 @@ function RunTask33 {
     $v1=Join-Path $root 'test-guests/IndependentGuest/build/outputs/apk/debug/IndependentGuest-debug.apk'
     Prepare $v2
     Import '/data/data/com.example.appsandbox/files/t35.apk'
-    Tap 'Create instance from selected revision'; Tap 'Create instance from selected revision'
+    TapCreateInstance; TapCreateInstance
     Stage $v1
     Import '/data/data/com.example.appsandbox/files/t35.apk'
-    Tap 'Create instance from selected revision'
+    TapCreateInstance
     AssertXml 'com.example.appsandbox.testguest[^\"]*contract=v2' 'v2 library contract missing'
     AssertXml 'com.example.appsandbox.independentguest[^\"]*contract=v1' 'v1 library contract missing'
     OpenPackage 'com.example.appsandbox.testguest' 0
@@ -143,7 +168,7 @@ function RunTask34 {
     $v2=Join-Path $root 'test-guests/GuestTestApp/build/outputs/apk/debug/GuestTestApp-debug.apk'
     Prepare $v2
     Import '/data/data/com.example.appsandbox/files/t35.apk'
-    Tap 'Create instance from selected revision'; Tap 'Create instance from selected revision'
+    TapCreateInstance; TapCreateInstance
     OpenPackage 'com.example.appsandbox.testguest' 0; $idA=CurrentId; Tap 'Guest Increment'; AssertXml 'Counter: 1' 'A action failed'
     A @('shell','input','keyevent','3') | Out-Null
     OpenPackage 'com.example.appsandbox.testguest' 1; $idB=CurrentId
@@ -175,6 +200,19 @@ function RunTask34 {
     OpenStale $idA; AssertXml 'Instance unavailable or registry is corrupted' 'stale A intent did not fail closed'
     OpenPackage 'com.example.appsandbox.testguest' 0; AssertXml ([regex]::Escape("instance=$idB")) 'B unavailable after deleting A'
     AssertXml 'Counter: 2' 'B changed after deleting A'; Tap 'Guest Toggle'; AssertXml 'Counter: 0' 'B action failed after A deletion'
+    $stateDir="files/guest-instances/$idB/files"
+    $temp="$stateDir/counter.txt.tmp"
+    A @('shell','run-as','com.example.appsandbox','mkdir',$temp) | Out-Null
+    A @('shell','run-as','com.example.appsandbox','cp','/data/local/tmp/t35.apk',"$temp/blocker") | Out-Null
+    Tap 'Guest Increment'; AssertXml 'Guest action failed: Guest state temporary write failed' 'write failure did not fail closed'
+    A @('shell','run-as','com.example.appsandbox','rm',"$temp/blocker") | Out-Null
+    A @('shell','run-as','com.example.appsandbox','rmdir',$temp) | Out-Null
+    OpenPackage 'com.example.appsandbox.testguest' 0; AssertXml 'Counter: 0' 'write failure changed committed state'
+    A @('shell','run-as','com.example.appsandbox','cp','/data/local/tmp/t35.apk',"$stateDir/counter.txt") | Out-Null
+    A @('shell','run-as','com.example.appsandbox','cp','/data/local/tmp/t35.apk',"$stateDir/counter.txt.bak") | Out-Null
+    OpenPackage 'com.example.appsandbox.testguest' 0
+    AssertXml 'Guest actions unavailable: Guest state is corrupted' 'dual corruption did not fail closed'
+    AssertXml 'Guest view disabled' 'corrupt state left Guest controls enabled'
     if((PmPath 'com.example.appsandbox.testguest')){throw 'Guest installed'}
     $final=DumpTasks 'final.txt'
     if($final -match 'com.example.appsandbox.testguest/.runtime.GuestMainActivity'){throw 'Guest ActivityRecord detected'}

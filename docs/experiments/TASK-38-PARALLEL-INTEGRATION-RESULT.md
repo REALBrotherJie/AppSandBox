@@ -4,12 +4,16 @@ Date: 2026-09-26
 
 ## Integrated Head
 
-Integrated commits on top of `99c765a`:
+Canonical main is based on `99c765a` and contains the equivalent audited task
+chain:
 
-- `70c832e` task-35 crash-safe interactive Guest state
-- `9a4e3cd` task-36 contract v2 negative APK matrix
-- `571e1e3` task-37 workspace navigation and recovery
-- `c6a6a84` task-36 combined-matrix script stabilization
+- `77093d0` task-35 crash-safe interactive Guest state
+- `b709207` task-36 contract v2 negative APK matrix
+- `1285b1d` task-37 workspace navigation and recovery
+- `5ce7779` workspace recovery integration and matrix stabilization
+
+Task-39 adds the final Store risk tests and fresh Task-35/36/37 result guards
+in one focused canonicalization commit.
 
 The focused integration fix avoids MIUI API31 framework crashes from stopped
 document tasks by having `GuestWorkspaceLauncher.open` start the same validated
@@ -26,8 +30,9 @@ framework null failure in MIUI, so it was treated as a real navigation gap.
 - `:test-guests:IndependentGuest:assembleDebug`: PASS
 - `ContractInvalidFixtures` all 10 debug variants: PASS
 
-Confirmed executed JVM suites: `GuestStateStoreTest`, `GuestContractValidationTest`,
-`GuestWorkspaceLaunchSpecTest`, `GuestInstanceStoreTest`, and `GuestViewSessionTest`.
+Confirmed executed JVM suites include `GuestStateStoreTest`,
+`GuestContractValidationTest`, `GuestWorkspaceLaunchSpecTest`,
+`GuestInstanceStoreTest`, and `GuestViewSessionTest`.
 
 Release merged manifest keeps `GuestWorkspaceActivity exported=false` and has no
 debug automation or experiment activities.

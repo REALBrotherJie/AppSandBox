@@ -133,6 +133,60 @@ class GuestStateStoreTest {
         assertEquals(7, GuestViewSession(b).counter())
     }
 
+    @Test fun separateRootsRemainIndependentUnderConcurrentMixedActions() = withRoots { a, b ->
+        val gate = CountDownLatch(1)
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val first = pool.submit {
+                gate.await()
+                repeat(30) {
+                    GuestViewSession(a).execute(GuestAction.INCREMENT)
+                    GuestViewSession(a).execute(GuestAction.RESET)
+                    GuestViewSession(a).execute(GuestAction.TOGGLE)
+                }
+                repeat(2) { GuestViewSession(a).execute(GuestAction.INCREMENT) }
+            }
+            val second = pool.submit {
+                gate.await()
+                repeat(30) {
+                    GuestViewSession(b).execute(GuestAction.TOGGLE)
+                    GuestViewSession(b).execute(GuestAction.RESET)
+                    GuestViewSession(b).execute(GuestAction.INCREMENT)
+                }
+                GuestViewSession(b).execute(GuestAction.TOGGLE)
+            }
+            gate.countDown()
+            first.get(20, TimeUnit.SECONDS)
+            second.get(20, TimeUnit.SECONDS)
+        } finally {
+            pool.shutdownNow()
+        }
+
+        assertEquals(3, GuestViewSession(a).counter())
+        assertEquals(0, GuestViewSession(b).counter())
+    }
+
+    @Test fun failedTemporaryWritePreservesCommittedStateAndOtherRoot() = withRoots { a, b ->
+        val first = GuestViewSession(a)
+        val second = GuestViewSession(b)
+        assertEquals(1, first.execute(GuestAction.INCREMENT))
+        assertEquals(1, second.execute(GuestAction.INCREMENT))
+
+        val blocker = File(a, "files/counter.txt.tmp")
+        assertTrue(blocker.mkdir())
+        File(blocker, "blocker").writeText("occupied")
+        try {
+            expectStoreFailure { first.execute(GuestAction.INCREMENT) }
+            assertEquals(1, GuestViewSession(a).counter())
+            assertEquals(2, second.execute(GuestAction.INCREMENT))
+        } finally {
+            blocker.deleteRecursively()
+        }
+
+        assertEquals(2, GuestViewSession(a).execute(GuestAction.INCREMENT))
+        assertEquals(2, GuestViewSession(b).counter())
+    }
+
     private fun createLink(link: File, target: File) {
         try {
             Files.createSymbolicLink(link.toPath(), target.toPath())

@@ -5,6 +5,13 @@ $root = Split-Path $PSScriptRoot -Parent
 if ($RunLabel -notmatch '^[a-zA-Z0-9_-]+$') { throw 'RunLabel must be alphanumeric, underscore, or hyphen' }
 $report = Join-Path $root "build/reports/task37/$Serial/$RunLabel"
 New-Item -ItemType Directory -Force $report | Out-Null
+$result = Join-Path $report 'result.txt'
+Remove-Item -LiteralPath $result -ErrorAction SilentlyContinue
+"status=RUNNING`nserial=$Serial`nrun=$RunLabel" | Set-Content $result
+trap {
+    "status=FAIL`nserial=$Serial`nrun=$RunLabel`nerror=$($_.Exception.Message)" | Set-Content $result
+    throw
+}
 
 function A([string[]]$argv) {
     & $adb -s $Serial @argv 2>&1 | Tee-Object -FilePath (Join-Path $report 'adb-last.txt')
@@ -252,6 +259,7 @@ if ($final -notmatch [regex]::Escape("appsandbox://workspace/$idB") -or
 }
 
 @"
+status=PASS
 serial=$Serial
 api=$api
 run=$RunLabel
@@ -272,4 +280,4 @@ closeReopen=PASS
 deleteStaleFailClosed=PASS
 guestActivityRecord=false
 guestInstalled=false
-"@ | Set-Content (Join-Path $report 'result.txt')
+"@ | Set-Content $result
