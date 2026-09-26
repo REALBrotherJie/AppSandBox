@@ -73,9 +73,12 @@ class GuestPackageReader(private val context: Context) {
         val appInfo = info.applicationInfo ?: error("APK has no application information")
         val metadata = appInfo.metaData ?: error("Unsupported Guest: missing View contract")
         require(metadata.getInt(CONTRACT_VERSION, 0) == 1) { "Unsupported Guest: contract version" }
-        require(!metadata.getString(VIEW_LAYOUT).isNullOrBlank()) { "Unsupported Guest: missing View layout" }
+        val layoutName = metadata.getString(VIEW_LAYOUT)
+        require(!layoutName.isNullOrBlank()) { "Unsupported Guest: missing View layout" }
         appInfo.sourceDir = apkPath
         appInfo.publicSourceDir = apkPath
+        val guestResources = packageManager.getResourcesForApplication(appInfo)
+        require(guestResources.getIdentifier(layoutName, "layout", info.packageName) != 0) { "Unsupported Guest: layout resource not found" }
         val label = packageManager.getApplicationLabel(appInfo).toString()
         val record = GuestPackageRecord(
             internalGuestId = guestId,

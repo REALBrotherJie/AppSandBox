@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 rootProject.name = "AppSandbox"
 include(":app")
 include(":test-guests:GuestTestApp")
+include(":test-guests:IndependentGuest")

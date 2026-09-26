@@ -11,6 +11,7 @@ import com.example.appsandbox.packageinfo.GuestPackageReader
 import com.example.appsandbox.storage.GuestInstanceStore
 import com.example.appsandbox.storage.GuestArtifactVerifier
 import com.example.appsandbox.storage.GuestStore
+import com.example.appsandbox.storage.GuestInstanceBinding
 import dalvik.system.DexClassLoader
 import java.io.File
 
@@ -25,8 +26,9 @@ class GuestWorkspaceActivity : Activity() {
         val found = intent.getStringExtra(EXTRA_INSTANCE_ID)?.let { store.get(it) }
         if (found == null) { show("Instance unavailable or registry is corrupted"); return }
         val revision = runCatching { GuestStore(this).findRevision(found.guestRevisionId) }.getOrNull()
-        if (revision == null || revision.packageName != found.guestPackageName || revision.apkPath != found.guestApkPath || !revision.sha256.equals(found.guestSha256, true)) {
-            show("Guest revision binding is unavailable or inconsistent. Restore the original revision.")
+        val bindingError = revision?.let { GuestInstanceBinding.validate(found, it) }
+        if (revision == null || bindingError != null) {
+            show("Guest revision binding is unavailable or inconsistent${bindingError?.let { ": $it" } ?: ""}. Restore the original revision.")
             return
         }
         val artifact = File(found.guestApkPath)
@@ -39,7 +41,7 @@ class GuestWorkspaceActivity : Activity() {
     }
     private fun buildUi() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 24) }
-        root.addView(TextView(this).apply { text = "Guest workspace\ninstance=${instance.instanceId}\nrevision=${instance.guestRevisionId}"; textSize = 16f })
+        root.addView(TextView(this).apply { text = "Guest workspace\npackage=${instance.guestPackageName}\ninstance=${instance.instanceId}\nrevision=${instance.guestRevisionId}"; textSize = 16f })
         state = TextView(this).apply { textSize = 22f; setPadding(0, 24, 0, 24) }
         val actions = LinearLayout(this)
         actions.addView(Button(this).apply { text = "Increment"; setOnClickListener { writeCounter(counter() + 1); render() } })

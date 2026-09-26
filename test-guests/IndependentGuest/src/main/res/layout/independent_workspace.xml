@@ -1,11 +1,10 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/exp002_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical">
     <TextView
-        android:id="@+id/exp002_text"
+        android:id="@+id/independent_marker"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="GUEST_A_MARKER_1D1C4B6A" />
+        android:text="INDEPENDENT_GUEST_MARKER_B" />
 </LinearLayout>

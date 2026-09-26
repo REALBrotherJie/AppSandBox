@@ -20,10 +20,21 @@ class Task29AutomationActivity : Activity() {
             startActivity(Intent(this, GuestWorkspaceActivity::class.java).putExtra(GuestWorkspaceActivity.EXTRA_INSTANCE_ID, resolved))
             finish(); return
         }
+        intent.getStringExtra(EXTRA_PACKAGE)?.let { packageName ->
+            val resolved = GuestInstanceStore(this).list().single { it.guestPackageName == packageName }.instanceId
+            startActivity(Intent(this, GuestWorkspaceActivity::class.java).putExtra(GuestWorkspaceActivity.EXTRA_INSTANCE_ID, resolved))
+            finish(); return
+        }
         intent.getStringExtra(EXTRA_DELETE_REVISION)?.let { prefix ->
             val store = GuestStore(this); val revision = store.records().single { it.revisionId.startsWith(prefix, true) }
             store.deleteRevision(revision.revisionId, GuestInstanceStore(this).list())
             setContentView(TextView(this).apply { text = "SUCCESS: revision deleted" }); return
+        }
+        intent.getStringExtra(EXTRA_TRY_DELETE_REVISION)?.let { prefix ->
+            val store = GuestStore(this); val revision = store.records().single { it.revisionId.startsWith(prefix, true) }
+            val text = runCatching { store.deleteRevision(revision.revisionId, GuestInstanceStore(this).list()); "UNEXPECTED: revision deleted" }
+                .getOrElse { "BLOCKED: ${it.message}" }
+            setContentView(TextView(this).apply { this.text = text; textSize = 18f }); return
         }
         val path = intent.getStringExtra(EXTRA_APK)
         val result = path?.let { GuestImportCoordinator(this).importFile(File(it)) }
@@ -38,5 +49,5 @@ class Task29AutomationActivity : Activity() {
             finish()
         }
     }
-    companion object { const val EXTRA_APK = "stagedApk"; const val EXTRA_INSTANCE = "instanceId"; const val EXTRA_DELETE_REVISION = "deleteRevision" }
+    companion object { const val EXTRA_APK = "stagedApk"; const val EXTRA_INSTANCE = "instanceId"; const val EXTRA_PACKAGE = "packageName"; const val EXTRA_DELETE_REVISION = "deleteRevision"; const val EXTRA_TRY_DELETE_REVISION = "tryDeleteRevision" }
 }

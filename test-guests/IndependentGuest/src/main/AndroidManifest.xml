@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:label="Independent Guest">
+        <meta-data android:name="com.example.appsandbox.guest.CONTRACT_VERSION" android:value="1" />
+        <meta-data android:name="com.example.appsandbox.guest.VIEW_LAYOUT" android:value="independent_workspace" />
+    </application>
+</manifest>

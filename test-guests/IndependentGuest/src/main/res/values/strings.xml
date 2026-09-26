@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Independent Guest</string>
+    <string name="independent_marker">INDEPENDENT_GUEST_MARKER_B</string>
+</resources>
