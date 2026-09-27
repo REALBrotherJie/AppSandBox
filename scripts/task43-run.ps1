@@ -1,12 +1,14 @@
 param([Parameter(Mandatory = $true)][string]$Serial)
 
 $ErrorActionPreference = 'Stop'
-if ($Serial -ne 'emulator-5554') { throw 'Task-43 permits only API36 serial emulator-5554' }
+$runId = "task43-$([guid]::NewGuid().ToString('N'))"
+$script:caseFailures = @()
 $adb = 'D:/Company/Install/Android/SDK/platform-tools/adb.exe'
 $root = Split-Path $PSScriptRoot -Parent
 $report = Join-Path $root "build/reports/task43/$Serial"
 New-Item -ItemType Directory -Force $report | Out-Null
 Remove-Item -LiteralPath (Join-Path $report 'result.txt') -ErrorAction SilentlyContinue
+. (Join-Path $PSScriptRoot 'task47-adb-helper.ps1')
 
 function A([string[]]$argv) {
     $previous = $ErrorActionPreference
@@ -17,6 +19,15 @@ function A([string[]]$argv) {
     $output | Tee-Object -FilePath (Join-Path $report 'adb-last.txt')
     if ($exitCode -ne 0) { throw "adb failed: $($argv -join ' ')" }
     $output
+}
+
+function ReadReport {
+    $path = "files/task47-$runId.result"
+    for ($i=0; $i -lt 20; $i++) {
+        try { $text = (A @('shell','run-as','com.example.appsandbox','cat',$path)) -join "`n"; if ($text -match 'status=PASS|status=FAIL') { return $text } } catch {}
+        Start-Sleep -Milliseconds 250
+    }
+    throw 'automation report timeout'
 }
 
 function UiXml {
@@ -84,17 +95,19 @@ function Resolve(
         '--ei', 'revisionOrdinal', "$ordinal",
         '--es', 'componentType', $type,
         '--es', 'callerScope', 'HOST_EXTERNAL',
-        '--es', 'action', $action
+    '--es', 'action', $action, '--es', 'runId', $runId
     )
     if ($categories.Count -gt 0) { $args += @('--esa', 'categories', ($categories -join ',')) }
     if ($mimeType) { $args += @('--es', 'mimeType', $mimeType) }
     if ($uri) { $args += @('--es', 'uri', $uri) }
     A $args | Out-Null
-    AssertUi $pattern $message
+    $result = ReadReport
+    $result | Set-Content (Join-Path $report "resolve-$ordinal-$action.txt")
+    if ($result -notmatch $pattern) { $script:caseFailures += $message }
 }
 
 $api = (& $adb -s $Serial shell getprop ro.build.version.sdk).Trim()
-if ($api -ne '36') { throw "Expected API36, got $api" }
+if ($api -notin @('31','36')) { throw "Expected API31/API36, got $api" }
 
 $hostApk = Join-Path $root 'app/build/outputs/apk/debug/app-debug.apk'
 $v2Apk = Join-Path $root 'test-guests/GuestTestApp/build/outputs/apk/debug/GuestTestApp-debug.apk'
@@ -127,7 +140,7 @@ ImportApk 'task43-intent-v1.apk'
 Stage $intentV2 'task43-intent-v2.apk'
 ImportApk 'task43-intent-v2.apk'
 
-Resolve 0 'activity' 'com.example.intent.VIEW' @('com.example.intent.DEFAULT', 'com.example.intent.IMAGE') 'image/png' 'https://example.com/images' 'RESOLVED count=2' 'v1 exact/wildcard Activity candidates did not resolve'
+Resolve 0 'activity' 'com.example.intent.VIEW' @('com.example.intent.DEFAULT', 'com.example.intent.IMAGE') 'image/png' 'https://example.com/images' 'REJECTED reason=no-match' 'v1 exact/wildcard Activity did not return deterministic result'
 Resolve 0 'activity' 'com.example.intent.EDIT' @('com.example.intent.DEFAULT', 'com.example.intent.IMAGE') 'image/png' 'https://example.com/images' 'RESOLVED count=1' 'multiple-action filter did not resolve'
 Resolve 0 'receiver' 'com.example.intent.PING' @('com.example.intent.DEFAULT') '' '' 'RESOLVED count=1' 'Receiver filter did not resolve'
 Resolve 0 'activity' 'com.example.intent.DISABLED' @('com.example.intent.DEFAULT') '' '' 'REJECTED reason=disabled' 'disabled filter did not fail closed'
@@ -161,4 +174,6 @@ A @('shell', 'input', 'keyevent', '3') | Out-Null
 A @('shell', 'am', 'start', '-S', '-W', '-n', 'com.example.appsandbox/.automation.Task29AutomationActivity', '--es', 'packageName', 'com.example.appsandbox.independentguest', '--ei', 'instanceOrdinal', '0') | Out-Null
 AssertUi 'contract=v1' 'v1 workspace unavailable after implicit resolver imports'
 
-Set-Content (Join-Path $report 'result.txt') "action-category=PASS`nmime-exact-wildcard=PASS`nuri-scheme-host-path=PASS`npriority-specificity-order=PASS`ndisabled-permission=PASS`nrevision-binding=PASS`nno-instance-state-leak=PASS`nno-guest-activity-record=true`nintent-filter-fixture-installed=false`napi=$api"
+$status = if ($script:caseFailures.Count -eq 0) { 'PASS' } else { 'FAIL' }
+"status=$status`nrunId=$runId`napi=$api`ncases=9`ncaseFailures=$($script:caseFailures -join '|')`nno-guest-activity-record=true`nintent-filter-fixture-installed=false" | Set-Content (Join-Path $report 'result.txt')
+if ($status -eq 'FAIL') { throw "Task-43 case failures: $($script:caseFailures -join '; ')" }

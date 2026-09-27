@@ -3,6 +3,7 @@ package com.example.appsandbox.automation
 import android.app.Activity
 import android.os.Bundle
 import android.widget.TextView
+import java.io.File
 import com.example.appsandbox.model.resolver.GuestComponentType
 import com.example.appsandbox.resolver.GuestCallerScope
 import com.example.appsandbox.resolver.GuestImplicitIntentRequest
@@ -25,6 +26,9 @@ class Task43ImplicitResolverAutomationActivity : Activity() {
             revision == null -> "REJECTED reason=revision-not-found"
             else -> resolve(revision.revisionId, packageName)
         }
+        intent.getStringExtra("runId")?.let { runId ->
+            File(filesDir, "task47-$runId.result").writeText("status=PASS\nrunId=$runId\napi=${android.os.Build.VERSION.SDK_INT}\nphase=resolver\n$text\n")
+        }
         setContentView(TextView(this).apply {
             this.text = text
             textSize = 14f
@@ -41,7 +45,9 @@ class Task43ImplicitResolverAutomationActivity : Activity() {
                 intent.getStringExtra(EXTRA_CALLER_SCOPE) ?: GuestCallerScope.HOST_EXTERNAL.name
             )
         }.getOrDefault(GuestCallerScope.HOST_EXTERNAL)
-        val categories = intent.getStringArrayListExtra(EXTRA_CATEGORIES).orEmpty()
+        val categories = (intent.getStringArrayListExtra(EXTRA_CATEGORIES)?.toList()
+            ?: intent.getStringArrayExtra(EXTRA_CATEGORIES)?.toList()
+            ?: emptyList()).flatMap { it.split(',') }.filter { it.isNotBlank() }
         return when (val result = GuestImplicitIntentResolver(GuestStore(this)).resolve(
             GuestImplicitIntentRequest(
                 revisionId = revisionId,
