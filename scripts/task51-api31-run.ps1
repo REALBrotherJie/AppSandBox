@@ -5,7 +5,7 @@ function A([string[]]$x){Invoke-AdbBounded -Adb $adb -Serial $Serial -CommandArg
 function V([string]$t,[string]$k){$x=@($t-split"`r?`n"|?{$_-cmatch('^'+[regex]::Escape($k)+'=')});if($x.Count-ne 1){throw "bad key $k"};$x[0].Substring($k.Length+1)}
 function ReadReport([string]$p,[string]$id){for($i=0;$i-lt 80;$i++){try{$t=A @('shell','run-as','com.example.appsandbox','cat',$p)}catch{if($_.Exception.Message-notmatch'No such file|not found'){throw};Start-Sleep -Milliseconds 250;continue};if((V $t 'status')-eq'FINAL' -and (V $t 'runId')-ceq$id){return $t};Start-Sleep -Milliseconds 250};throw "timeout $id"}
 function Z([string]$t){foreach($k in 'constructorAttempted','guestConstructed','attachExecutorAttempted','attachInvokeAttempted','attachCompleted','guestLifecycle'){if((V $t $k)-ne'false'){throw "$k nonzero"}}}
-function GuestPackagePath(){return (A @('shell','cmd','package','path','com.example.appsandbox.testguest')).Trim()}
+function GuestPackagePath(){return (A @('shell','pm','list','packages','com.example.appsandbox.testguest')).Trim()}
 if((A @('get-state')).Trim()-ne'device'){throw 'device unavailable'};if((A @('shell','getprop','ro.build.version.sdk')).Trim()-ne'31'){throw 'wrong API'}
 if(!$HostApk){$HostApk=Join-Path $root 'app/build/outputs/apk/debug/app-debug.apk'};if(!$GuestApk){$GuestApk=Join-Path $root 'test-guests/GuestTestApp/build/outputs/apk/debug/GuestTestApp-debug.apk'}
 if(!(Test-Path $HostApk)-or!(Test-Path $GuestApk)){throw 'APK missing'};$hs=(Get-FileHash $HostApk -Algorithm SHA256).Hash.ToLower();$gs=(Get-FileHash $GuestApk -Algorithm SHA256).Hash.ToLower();if($HostSha256-and$HostSha256.ToLower()-ne$hs){throw 'host SHA mismatch'};if($GuestSha256-and$GuestSha256.ToLower()-ne$gs){throw 'guest SHA mismatch'}
