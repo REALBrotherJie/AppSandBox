@@ -1,4 +1,16 @@
-# AppSandbox UI reusable kit
+# AppSandbox Codex 文档
+
+## 必读会话规则
+
+所有后续审视会话、执行会话和 task 开始前，必须先读取：
+
+- [会话协作要求](./00_SESSION_REQUIREMENTS.md)
+
+该文件要求一个 task 完成一个完整大目标，执行会话连续完成实现、风险测试、双版本验证、修复和提交，避免为微小步骤反复创建长篇 task。
+
+实现类任务必须以产品代码和高风险行为测试为主要增量。完整 dumpsys/logcat、重复设备状态和截图默认不进入 Git，运行证据写入 ignored 本地报告目录，仓库只保留精简结论。
+
+## UI reusable kit
 
 这套文档把 2026-09-23 完成的 Android 宿主 UI 经验抽象为可复用规范，适用于 AppSandbox 及其他普通 Android App。文档只保留设计方法、交互约束和验收标准，不复制其他项目的源码、类名、专有业务逻辑或虚拟化实现。
 
