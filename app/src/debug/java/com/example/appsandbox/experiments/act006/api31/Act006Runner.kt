@@ -51,14 +51,17 @@ class Act006Runner : Activity() {
             actualSha, className, componentName.flattenToShortString(), requestedFingerprint)
         val expected = Act006Expected(instance.instanceId, revision.revisionId, actualSha, declared.className,
             componentName.flattenToShortString(), adapter.fingerprint)
-        val core = Act006StateMachine(runId, Act006Api31Executor(guestClass, preparation)).execute(snapshot, expected)
+        val executor = Act006Api31Executor(guestClass, preparation)
+        val core = Act006StateMachine(runId, executor).execute(snapshot, expected)
         return Act006AttachResult(
             outcome = if (core.phase == Act006Phase.REJECTED) "REJECTED" else "PROCESS_RECOVERY_REQUIRED",
             reason = core.reason.name,
             classLoaded = true,
+            constructorAttempted = core.counters.constructorAttempted == 1,
             constructed = core.counters.constructorCompleted == 1,
-            attachInvokeAttempted = core.counters.attachAttempted == 1,
-            attachCompleted = core.counters.attachCompleted == 1,
+            attachExecutorAttempted = core.counters.attachAttempted == 1,
+            attachInvokeAttempted = executor.hiddenInvokeAttempted.get(),
+            attachCompleted = executor.hiddenInvokeCompleted.get(),
             lifecycle = core.counters.lifecycleAttempted != 0,
             exceptionType = if (core.error == null) "none" else "executor",
             detail = core.error ?: "none"
@@ -71,7 +74,8 @@ class Act006Runner : Activity() {
         val destination = File(filesDir, "task51-$runId.result"); val temp = File(filesDir, destination.name + ".tmp")
         temp.writeText(listOf("status=FINAL", "runId=$runId", "caseId=$caseId", "api=${android.os.Build.VERSION.SDK_INT}",
             "outcome=${result.outcome}", "reason=${result.reason}", "adapterFingerprint=${Act006Api31Adapter().fingerprint}",
-            "classLoaded=${result.classLoaded}", "guestConstructed=${result.constructed}", "attachInvokeAttempted=${result.attachInvokeAttempted}",
+            "classLoaded=${result.classLoaded}", "constructorAttempted=${result.constructorAttempted}", "guestConstructed=${result.constructed}",
+            "attachExecutorAttempted=${result.attachExecutorAttempted}", "attachInvokeAttempted=${result.attachInvokeAttempted}",
             "attachCompleted=${result.attachCompleted}", "guestLifecycle=${result.lifecycle}", "exceptionType=${result.exceptionType}",
             "detail=${result.detail}", "hostComponent=${componentName.flattenToShortString()}", "hostTaskId=$taskId").joinToString("\n", postfix = "\n"))
         check(temp.renameTo(destination))

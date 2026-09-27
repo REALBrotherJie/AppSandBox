@@ -5,9 +5,11 @@ import android.os.Build
 import com.example.appsandbox.experiments.act006.core.Act006AttachExecutor
 import com.example.appsandbox.experiments.act006.core.Act006InputSnapshot
 import java.lang.reflect.Method
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class Act006AttachResult(val outcome: String, val reason: String, val classLoaded: Boolean = false,
-    val constructed: Boolean = false, val attachInvokeAttempted: Boolean = false, val attachCompleted: Boolean = false,
+    val constructorAttempted: Boolean = false, val constructed: Boolean = false,
+    val attachExecutorAttempted: Boolean = false, val attachInvokeAttempted: Boolean = false, val attachCompleted: Boolean = false,
     val lifecycle: Boolean = false, val exceptionType: String = "none", val detail: String = "none")
 
 class Act006Api31Adapter {
@@ -67,9 +69,15 @@ class Act006Api31Adapter {
 class Act006Api31Executor(
     private val guestClass: Class<out Activity>, private val preparation: Act006Api31Adapter.Preparation.Ready
 ) : Act006AttachExecutor {
+    val hiddenInvokeAttempted = AtomicBoolean()
+    val hiddenInvokeCompleted = AtomicBoolean()
     override fun construct(input: Act006InputSnapshot): Any = guestClass.getDeclaredConstructor().newInstance()
     override fun attach(instance: Any, input: Act006InputSnapshot) {
-        try { preparation.method.invoke(instance, *preparation.arguments) }
+        try {
+            hiddenInvokeAttempted.set(true)
+            preparation.method.invoke(instance, *preparation.arguments)
+            hiddenInvokeCompleted.set(true)
+        }
         catch (error: Throwable) { throw generateSequence(error) { it.cause }.last() }
     }
 }
