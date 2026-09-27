@@ -83,7 +83,10 @@ class GuestPackageReader(private val context: Context) {
         val guestResources = packageManager.getResourcesForApplication(appInfo)
         val contract = readContract(appInfo, guestResources, info.packageName)
         val label = packageManager.getApplicationLabel(appInfo).toString()
-        val components = normalizeComponents(info, guestId)
+        val components = bindIntentFilters(
+            normalizeComponents(info, guestId),
+            readIntentFilters(apkPath, info.packageName, guestId)
+        )
         val record = GuestPackageRecord(
             internalGuestId = guestId,
             packageName = info.packageName,
@@ -186,5 +189,35 @@ class GuestPackageReader(private val context: Context) {
         val (stateView, actions) = GuestContractValidation.parseActionSpec(text)
         GuestContractValidation.validateLayout(resources, layoutId, stateView, actions)
         return GuestViewContract(2, layoutName, stateView, actions)
+    }
+
+    private fun readIntentFilters(
+        apkPath: String,
+        packageName: String,
+        revisionId: String
+    ): List<com.example.appsandbox.model.resolver.GuestIntentFilter> {
+        return GuestIntentFilterManifestParser.parse(
+            GuestBinaryXmlManifest.read(apkPath),
+            packageName,
+            revisionId
+        )
+    }
+
+    private fun bindIntentFilters(
+        components: List<GuestComponent>,
+        filters: List<com.example.appsandbox.model.resolver.GuestIntentFilter>
+    ): List<GuestComponent> {
+        val componentKeys = components.map { it.type to it.className }.toSet()
+        if (filters.any { (it.componentType to it.componentClassName) !in componentKeys }) {
+            error("Unsupported Guest: intent-filter component is not declared")
+        }
+        return components.map { component ->
+            component.copy(
+                intentFilters = filters.filter {
+                    it.componentType == component.type &&
+                        it.componentClassName == component.className
+                }
+            )
+        }
     }
 }

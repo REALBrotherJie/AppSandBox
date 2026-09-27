@@ -2,6 +2,7 @@ param([Parameter(Mandatory = $true)][string]$Serial)
 
 $ErrorActionPreference = 'Stop'
 $adb = 'D:/Company/Install/Android/SDK/platform-tools/adb.exe'
+. (Join-Path $PSScriptRoot 'task47-adb-helper.ps1')
 $root = Split-Path $PSScriptRoot -Parent
 $report = Join-Path $root "build/reports/task42/$Serial"
 New-Item -ItemType Directory -Force $report | Out-Null
@@ -9,14 +10,7 @@ Remove-Item -LiteralPath (Join-Path $report 'result.txt') -ErrorAction SilentlyC
 "status=RUNNING`nserial=$Serial" | Set-Content (Join-Path $report 'result.txt')
 
 function A([string[]]$argv) {
-    $previousPreference = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    $output = & $adb -s $Serial @argv 2>&1
-    $code = $LASTEXITCODE
-    $ErrorActionPreference = $previousPreference
-    $output | Tee-Object -FilePath (Join-Path $report 'adb-last.txt')
-    if ($code -ne 0) { throw "adb failed: $($argv -join ' ')" }
-    $output
+    Invoke-AdbBounded -Adb $adb -Serial $Serial -CommandArgs $argv -TimeoutSec 30 -ReportDir $report
 }
 
 function UiXml {
@@ -61,20 +55,20 @@ function Tap([string]$prefix) {
 }
 
 function RuntimePid {
-    $processId = ((& $adb -s $Serial shell pidof com.example.appsandbox:guest_runtime 2>$null) -join '').Trim()
+    try { $processId = (A @('shell', 'pidof', 'com.example.appsandbox:guest_runtime')).Trim() } catch { return $null }
     if ($processId -match '^\d+$') { return $processId }
     return $null
 }
 
 function HostPid {
-    $processId = ((& $adb -s $Serial shell pidof com.example.appsandbox 2>$null) -join '').Trim()
+    $processId = (A @('shell', 'pidof', 'com.example.appsandbox')).Trim()
     if ($processId -match '^\d+$') { return $processId }
     return $null
 }
 
 function ProcessUid([string]$processId) {
     $status = A @('shell', 'cat', "/proc/$processId/status")
-    $line = $status | Where-Object { $_ -match '^Uid:' } | Select-Object -First 1
+    $line = ($status -split "`r?`n") | Where-Object { $_ -match '^Uid:' } | Select-Object -First 1
     if ($line -match '^Uid:\s+(\d+)') { return $matches[1] }
     return $null
 }
@@ -124,7 +118,7 @@ function CurrentId {
 }
 
 try {
-    $api = (& $adb -s $Serial shell getprop ro.build.version.sdk).Trim()
+    $api = (A @('shell', 'getprop', 'ro.build.version.sdk')).Trim()
     if ($Serial -eq '7b670025' -and $api -ne '31') { throw "Expected API31, got $api" }
     if ($Serial -eq 'emulator-5554' -and $api -ne '36') { throw "Expected API36, got $api" }
 
@@ -188,8 +182,9 @@ try {
     OpenInstance 0
     AssertXml 'Counter: 2' 'force-stop did not restore B through new runtime'
 
-    if ((& $adb -s $Serial shell pm path com.example.appsandbox.testguest) -join '') { throw 'Guest package must not be installed' }
-    $final = (& $adb -s $Serial shell dumpsys activity activities) -join "`n"
+    $guestPackagePath = try { (A @('shell', 'pm', 'path', 'com.example.appsandbox.testguest')).Trim() } catch { '' }
+    if ($guestPackagePath) { throw 'Guest package must not be installed' }
+    $final = A @('shell', 'dumpsys', 'activity', 'activities')
     $final | Set-Content (Join-Path $report 'final-activities.txt')
     if ($final -match 'com.example.appsandbox.testguest/.runtime.GuestMainActivity') { throw 'Guest ActivityRecord detected' }
 
@@ -198,3 +193,5 @@ try {
     "status=FAIL`nserial=$Serial`nerror=$($_.Exception.Message)" | Set-Content (Join-Path $report 'result.txt')
     throw
 }
+
+

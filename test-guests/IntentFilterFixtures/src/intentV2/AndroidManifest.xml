@@ -1,0 +1,38 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name=".FilterComponents$FilterActivity"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter android:priority="20">
+                <action android:name="com.example.intent.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="com.example.intent.DEFAULT" />
+                <data
+                    android:mimeType="image/png"
+                    android:scheme="https"
+                    android:host="example.com"
+                    android:path="/images" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".FilterComponents$RevisionV2Activity"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.example.intent.REVISION_V2" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <receiver
+            android:name=".FilterComponents$FilterReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.intent.PING" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

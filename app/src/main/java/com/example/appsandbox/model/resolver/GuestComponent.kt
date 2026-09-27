@@ -22,13 +22,23 @@ data class GuestComponent(
     val type: GuestComponentType,
     val enabled: Boolean,
     val exported: Boolean,
-    val declaredPermissions: List<String> = emptyList()
+    val declaredPermissions: List<String> = emptyList(),
+    val intentFilters: List<GuestIntentFilter> = emptyList()
 ) {
     init {
         require(revisionId.isNotBlank()) { "component revision is blank" }
         require(packageName.isNotBlank()) { "component package is blank" }
         require(className.isNotBlank()) { "component class is blank" }
         require(declaredPermissions.none { it.isBlank() }) { "component permission is blank" }
+        require(intentFilters.all {
+            it.revisionId == revisionId &&
+                it.packageName == packageName &&
+                it.componentClassName == className &&
+                it.componentType == type
+        }) { "component filter is not bound to component" }
+        require(intentFilters.map { it.canonicalKey }.size == intentFilters.map { it.canonicalKey }.toSet().size) {
+            "component has duplicate intent filters"
+        }
     }
 
     fun toJson() = JSONObject()
@@ -39,6 +49,7 @@ data class GuestComponent(
         .put("enabled", enabled)
         .put("exported", exported)
         .put("declaredPermissions", org.json.JSONArray(declaredPermissions))
+        .put("intentFilters", org.json.JSONArray(intentFilters.map { it.toJson() }))
 }
 
 enum class GuestComponentNameReason(val code: String) {

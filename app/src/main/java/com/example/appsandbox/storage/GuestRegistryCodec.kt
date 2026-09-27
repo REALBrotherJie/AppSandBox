@@ -5,13 +5,14 @@ import com.example.appsandbox.model.GuestPackageRecord
 import com.example.appsandbox.model.resolver.GuestComponent
 import com.example.appsandbox.model.resolver.GuestComponentNames
 import com.example.appsandbox.model.resolver.GuestComponentType
+import com.example.appsandbox.model.resolver.GuestIntentFilter
 import org.json.JSONArray
 import org.json.JSONObject
 
 class GuestRegistryCodecException(message: String, cause: Throwable? = null) : IllegalStateException(message, cause)
 
 object GuestRegistryCodec {
-    const val SCHEMA_VERSION = 3
+    const val SCHEMA_VERSION = 4
 
     fun encode(records: List<GuestPackageRecord>): String =
         JSONObject()
@@ -26,14 +27,14 @@ object GuestRegistryCodec {
             throw GuestRegistryCodecException("Malformed Guest registry", error)
         }
         val schema = root.optInt("schemaVersion", -1)
-        if (schema != SCHEMA_VERSION) {
+        if (schema !in setOf(3, SCHEMA_VERSION)) {
             throw GuestRegistryCodecException("Unsupported Guest registry schema: $schema")
         }
         val records = root.optJSONArray("records")
             ?: throw GuestRegistryCodecException("Guest registry has no records")
         return (0 until records.length()).map {
             try {
-                parseRecord(records.getJSONObject(it))
+                parseRecord(records.getJSONObject(it), schema)
             } catch (error: GuestRegistryCodecException) {
                 throw error
             } catch (error: Throwable) {
@@ -42,9 +43,11 @@ object GuestRegistryCodec {
         }
     }
 
-    private fun parseRecord(value: JSONObject): GuestPackageRecord {
+    private fun parseRecord(value: JSONObject, registrySchema: Int): GuestPackageRecord {
         val recordSchema = value.optInt("schemaVersion", -1)
-        if (recordSchema != GuestPackageRecord.CURRENT_SCHEMA_VERSION) {
+        if (recordSchema != GuestPackageRecord.CURRENT_SCHEMA_VERSION &&
+            !(registrySchema == 3 && recordSchema == 3)
+        ) {
             throw GuestRegistryCodecException("Unsupported Guest revision schema: $recordSchema")
         }
         val revisionId = value.optString("revisionId").takeIf { it.isNotBlank() }
@@ -85,16 +88,20 @@ object GuestRegistryCodec {
             revisionId = revisionId,
             sha256 = value.optString("sha256").ifEmpty { null },
             fileSize = value.optLong("fileSize", -1),
-            schemaVersion = recordSchema,
+            schemaVersion = GuestPackageRecord.CURRENT_SCHEMA_VERSION,
             contractVersion = value.optInt("contractVersion", 1),
             components = components
         )
     }
 
     private fun parseComponent(value: JSONObject): GuestComponent {
-        val permissionsValue = value.optJSONArray("declaredPermissions") ?: JSONArray()
-        val permissions = (0 until permissionsValue.length()).map { permissionsValue.getString(it) }
         return try {
+            val permissionsValue = value.optJSONArray("declaredPermissions") ?: JSONArray()
+            val permissions = (0 until permissionsValue.length()).map { permissionsValue.getString(it) }
+            val filtersValue = value.optJSONArray("intentFilters") ?: JSONArray()
+            val filters = (0 until filtersValue.length()).map {
+                GuestIntentFilter.fromJson(filtersValue.getJSONObject(it))
+            }
             val packageName = value.getString("packageName")
             val className = value.getString("className")
             val normalizedClassName = GuestComponentNames.normalize(packageName, className)
@@ -108,10 +115,14 @@ object GuestRegistryCodec {
                 type = GuestComponentType.fromCode(value.getString("type")),
                 enabled = value.getBoolean("enabled"),
                 exported = value.getBoolean("exported"),
-                declaredPermissions = normalizedPermissions
+                declaredPermissions = normalizedPermissions,
+                intentFilters = filters
             )
         } catch (error: Throwable) {
-            throw GuestRegistryCodecException("Malformed Guest component", error)
+            throw GuestRegistryCodecException(
+                "Malformed Guest component: ${error.message ?: "invalid component"}",
+                error
+            )
         }
     }
 }
