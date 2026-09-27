@@ -1,6 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <activity android:name=".automation.Task29AutomationActivity" android:exported="true" />
+        <activity android:name=".automation.Task40ResolverAutomationActivity" android:exported="true" />
         <activity android:name=".experiments.v1.ExperimentActivity" android:exported="true" />
         <activity android:name=".experiments.task27.Task27DemoActivity" android:exported="true" />
         <activity

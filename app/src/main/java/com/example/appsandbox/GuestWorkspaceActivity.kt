@@ -8,11 +8,12 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.example.appsandbox.contract.GuestActionViewBinder
+import com.example.appsandbox.contract.GuestActionSession
 import com.example.appsandbox.contract.GuestViewContract
-import com.example.appsandbox.contract.GuestViewSession
 import com.example.appsandbox.experiments.GuestWorkspaceContext
 import com.example.appsandbox.model.GuestInstanceRecord
 import com.example.appsandbox.packageinfo.GuestPackageReader
+import com.example.appsandbox.runtime.client.GuestRuntimeSessionClient
 import com.example.appsandbox.storage.GuestInstanceStore
 import com.example.appsandbox.storage.GuestArtifactVerifier
 import com.example.appsandbox.storage.GuestStore
@@ -28,6 +29,7 @@ class GuestWorkspaceActivity : Activity() {
     private lateinit var guestRoot: LinearLayout
     private lateinit var store: GuestInstanceStore
     private lateinit var contract: GuestViewContract
+    private var actionSession: GuestActionSession? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = GuestInstanceStore(this)
@@ -42,7 +44,14 @@ class GuestWorkspaceActivity : Activity() {
         super.onResume()
         reload(intent)
     }
+    override fun onDestroy() {
+        actionSession?.close()
+        actionSession = null
+        super.onDestroy()
+    }
     private fun reload(source: Intent) {
+        actionSession?.close()
+        actionSession = null
         val spec = runCatching {
             GuestWorkspaceLaunchPolicy.validate(source.getStringExtra(EXTRA_INSTANCE_ID), source.dataString)
         }.getOrElse { show("Workspace intent is invalid: ${it.message}"); return }
@@ -101,8 +110,10 @@ class GuestWorkspaceActivity : Activity() {
             require(layoutId != 0) { "Unsupported Guest: layout resource missing" }
             val guestView = android.view.LayoutInflater.from(context).inflate(layoutId, guestRoot, false)
             if (contract.version == 2) {
+                val session = GuestRuntimeSessionClient(applicationContext, instance.instanceId, instance.guestRevisionId)
+                actionSession = session
                 GuestActionViewBinder(
-                    GuestViewSession(File(instance.dataRoot)),
+                    session,
                     onState = { state.text = it },
                     onFailure = { state.text = "Guest action failed: $it" }
                 ).bind(guestView, context.resources, context.packageName, contract)

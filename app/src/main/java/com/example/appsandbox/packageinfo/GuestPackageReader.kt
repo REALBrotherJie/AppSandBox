@@ -1,22 +1,21 @@
 package com.example.appsandbox.packageinfo
 
 import android.content.Context
+import android.content.pm.ComponentInfo
 import android.content.pm.PackageInfo
 import android.os.Build
 import android.util.Log
 import com.example.appsandbox.contract.GuestViewContract
 import com.example.appsandbox.model.ComponentSummary
 import com.example.appsandbox.model.GuestPackageRecord
+import com.example.appsandbox.model.resolver.GuestComponent
+import com.example.appsandbox.model.resolver.GuestComponentNames
+import com.example.appsandbox.model.resolver.GuestComponentType
 import com.example.appsandbox.packageinfo.validation.GuestContractRejection
 import com.example.appsandbox.packageinfo.validation.GuestContractValidation
 import java.io.File
 
 class GuestPackageReader(private val context: Context) {
-    companion object {
-        const val CONTRACT_VERSION = "com.example.appsandbox.guest.CONTRACT_VERSION"
-        const val VIEW_LAYOUT = "com.example.appsandbox.guest.VIEW_LAYOUT"
-        const val ACTION_SPEC = "com.example.appsandbox.guest.ACTION_SPEC"
-    }
     fun validate(apkPath: String): PackageInfo {
         val packageManager = context.packageManager
         val info = if (Build.VERSION.SDK_INT >= 33) {
@@ -57,7 +56,9 @@ class GuestPackageReader(private val context: Context) {
             packageManager.getPackageArchiveInfo(
                 apkPath,
                 android.content.pm.PackageManager.PackageInfoFlags.of(
-                    android.content.pm.PackageManager.GET_META_DATA.toLong() or android.content.pm.PackageManager.GET_ACTIVITIES.toLong() or
+                    android.content.pm.PackageManager.GET_META_DATA.toLong() or
+                        android.content.pm.PackageManager.GET_DISABLED_COMPONENTS.toLong() or
+                        android.content.pm.PackageManager.GET_ACTIVITIES.toLong() or
                         android.content.pm.PackageManager.GET_SERVICES.toLong() or
                         android.content.pm.PackageManager.GET_RECEIVERS.toLong() or
                         android.content.pm.PackageManager.GET_PROVIDERS.toLong()
@@ -67,7 +68,9 @@ class GuestPackageReader(private val context: Context) {
             @Suppress("DEPRECATION")
             packageManager.getPackageArchiveInfo(
                 apkPath,
-                    android.content.pm.PackageManager.GET_META_DATA or android.content.pm.PackageManager.GET_ACTIVITIES or
+                    android.content.pm.PackageManager.GET_META_DATA or
+                    android.content.pm.PackageManager.GET_DISABLED_COMPONENTS or
+                    android.content.pm.PackageManager.GET_ACTIVITIES or
                     android.content.pm.PackageManager.GET_SERVICES or
                     android.content.pm.PackageManager.GET_RECEIVERS or
                     android.content.pm.PackageManager.GET_PROVIDERS
@@ -80,6 +83,7 @@ class GuestPackageReader(private val context: Context) {
         val guestResources = packageManager.getResourcesForApplication(appInfo)
         val contract = readContract(appInfo, guestResources, info.packageName)
         val label = packageManager.getApplicationLabel(appInfo).toString()
+        val components = normalizeComponents(info, guestId)
         val record = GuestPackageRecord(
             internalGuestId = guestId,
             packageName = info.packageName,
@@ -90,16 +94,66 @@ class GuestPackageReader(private val context: Context) {
             apkPath = File(apkPath).absolutePath,
             appLabel = label,
             importedAt = System.currentTimeMillis(),
-            componentSummary = ComponentSummary(
-                info.activities?.size ?: 0,
-                info.services?.size ?: 0,
-                info.receivers?.size ?: 0,
-                info.providers?.size ?: 0
-            ),
-            contractVersion = contract.version
+            componentSummary = ComponentSummary.fromComponents(components),
+            schemaVersion = GuestPackageRecord.CURRENT_SCHEMA_VERSION,
+            contractVersion = contract.version,
+            components = components
         )
         Log.i(tag, "Parsed ${record.packageName} from $apkPath")
         return record
+    }
+
+    companion object {
+        const val CONTRACT_VERSION = "com.example.appsandbox.guest.CONTRACT_VERSION"
+        const val VIEW_LAYOUT = "com.example.appsandbox.guest.VIEW_LAYOUT"
+        const val ACTION_SPEC = "com.example.appsandbox.guest.ACTION_SPEC"
+
+        fun normalizeComponents(info: PackageInfo, revisionId: String): List<GuestComponent> {
+            val packageName = info.packageName.takeIf { it.isNotBlank() }
+                ?: error("APK has no package name")
+            val result = buildList {
+                info.activities.orEmpty().forEach {
+                    add(normalize(it, GuestComponentType.ACTIVITY, revisionId, packageName, it.permission))
+                }
+                info.services.orEmpty().forEach {
+                    add(normalize(it, GuestComponentType.SERVICE, revisionId, packageName, it.permission))
+                }
+                info.receivers.orEmpty().forEach {
+                    add(normalize(it, GuestComponentType.RECEIVER, revisionId, packageName, it.permission))
+                }
+                info.providers.orEmpty().forEach {
+                    val permissions = listOfNotNull(it.readPermission, it.writePermission)
+                    add(normalize(it, GuestComponentType.PROVIDER, revisionId, packageName, *permissions.toTypedArray()))
+                }
+            }
+            if (result.map { it.className to it.type }.toSet().size != result.size) {
+                error("Duplicate Guest component declaration")
+            }
+            return result.sortedWith(compareBy({ it.type.code }, { it.className }))
+        }
+
+        private fun normalize(
+            info: ComponentInfo,
+            type: GuestComponentType,
+            revisionId: String,
+            packageName: String,
+            vararg permissions: String?
+        ): GuestComponent {
+            val className = GuestComponentNames.normalize(packageName, info.name)
+            val normalizedPermissions = permissions.filterNotNull()
+                .map(GuestComponentNames::normalizePermission)
+                .distinct()
+                .sorted()
+            return GuestComponent(
+                revisionId = revisionId,
+                packageName = packageName,
+                className = className,
+                type = type,
+                enabled = info.enabled,
+                exported = info.exported,
+                declaredPermissions = normalizedPermissions
+            )
+        }
     }
 
     fun readContract(apkPath: String): GuestViewContract {

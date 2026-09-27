@@ -1,5 +1,6 @@
 package com.example.appsandbox.model
 
+import com.example.appsandbox.model.resolver.GuestComponent
 import org.json.JSONObject
 
 data class ComponentSummary(
@@ -13,6 +14,15 @@ data class ComponentSummary(
         .put("serviceCount", serviceCount)
         .put("receiverCount", receiverCount)
         .put("providerCount", providerCount)
+
+    companion object {
+        fun fromComponents(components: List<GuestComponent>) = ComponentSummary(
+            components.count { it.type == com.example.appsandbox.model.resolver.GuestComponentType.ACTIVITY },
+            components.count { it.type == com.example.appsandbox.model.resolver.GuestComponentType.SERVICE },
+            components.count { it.type == com.example.appsandbox.model.resolver.GuestComponentType.RECEIVER },
+            components.count { it.type == com.example.appsandbox.model.resolver.GuestComponentType.PROVIDER }
+        )
+    }
 }
 
 data class GuestPackageRecord(
@@ -28,8 +38,13 @@ data class GuestPackageRecord(
     val sha256: String? = null,
     val fileSize: Long = -1L,
     val schemaVersion: Int = 1,
-    val contractVersion: Int = 1
+    val contractVersion: Int = 1,
+    val components: List<GuestComponent> = emptyList()
 ) {
+    companion object {
+        const val CURRENT_SCHEMA_VERSION = 3
+    }
+
     fun toJson() = JSONObject()
         .put("internalGuestId", internalGuestId)
         .put("packageName", packageName)
@@ -44,4 +59,5 @@ data class GuestPackageRecord(
         .put("fileSize", fileSize)
         .put("schemaVersion", schemaVersion)
         .put("contractVersion", contractVersion)
+        .put("components", org.json.JSONArray(components.map { it.toJson() }))
 }

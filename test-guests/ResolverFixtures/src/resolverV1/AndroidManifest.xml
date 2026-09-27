@@ -1,0 +1,38 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <permission
+        android:name="com.example.appsandbox.resolverfixture.permission.PROTECTED"
+        android:protectionLevel="signature" />
+
+    <application>
+        <activity
+            android:name=".FixtureComponents$ExportedActivity"
+            android:enabled="true"
+            android:exported="true" />
+        <activity
+            android:name=".FixtureComponents$PrivateActivity"
+            android:enabled="true"
+            android:exported="false" />
+        <service
+            android:name=".FixtureComponents$EnabledService"
+            android:enabled="true"
+            android:exported="true" />
+        <service
+            android:name=".FixtureComponents$DisabledService"
+            android:enabled="false"
+            android:exported="true" />
+        <service
+            android:name=".FixtureComponents$ProtectedService"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="com.example.appsandbox.resolverfixture.permission.PROTECTED" />
+        <receiver
+            android:name=".FixtureComponents$FixtureReceiver"
+            android:enabled="true"
+            android:exported="true" />
+        <provider
+            android:name=".FixtureComponents$FixtureProvider"
+            android:authorities="com.example.appsandbox.resolverfixture.provider"
+            android:enabled="true"
+            android:exported="true" />
+    </application>
+</manifest>

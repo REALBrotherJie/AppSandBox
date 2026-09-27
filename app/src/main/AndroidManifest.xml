@@ -17,5 +17,9 @@
             android:documentLaunchMode="intoExisting"
             android:exported="false"
             android:launchMode="standard" />
+        <service
+            android:name=".runtime.GuestRuntimeService"
+            android:exported="false"
+            android:process=":guest_runtime" />
     </application>
 </manifest>
