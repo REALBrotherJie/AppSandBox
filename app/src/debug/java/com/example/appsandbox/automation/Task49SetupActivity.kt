@@ -27,7 +27,7 @@ class Task49SetupActivity : Activity() {
                 val record = requireNotNull(store.findRevision(instance.guestRevisionId))
                 startActivity(Intent(this, Act003StubActivity::class.java).apply {
                     action = Act003StubActivity.ACTION
-                    putExtra(Act003StubActivity.EXTRA_EXPERIMENT, Act003StubActivity.EXPERIMENT_ACT005)
+                    putExtra(Act003StubActivity.EXTRA_EXPERIMENT, if (intent.getStringExtra("experiment") == Act003StubActivity.EXPERIMENT_ACT006) Act003StubActivity.EXPERIMENT_ACT006 else Act003StubActivity.EXPERIMENT_ACT005)
                     putExtra(Act003StubActivity.EXTRA_LAUNCH_ID, runId)
                     putExtra(Act003StubActivity.EXTRA_INSTANCE_ID, instance.instanceId)
                     putExtra(Act003StubActivity.EXTRA_REVISION_ID, record.revisionId)

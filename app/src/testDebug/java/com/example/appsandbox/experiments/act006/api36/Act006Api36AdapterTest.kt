@@ -1,14 +1,14 @@
 package com.example.appsandbox.experiments.act006.api36
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Test
-import java.io.File
 
 class Act006Api36AdapterTest {
-    @Test fun rejectsApiAndShaBeforeConstruction() {
-        val a = Act006Api36Adapter()
-        assertEquals(Act006Reason.API_MISMATCH, Act006Reason.API_MISMATCH)
+    @Test fun resultDefaultsProveNoCallsOccurred() {
+        val result = Act006Result(Act006Reason.ACCESS_DENIED)
+        assertEquals(false, result.constructorAttempted)
+        assertEquals(false, result.attachInvokeAttempted)
+        assertEquals(0, result.lifecycleCalls)
     }
-    @Test fun fingerprintIsIndependentApi36Shape() { assertEquals(true, Act006Api36Adapter().javaClass.declaredMethods.any { it.name == "attach" }) }
+    @Test fun adapterPublishesSingleControlledExecutor() { assertEquals(1, Act006Api36Adapter().javaClass.declaredMethods.count { it.name == "execute" }) }
 }

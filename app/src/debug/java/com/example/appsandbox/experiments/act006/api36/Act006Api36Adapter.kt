@@ -1,61 +1,64 @@
 package com.example.appsandbox.experiments.act006.api36
 
 import android.app.Activity
-import android.app.Application
-import android.app.Instrumentation
-import android.content.Context
-import android.content.Intent
-import android.content.pm.ActivityInfo
-import android.os.Bundle
-import android.os.IBinder
-import android.view.Window
+import android.os.Build
+import com.example.appsandbox.storage.ArtifactState
+import com.example.appsandbox.storage.GuestArtifactVerifier
+import com.example.appsandbox.model.GuestInstanceRecord
+import com.example.appsandbox.model.GuestPackageRecord
 import dalvik.system.DexClassLoader
 import java.io.File
+import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 
-enum class Act006Reason { NONE, INVALID_INPUT, STALE_REVISION, SHA_MISMATCH, MISSING_CLASS, NON_ACTIVITY, API_MISMATCH, ACCESS_DENIED, ATTACH_FAILED, PROCESS_RECOVERY_REQUIRED }
-data class Act006Request(val api: Int, val apk: File, val className: String, val sha256: String, val expectedSha256: String, val host: Activity, val injectBadToken: Boolean = false)
-data class Act006Result(val reason: Act006Reason, val constructor: Boolean, val attachReturn: String, val baseContext: Boolean, val application: Boolean, val intent: Boolean, val activityInfo: Boolean, val window: Boolean, val token: Boolean, val lifecycle: Boolean = false, val fingerprint: String)
+enum class Act006Reason { NONE, INVALID_INPUT, STALE_REVISION, SHA_MISMATCH, MISSING_CLASS, NON_ACTIVITY, API_MISMATCH, ACCESS_DENIED, DUPLICATE_LAUNCH, PROCESS_RECOVERY_REQUIRED }
+data class Act006Request(val launchId: String, val className: String, val host: Activity, val forcedApi: Int? = null, val denyAccess: Boolean = false, val injectAttachFailure: Boolean = false)
+data class Act006Result(val reason: Act006Reason, val constructorAttempted: Boolean = false, val constructorCompleted: Boolean = false, val attachInvokeAttempted: Boolean = false, val attachCompleted: Boolean = false, val attachResult: String = "NOT_CALLED", val fingerprint: String = "", val guestState: String = "NOT_CONSTRUCTED", val lifecycleCalls: Int = 0)
 
-/** API36-only, debug-only carrier experiment. No lifecycle is invoked. */
+/** API36-only debug experiment. It never invokes a Guest lifecycle method. */
 class Act006Api36Adapter {
-    fun attach(request: Act006Request): Act006Result {
-        if (request.api != 36) return fail(Act006Reason.API_MISMATCH, "expected=36")
-        if (request.sha256 != request.expectedSha256) return fail(Act006Reason.SHA_MISMATCH, "sha")
-        val type = runCatching { DexClassLoader(request.apk.path, request.host.codeCacheDir.path, null, javaClass.classLoader).loadClass(request.className) }
-            .getOrElse { return fail(Act006Reason.MISSING_CLASS, "${it.javaClass.simpleName}") }
-        if (!Activity::class.java.isAssignableFrom(type)) return fail(Act006Reason.NON_ACTIVITY, type.name)
-        val guest = runCatching { type.getDeclaredConstructor().newInstance() as Activity }
-            .getOrElse { return fail(Act006Reason.MISSING_CLASS, "constructor:${it.javaClass.simpleName}") }
-        val method = runCatching { Activity::class.java.declaredMethods.single { it.name == "attach" } }
-            .getOrElse { return Act006Result(Act006Reason.ACCESS_DENIED, true, "NOT_CALLED", false, false, false, false, false, false, fingerprint()) }
+    fun execute(request: Act006Request, instance: GuestInstanceRecord?, revision: GuestPackageRecord?): Act006Result {
+        if (request.launchId.isBlank() || request.className.isBlank()) return result(Act006Reason.INVALID_INPUT)
+        if ((request.forcedApi ?: Build.VERSION.SDK_INT) != 36 || Build.VERSION.SDK_INT != 36) return result(Act006Reason.API_MISMATCH)
+        if (launches.putIfAbsent(request.launchId, request.className) != null) return result(Act006Reason.DUPLICATE_LAUNCH)
+        if (instance == null || revision == null || instance.guestRevisionId != revision.revisionId || instance.guestPackageName != revision.packageName) return result(Act006Reason.STALE_REVISION)
+        val apk = File(revision.apkPath)
+        if (revision.sha256 != instance.guestSha256 || GuestArtifactVerifier.verify(revision).state != ArtifactState.VALID || sha256(apk) != revision.sha256 || apk.canWrite()) return result(Act006Reason.SHA_MISMATCH)
+        val component = revision.components.singleOrNull { it.className == request.className && it.type.code == "activity" } ?: return result(Act006Reason.MISSING_CLASS)
+        val loader = DexClassLoader(apk.path, request.host.codeCacheDir.path, null, javaClass.classLoader)
+        val type = runCatching { loader.loadClass(component.className) }.getOrElse { return result(Act006Reason.MISSING_CLASS, fingerprint = "class:${root(it)}") }
+        if (!Activity::class.java.isAssignableFrom(type)) return result(Act006Reason.NON_ACTIVITY, fingerprint = "classLoader=${type.classLoader.javaClass.name}")
+        val prepared = runCatching { prepare(request.host, request.denyAccess) }.getOrElse { return result(Act006Reason.ACCESS_DENIED, fingerprint = "prepare:${root(it)}") }
+        val guest = runCatching { type.getDeclaredConstructor().newInstance() as Activity }.getOrElse {
+            return result(Act006Reason.PROCESS_RECOVERY_REQUIRED, constructorAttempted = true, fingerprint = "${prepared.fingerprint}|constructor:${root(it)}")
+        }
+        val args = prepared.args.copyOf()
+        if (request.injectAttachFailure) args[3] = null
         return try {
-            method.isAccessible = true
-            val info = ActivityInfo(request.host.packageManager.getActivityInfo(request.host.componentName, 0))
-            val args = method.parameterTypes.mapIndexed { i, type -> when {
-                i == 0 -> request.host
-                type == Instrumentation::class.java -> Instrumentation()
-                type == IBinder::class.java -> if (request.injectBadToken) null else request.host.window.decorView.applicationWindowToken
-                type == Int::class.javaPrimitiveType -> request.host.taskId
-                type == Application::class.java -> request.host.application
-                type == Intent::class.java -> Intent(request.host.intent)
-                type == ActivityInfo::class.java -> info
-                type == CharSequence::class.java -> request.host.title
-                type == android.content.res.Configuration::class.java -> request.host.resources.configuration
-                type == Window::class.java -> request.host.window
-                type == String::class.java -> null
-                type.isPrimitive -> 0
-                else -> null
-            }}.toTypedArray()
-            method.invoke(guest, *args)
-            Act006Result(Act006Reason.NONE, true, "RETURNED", guest.baseContext != null, guest.application != null, guest.intent != null,
-                true, guest.window != null, guest.window?.decorView?.windowToken != null, false, fingerprint(method.parameterTypes))
+            prepared.method.invoke(guest, *args)
+            Act006Result(Act006Reason.NONE, true, true, true, true, "RETURNED", prepared.fingerprint,
+                "base=${guest.baseContext != null},app=${guest.application != null},intent=${guest.intent != null},window=${guest.window != null},token=${guest.window?.decorView?.windowToken != null}")
         } catch (t: Throwable) {
-            Act006Result(Act006Reason.PROCESS_RECOVERY_REQUIRED, true, "THREW:${t.javaClass.simpleName}", false, false, false, false, false, false, false, fingerprint())
+            Act006Result(Act006Reason.PROCESS_RECOVERY_REQUIRED, true, true, true, false, "THREW:${root(t)}", prepared.fingerprint, "UNSAFE_PROCESS")
         }
     }
-    private fun fail(reason: Act006Reason, detail: String) = Act006Result(reason, false, "NOT_CALLED", false, false, false, false, false, false, false, "$detail|${fingerprint()}")
-    private fun fingerprint(types: Array<Class<*>>? = null) = "android.app.Activity.attach|params=${(types ?: API36_TYPES).joinToString(",") { it.name }}"
-    companion object {
-        private val API36_TYPES = arrayOf(Context::class.java, Class.forName("android.app.ActivityThread"), Instrumentation::class.java, IBinder::class.java, Int::class.javaPrimitiveType!!, Application::class.java, Intent::class.java, ActivityInfo::class.java, CharSequence::class.java, Activity::class.java, String::class.java, Class.forName("android.app.Activity\$NonConfigurationInstances"), android.content.res.Configuration::class.java, String::class.java, Class.forName("android.app.VoiceInteractor"), Window::class.java, Class.forName("android.app.Activity\$ActivityConfigCallback"), Any::class.java, IBinder::class.java, IBinder::class.java)
+
+    private data class Prepared(val method: java.lang.reflect.Method, val args: Array<Any?>, val fingerprint: String)
+    private fun prepare(host: Activity, deny: Boolean): Prepared {
+        if (deny) error("forced access denial")
+        val method = Activity::class.java.declaredMethods.filter { it.name == "attach" && it.parameterCount in 19..20 }.maxBy { it.parameterCount }.apply { isAccessible = true }
+        fun field(name: String): Any? = Activity::class.java.getDeclaredField(name).apply { isAccessible = true }.get(host)
+        val values = mutableListOf<Any?>(host, field("mMainThread"), field("mInstrumentation"), field("mToken"), field("mIdent"), host.application,
+            host.intent, field("mActivityInfo"), host.title, field("mParent"), field("mEmbeddedID"), field("mLastNonConfigurationInstances"),
+            host.resources.configuration, field("mReferrer"), null, host.window, null, field("mAssistToken"), field("mShareableActivityToken"))
+        if (method.parameterCount == 20) values += field("mInitialCallerInfoAccessToken")
+        val args = values.toTypedArray()
+        require(args[1] != null && args[2] != null && args[3] != null && args[4] is Int && args[7] != null && args[17] != null) { "required host attach value unavailable" }
+        val names = listOf("context","activityThread","instrumentation","activityToken","ident","application","intent","activityInfo","title","parent","embeddedId","lastNonConfiguration","configuration","referrer","voiceInteractor","window","activityConfigCallback","assistToken","shareableActivityToken","initialCallerInfoAccessToken")
+        return Prepared(method, args, method.parameterTypes.mapIndexed { i, c -> "${names[i]}:${c.name}" }.joinToString("|"))
     }
+    private fun result(reason: Act006Reason, constructorAttempted: Boolean = false, fingerprint: String = "") = Act006Result(reason, constructorAttempted = constructorAttempted, fingerprint = fingerprint)
+    private fun sha256(file: File) = MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+    private fun root(t: Throwable): String { var x=t; while(x.cause != null) x=x.cause!!; return x.javaClass.name + ":" + (x.message ?: "") }
+    companion object { private val launches = ConcurrentHashMap<String, String>() }
 }

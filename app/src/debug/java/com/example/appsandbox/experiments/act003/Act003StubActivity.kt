@@ -135,19 +135,25 @@ class Act003StubActivity : Activity() {
         val revision = runCatching { GuestStore(this).findRevision(instance?.guestRevisionId.orEmpty()) }.getOrNull()
         val apk = revision?.apkPath?.let(::File)
         val expected = revision?.sha256.orEmpty()
-        val result = if (apk == null || revision == null) Act006Result(Act006Reason.STALE_REVISION, false, "NOT_CALLED", false, false, false, false, false, false, false, "missing")
-        else Act006Api36Adapter().attach(Act006Request(if (scenario == "api-mismatch") 31 else android.os.Build.VERSION.SDK_INT, apk, "com.example.appsandbox.testguest.runtime.GuestMainActivity", if (scenario == "sha-mismatch") "0".repeat(64) else expected, expected, this, scenario == "attach-fault"))
+        val selectedRevision = when (scenario) {
+            "stale-revision" -> null
+            "sha-mismatch" -> revision?.copy(sha256 = "0".repeat(64))
+            "missing-class" -> revision?.copy(components = revision.components.map { if (it.type == GuestComponentType.ACTIVITY) it.copy(className = "missing.GuestActivity") else it })
+            "non-activity" -> revision?.copy(components = revision.components + requireNotNull(revision.components.firstOrNull { it.type == GuestComponentType.ACTIVITY }).copy(className = "com.example.appsandbox.testguest.runtime.GuestProbe"))
+            else -> revision
+        }
+        val className = when (scenario) { "missing-class" -> "missing.GuestActivity"; "non-activity" -> "com.example.appsandbox.testguest.runtime.GuestProbe"; else -> "com.example.appsandbox.testguest.runtime.GuestMainActivity" }
+        val result = Act006Api36Adapter().execute(Act006Request(launchId, className, this,
+            forcedApi = if (scenario == "api-mismatch") 31 else null, denyAccess = scenario == "access-denied", injectAttachFailure = scenario == "attach-fault"), instance, selectedRevision)
         append("act006.scenario=$scenario")
         append("act006.reason=${result.reason}")
-        append("act006.constructor=${result.constructor}")
-        append("act006.attachReturn=${result.attachReturn}")
-        append("act006.baseContext=${result.baseContext}")
-        append("act006.application=${result.application}")
-        append("act006.intent=${result.intent}")
-        append("act006.activityInfo=${result.activityInfo}")
-        append("act006.window=${result.window}")
-        append("act006.token=${result.token}")
-        append("act006.lifecycle=${result.lifecycle}")
+        append("act006.constructorAttempted=${result.constructorAttempted}")
+        append("act006.constructorCompleted=${result.constructorCompleted}")
+        append("act006.attachInvokeAttempted=${result.attachInvokeAttempted}")
+        append("act006.attachCompleted=${result.attachCompleted}")
+        append("act006.attachResult=${result.attachResult}")
+        append("act006.guestState=${result.guestState}")
+        append("act006.lifecycleCalls=${result.lifecycleCalls}")
         append("act006.fingerprint=${result.fingerprint}")
         append("hostFallback=ACT003_STUB")
         append("guestActivityRecord=false")
