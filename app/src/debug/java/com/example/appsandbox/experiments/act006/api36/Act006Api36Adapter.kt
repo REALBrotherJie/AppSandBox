@@ -10,6 +10,10 @@ import dalvik.system.DexClassLoader
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
+import com.example.appsandbox.experiments.act006.core.Act006AttachExecutor
+import com.example.appsandbox.experiments.act006.core.Act006Expected
+import com.example.appsandbox.experiments.act006.core.Act006InputSnapshot
+import com.example.appsandbox.experiments.act006.core.Act006StateMachine
 
 enum class Act006Reason { NONE, INVALID_INPUT, STALE_REVISION, SHA_MISMATCH, MISSING_CLASS, NON_ACTIVITY, API_MISMATCH, ACCESS_DENIED, DUPLICATE_LAUNCH, PROCESS_RECOVERY_REQUIRED }
 data class Act006Request(val launchId: String, val className: String, val host: Activity, val forcedApi: Int? = null, val denyAccess: Boolean = false, val injectAttachFailure: Boolean = false)
@@ -29,18 +33,22 @@ class Act006Api36Adapter {
         val type = runCatching { loader.loadClass(component.className) }.getOrElse { return result(Act006Reason.MISSING_CLASS, fingerprint = "class:${root(it)}") }
         if (!Activity::class.java.isAssignableFrom(type)) return result(Act006Reason.NON_ACTIVITY, fingerprint = "classLoader=${type.classLoader.javaClass.name}")
         val prepared = runCatching { prepare(request.host, request.denyAccess) }.getOrElse { return result(Act006Reason.ACCESS_DENIED, fingerprint = "prepare:${root(it)}") }
-        val guest = runCatching { type.getDeclaredConstructor().newInstance() as Activity }.getOrElse {
-            return result(Act006Reason.PROCESS_RECOVERY_REQUIRED, constructorAttempted = true, fingerprint = "${prepared.fingerprint}|constructor:${root(it)}")
-        }
-        val args = prepared.args.copyOf()
-        if (request.injectAttachFailure) args[3] = null
-        return try {
-            prepared.method.invoke(guest, *args)
-            Act006Result(Act006Reason.NONE, true, true, true, true, "RETURNED", prepared.fingerprint,
-                "base=${guest.baseContext != null},app=${guest.application != null},intent=${guest.intent != null},window=${guest.window != null},token=${guest.window?.decorView?.windowToken != null}")
-        } catch (t: Throwable) {
-            Act006Result(Act006Reason.PROCESS_RECOVERY_REQUIRED, true, true, true, false, "THREW:${root(t)}", prepared.fingerprint, "UNSAFE_PROCESS")
-        }
+        val input = Act006InputSnapshot(request.launchId, request.launchId, instance.instanceId, revision.revisionId,
+            revision.sha256, component.className, request.host.componentName.flattenToShortString(), prepared.fingerprint)
+        val expected = Act006Expected(input.instanceId, input.revisionId, input.artifactSha256, input.guestClass, input.hostCarrier, input.apiAdapterFingerprint)
+        var guest: Activity? = null
+        val core = Act006StateMachine(request.launchId, object : Act006AttachExecutor {
+            override fun construct(input: Act006InputSnapshot): Any = (type.getDeclaredConstructor().newInstance() as Activity).also { guest = it }
+            override fun attach(instance: Any, input: Act006InputSnapshot) {
+                val args = prepared.args.copyOf(); if (request.injectAttachFailure) args[3] = null
+                prepared.method.invoke(instance as Activity, *args)
+            }
+        }).execute(input, expected)
+        val c = core.counters
+        return Act006Result(if (core.attachedNoLifecycle) Act006Reason.NONE else Act006Reason.PROCESS_RECOVERY_REQUIRED,
+            c.constructorAttempted == 1, c.constructorCompleted == 1, c.attachAttempted == 1, c.attachCompleted == 1,
+            if (c.attachCompleted == 1) "RETURNED" else "THREW:${core.error.orEmpty()}", prepared.fingerprint,
+            guest?.let { "base=${it.baseContext != null},app=${it.application != null},intent=${it.intent != null},window=${it.window != null},token=${it.window?.decorView?.windowToken != null}" } ?: "NOT_CONSTRUCTED")
     }
 
     private data class Prepared(val method: java.lang.reflect.Method, val args: Array<Any?>, val fingerprint: String)
