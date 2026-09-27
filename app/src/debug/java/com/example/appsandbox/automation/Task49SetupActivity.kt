@@ -35,6 +35,7 @@ class Task49SetupActivity : Activity() {
                     putExtra(Act003StubActivity.EXTRA_GUEST_PACKAGE, record.packageName)
                     putExtra(Act003StubActivity.EXTRA_GUEST_COMPONENT, "com.example.appsandbox.testguest.runtime.GuestMainActivity")
                     putExtra(Act003StubActivity.EXTRA_SCENARIO, intent.getStringExtra("scenario") ?: "valid")
+                    putExtra("caseId", intent.getStringExtra("caseId"))
                 })
                 report.writeText("status=PASS\nrunId=$runId\napi=${android.os.Build.VERSION.SDK_INT}\nphase=launch\n")
             }

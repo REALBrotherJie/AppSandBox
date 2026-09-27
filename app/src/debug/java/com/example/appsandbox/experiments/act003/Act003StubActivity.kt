@@ -28,6 +28,8 @@ class Act003StubActivity : Activity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         report.delete()
+        append("runId=${validLaunchId ?: "invalid"}")
+        append("caseId=${intent.getStringExtra("caseId") ?: "missing"}")
         append("lifecycle=onCreate")
         if (validLaunchId == null) {
             append("launchResult=INVALID_LAUNCH_ID")
@@ -83,6 +85,7 @@ class Act003StubActivity : Activity() {
         append("hostStubTokenOnly=true")
         if (experiment == EXPERIMENT_ACT004A) append("guestTokenWindowTask=NOT_CLAIMED")
         append("hostSurvived=true")
+        append("FINAL=1")
     }
 
     private fun runAct005() {

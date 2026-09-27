@@ -37,31 +37,46 @@ class Act006Api36Adapter {
             revision.sha256, component.className, request.host.componentName.flattenToShortString(), prepared.fingerprint)
         val expected = Act006Expected(input.instanceId, input.revisionId, input.artifactSha256, input.guestClass, input.hostCarrier, input.apiAdapterFingerprint)
         var guest: Activity? = null
+        var invokeAttempted = false
+        var invokeCompleted = false
         val core = Act006StateMachine(request.launchId, object : Act006AttachExecutor {
             override fun construct(input: Act006InputSnapshot): Any = (type.getDeclaredConstructor().newInstance() as Activity).also { guest = it }
             override fun attach(instance: Any, input: Act006InputSnapshot) {
                 val args = prepared.args.copyOf(); if (request.injectAttachFailure) args[3] = null
+                invokeAttempted = true
                 prepared.method.invoke(instance as Activity, *args)
+                invokeCompleted = true
             }
         }).execute(input, expected)
         val c = core.counters
-        return Act006Result(if (core.attachedNoLifecycle) Act006Reason.NONE else Act006Reason.PROCESS_RECOVERY_REQUIRED,
-            c.constructorAttempted == 1, c.constructorCompleted == 1, c.attachAttempted == 1, c.attachCompleted == 1,
-            if (c.attachCompleted == 1) "RETURNED" else "THREW:${core.error.orEmpty()}", prepared.fingerprint,
+        val mappedReason = when (core.reason) {
+            com.example.appsandbox.experiments.act006.core.Act006Reason.NONE -> Act006Reason.NONE
+            com.example.appsandbox.experiments.act006.core.Act006Reason.CONSTRUCTOR_FAILED -> Act006Reason.PROCESS_RECOVERY_REQUIRED
+            com.example.appsandbox.experiments.act006.core.Act006Reason.ATTACH_FAILED,
+            com.example.appsandbox.experiments.act006.core.Act006Reason.PROCESS_RECOVERY -> Act006Reason.PROCESS_RECOVERY_REQUIRED
+            else -> Act006Reason.ACCESS_DENIED
+        }
+        return Act006Result(mappedReason,
+            c.constructorAttempted == 1, c.constructorCompleted == 1, invokeAttempted, invokeCompleted,
+            if (invokeCompleted) "RETURNED" else if (invokeAttempted) "THREW:${core.error.orEmpty()}" else "NOT_CALLED", prepared.fingerprint,
             guest?.let { "base=${it.baseContext != null},app=${it.application != null},intent=${it.intent != null},window=${it.window != null},token=${it.window?.decorView?.windowToken != null}" } ?: "NOT_CONSTRUCTED")
     }
 
     private data class Prepared(val method: java.lang.reflect.Method, val args: Array<Any?>, val fingerprint: String)
     private fun prepare(host: Activity, deny: Boolean): Prepared {
         if (deny) error("forced access denial")
-        val method = Activity::class.java.declaredMethods.filter { it.name == "attach" && it.parameterCount in 19..20 }.maxBy { it.parameterCount }.apply { isAccessible = true }
+        val expected = listOf("android.content.Context", "android.app.ActivityThread", "android.app.Instrumentation", "android.os.IBinder", "int", "android.app.Application", "android.content.Intent", "android.content.pm.ActivityInfo", "java.lang.CharSequence", "android.app.Activity", "java.lang.String", "android.app.Activity\$NonConfigurationInstances", "android.content.res.Configuration", "java.lang.String", "android.app.VoiceInteractor", "android.view.Window", "android.app.Activity\$ActivityConfigCallback", "android.os.IBinder", "android.os.IBinder", "android.os.IBinder")
+        val method = Activity::class.java.declaredMethods.singleOrNull { it.name == "attach" && it.parameterTypes.map(Class<*>::getName) == expected }
+            ?: error("API36 attach declaration unavailable or shape mismatch")
+        method.isAccessible = true
         fun field(name: String): Any? = Activity::class.java.getDeclaredField(name).apply { isAccessible = true }.get(host)
         val values = mutableListOf<Any?>(host, field("mMainThread"), field("mInstrumentation"), field("mToken"), field("mIdent"), host.application,
             host.intent, field("mActivityInfo"), host.title, field("mParent"), field("mEmbeddedID"), field("mLastNonConfigurationInstances"),
             host.resources.configuration, field("mReferrer"), null, host.window, null, field("mAssistToken"), field("mShareableActivityToken"))
         if (method.parameterCount == 20) values += field("mInitialCallerInfoAccessToken")
         val args = values.toTypedArray()
-        require(args[1] != null && args[2] != null && args[3] != null && args[4] is Int && args[7] != null && args[17] != null) { "required host attach value unavailable" }
+        require(args[1] != null && args[2] != null && args[3] != null && args[4] is Int && args[7] != null) { "required host attach value unavailable" }
+        require(host.window.javaClass.name == "com.android.internal.policy.PhoneWindow") { "Host window semantic owner unavailable" }
         val names = listOf("context","activityThread","instrumentation","activityToken","ident","application","intent","activityInfo","title","parent","embeddedId","lastNonConfiguration","configuration","referrer","voiceInteractor","window","activityConfigCallback","assistToken","shareableActivityToken","initialCallerInfoAccessToken")
         return Prepared(method, args, method.parameterTypes.mapIndexed { i, c -> "${names[i]}:${c.name}" }.joinToString("|"))
     }
