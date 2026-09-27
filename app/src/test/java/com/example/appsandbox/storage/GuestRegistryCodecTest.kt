@@ -4,6 +4,8 @@ import com.example.appsandbox.model.ComponentSummary
 import com.example.appsandbox.model.GuestPackageRecord
 import com.example.appsandbox.model.resolver.GuestComponent
 import com.example.appsandbox.model.resolver.GuestComponentType
+import com.example.appsandbox.model.resolver.GuestIntentFilterNormalizer
+import com.example.appsandbox.model.resolver.GuestRawIntentData
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -17,7 +19,27 @@ class GuestRegistryCodecTest {
         className = "com.example.fixture.VisibleActivity",
         type = GuestComponentType.ACTIVITY,
         enabled = true,
-        exported = true
+        exported = true,
+        intentFilters = listOf(
+            GuestIntentFilterNormalizer.normalize(
+                revisionId = "revision-a",
+                packageName = "com.example.fixture",
+                componentClassName = "com.example.fixture.VisibleActivity",
+                componentType = GuestComponentType.ACTIVITY,
+                actions = listOf("com.example.VIEW"),
+                categories = listOf("com.example.DEFAULT"),
+                dataDeclarations = listOf(
+                    GuestRawIntentData(
+                        mimeType = "image/*",
+                        scheme = "HTTPS",
+                        host = "Example.COM",
+                        path = "/images"
+                    )
+                ),
+                priority = 7,
+                autoVerify = true
+            )
+        )
     )
     private val record = GuestPackageRecord(
         internalGuestId = "guest-a",
@@ -46,6 +68,13 @@ class GuestRegistryCodecTest {
         try {
             GuestRegistryCodec.decode(old)
             throw AssertionError("expected schema rejection")
+        } catch (error: GuestRegistryCodecException) {
+            assertTrue(error.message.orEmpty().contains("Unsupported Guest registry schema"))
+        }
+        val task40 = """{"schemaVersion":3,"records":[]}"""
+        try {
+            GuestRegistryCodec.decode(task40)
+            throw AssertionError("expected Task-40 schema rejection")
         } catch (error: GuestRegistryCodecException) {
             assertTrue(error.message.orEmpty().contains("Unsupported Guest registry schema"))
         }

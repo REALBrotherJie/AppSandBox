@@ -5,13 +5,14 @@ import com.example.appsandbox.model.GuestPackageRecord
 import com.example.appsandbox.model.resolver.GuestComponent
 import com.example.appsandbox.model.resolver.GuestComponentNames
 import com.example.appsandbox.model.resolver.GuestComponentType
+import com.example.appsandbox.model.resolver.GuestIntentFilter
 import org.json.JSONArray
 import org.json.JSONObject
 
 class GuestRegistryCodecException(message: String, cause: Throwable? = null) : IllegalStateException(message, cause)
 
 object GuestRegistryCodec {
-    const val SCHEMA_VERSION = 3
+    const val SCHEMA_VERSION = 4
 
     fun encode(records: List<GuestPackageRecord>): String =
         JSONObject()
@@ -92,9 +93,13 @@ object GuestRegistryCodec {
     }
 
     private fun parseComponent(value: JSONObject): GuestComponent {
-        val permissionsValue = value.optJSONArray("declaredPermissions") ?: JSONArray()
-        val permissions = (0 until permissionsValue.length()).map { permissionsValue.getString(it) }
         return try {
+            val permissionsValue = value.optJSONArray("declaredPermissions") ?: JSONArray()
+            val permissions = (0 until permissionsValue.length()).map { permissionsValue.getString(it) }
+            val filtersValue = value.optJSONArray("intentFilters") ?: JSONArray()
+            val filters = (0 until filtersValue.length()).map {
+                GuestIntentFilter.fromJson(filtersValue.getJSONObject(it))
+            }
             val packageName = value.getString("packageName")
             val className = value.getString("className")
             val normalizedClassName = GuestComponentNames.normalize(packageName, className)
@@ -108,10 +113,14 @@ object GuestRegistryCodec {
                 type = GuestComponentType.fromCode(value.getString("type")),
                 enabled = value.getBoolean("enabled"),
                 exported = value.getBoolean("exported"),
-                declaredPermissions = normalizedPermissions
+                declaredPermissions = normalizedPermissions,
+                intentFilters = filters
             )
         } catch (error: Throwable) {
-            throw GuestRegistryCodecException("Malformed Guest component", error)
+            throw GuestRegistryCodecException(
+                "Malformed Guest component: ${error.message ?: "invalid component"}",
+                error
+            )
         }
     }
 }

@@ -42,7 +42,7 @@ data class GuestPackageRecord(
     val components: List<GuestComponent> = emptyList()
 ) {
     companion object {
-        const val CURRENT_SCHEMA_VERSION = 3
+        const val CURRENT_SCHEMA_VERSION = 4
     }
 
     fun toJson() = JSONObject()

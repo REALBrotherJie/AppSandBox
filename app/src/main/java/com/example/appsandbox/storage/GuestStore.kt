@@ -39,7 +39,12 @@ class GuestStore(private val context: Context) : com.example.appsandbox.resolver
                 sha256 = sha,
                 fileSize = size,
                 schemaVersion = GuestPackageRecord.CURRENT_SCHEMA_VERSION,
-                components = parsed.components.map { it.copy(revisionId = revisionId) }
+                components = parsed.components.map { component ->
+                    component.copy(
+                        revisionId = revisionId,
+                        intentFilters = component.intentFilters.map { it.copy(revisionId = revisionId) }
+                    )
+                }
             )
             val verification = GuestArtifactVerifier.verify(record)
             if (verification.state != ArtifactState.VALID) throw GuestStoreException(verification.state, verification.message ?: verification.state.name)
