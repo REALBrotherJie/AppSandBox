@@ -66,6 +66,9 @@ class Task43ImplicitResolverAutomationActivity : Activity() {
                 }
             }
 
+            is GuestImplicitResolutionResult.Ambiguous ->
+                "REVISION=$revisionId AMBIGUOUS candidates=${result.candidates.size}"
+
             is GuestImplicitResolutionResult.Rejected ->
                 "REVISION=$revisionId REJECTED reason=${result.reason.code}"
         }

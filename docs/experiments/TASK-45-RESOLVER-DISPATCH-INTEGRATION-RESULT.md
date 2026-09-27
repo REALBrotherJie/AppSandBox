@@ -19,10 +19,10 @@ Status: PARTIALLY CONFIRMED
 
 ## Verification
 - `git diff --check`: passed.
-- Gradle JVM/build verification: blocked before compilation because the configured SDK lacks accepted licenses and installed `platforms;android-36` / `build-tools;35.0.0`.
-- API31: not executed in this environment.
-- API36: not executed; SDK/emulator environment unavailable.
+- Gradle JVM/build verification: passed after normalizing to the complete SDK; 107 JVM tests passed (1 skipped), and full `test`, `assembleDebug`, and `assembleRelease` passed.
+- API31: device remained online, but the existing Task-42 runner stalled in its ADB/uiautomator capture path; no end-to-end pass is claimed.
+- API36: AVD cold-booted and reached SDK 36 `sys.boot_completed=1`; the Task-43 runner likewise stalled during capture, so parity and device matrix are not claimed.
 - Guest installed: false / false.
 
 ## Remaining gate
-Install/restore the configured Android SDK and API31/API36 devices, then run the full Task-42 regression and the Task-45 resolver, ambiguity, stale-plan, migration, and logical-dispatch matrix before updating `main`.
+Repair the existing ADB/uiautomator runners, then run the full Task-42 regression and the Task-45 resolver, framework parity, stale-plan, migration, and logical-dispatch matrix before updating `main`.

@@ -154,7 +154,7 @@ class GuestImplicitIntentResolverTest {
 
         val result = resolver.resolve(
             request("revision-a", categories = listOf("com.example.DEFAULT"), mimeType = "image/png")
-        ) as GuestImplicitResolutionResult.Resolved
+        ) as GuestImplicitResolutionResult.Ambiguous
         assertEquals(
             listOf(
                 "$packageName.BroadActivity",
@@ -392,7 +392,7 @@ class GuestImplicitIntentResolverTest {
         componentClassName = GuestComponentNames.normalize(packageName, className),
         componentType = GuestComponentType.ACTIVITY,
         actions = actions,
-        categories = categories,
+        categories = (listOf("android.intent.category.DEFAULT") + categories).distinct(),
         dataDeclarations = data,
         priority = priority,
         autoVerify = false
