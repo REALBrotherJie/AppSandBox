@@ -5,9 +5,9 @@ Status: CONFIRMED
 
 ## Result
 
-- Added debug-only, version-specific API31 and API36 adapters. Each records runtime declaration fingerprint, capability/access outcome, selection phase and Host fallback phase.
-- Selection accepts only a verified instance/revision/artifact SHA/component mapping and uses a dedicated Guest `DexClassLoader` to load and verify the Activity class without invoking its constructor.
-- A successful selection immediately transitions `CLASS_SELECTED -> ROLLED_BACK_TO_HOST`; system-created ACT-003 Stub remains the only Activity object, task, window, token and lifecycle owner.
+- Added debug-only, version-specific API31 and API36 declaration probes. Each records a runtime declaration fingerprint and capability/access outcome after the Host Stub has entered `onCreate`.
+- The runner accepts only a verified instance/revision/artifact SHA/component mapping and uses a dedicated Guest `DexClassLoader` to load and verify the Activity class without invoking its constructor.
+- `CLASS_SELECTED -> ROLLED_BACK_TO_HOST` names only the runner's local bookkeeping path. It did not modify framework class selection or a launch transaction and therefore is not evidence of a real framework replacement or rollback. The system-created ACT-003 Stub remained the only Activity object, task, window, token and lifecycle owner.
 - Empty/stale mappings, artifact mismatch, stale component, missing/non-Activity class, API mismatch, access denial and conflicting repeated launch IDs fail closed. Repeating the same launch after process restart remains recoverable.
 
 ## Device matrix
