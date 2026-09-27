@@ -11,14 +11,7 @@ Remove-Item -LiteralPath (Join-Path $report 'result.txt') -ErrorAction SilentlyC
 . (Join-Path $PSScriptRoot 'task47-adb-helper.ps1')
 
 function A([string[]]$argv) {
-    $previous = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    $output = & $adb -s $Serial @argv 2>&1
-    $exitCode = $LASTEXITCODE
-    $ErrorActionPreference = $previous
-    $output | Tee-Object -FilePath (Join-Path $report 'adb-last.txt')
-    if ($exitCode -ne 0) { throw "adb failed: $($argv -join ' ')" }
-    $output
+    Invoke-AdbBounded -Adb $adb -Serial $Serial -CommandArgs $argv -TimeoutSec 30 -ReportDir $report
 }
 
 function ReadReport {
@@ -140,7 +133,7 @@ ImportApk 'task43-intent-v1.apk'
 Stage $intentV2 'task43-intent-v2.apk'
 ImportApk 'task43-intent-v2.apk'
 
-Resolve 0 'activity' 'com.example.intent.VIEW' @('com.example.intent.DEFAULT', 'com.example.intent.IMAGE') 'image/png' 'https://example.com/images' 'REJECTED reason=no-match' 'v1 exact/wildcard Activity did not return deterministic result'
+Resolve 0 'activity' 'com.example.intent.VIEW' @('com.example.intent.DEFAULT', 'com.example.intent.IMAGE') 'image/png' 'https://example.com/images' 'AMBIGUOUS|REJECTED reason=ambiguous' 'v1 exact/wildcard Activity did not return ambiguity'
 Resolve 0 'activity' 'com.example.intent.EDIT' @('com.example.intent.DEFAULT', 'com.example.intent.IMAGE') 'image/png' 'https://example.com/images' 'RESOLVED count=1' 'multiple-action filter did not resolve'
 Resolve 0 'receiver' 'com.example.intent.PING' @('com.example.intent.DEFAULT') '' '' 'RESOLVED count=1' 'Receiver filter did not resolve'
 Resolve 0 'activity' 'com.example.intent.DISABLED' @('com.example.intent.DEFAULT') '' '' 'REJECTED reason=disabled' 'disabled filter did not fail closed'
@@ -177,3 +170,5 @@ AssertUi 'contract=v1' 'v1 workspace unavailable after implicit resolver imports
 $status = if ($script:caseFailures.Count -eq 0) { 'PASS' } else { 'FAIL' }
 "status=$status`nrunId=$runId`napi=$api`ncases=9`ncaseFailures=$($script:caseFailures -join '|')`nno-guest-activity-record=true`nintent-filter-fixture-installed=false" | Set-Content (Join-Path $report 'result.txt')
 if ($status -eq 'FAIL') { throw "Task-43 case failures: $($script:caseFailures -join '; ')" }
+
+

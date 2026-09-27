@@ -2,6 +2,7 @@ param([Parameter(Mandatory = $true)][string]$Serial)
 
 $ErrorActionPreference = 'Stop'
 $adb = 'D:/Company/Install/Android/SDK/platform-tools/adb.exe'
+. (Join-Path $PSScriptRoot 'task47-adb-helper.ps1')
 $root = Split-Path $PSScriptRoot -Parent
 $report = Join-Path $root "build/reports/task42/$Serial"
 New-Item -ItemType Directory -Force $report | Out-Null
@@ -9,14 +10,7 @@ Remove-Item -LiteralPath (Join-Path $report 'result.txt') -ErrorAction SilentlyC
 "status=RUNNING`nserial=$Serial" | Set-Content (Join-Path $report 'result.txt')
 
 function A([string[]]$argv) {
-    $previousPreference = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    $output = & $adb -s $Serial @argv 2>&1
-    $code = $LASTEXITCODE
-    $ErrorActionPreference = $previousPreference
-    $output | Tee-Object -FilePath (Join-Path $report 'adb-last.txt')
-    if ($code -ne 0) { throw "adb failed: $($argv -join ' ')" }
-    $output
+    Invoke-AdbBounded -Adb $adb -Serial $Serial -CommandArgs $argv -TimeoutSec 30 -ReportDir $report
 }
 
 function UiXml {
@@ -198,3 +192,5 @@ try {
     "status=FAIL`nserial=$Serial`nerror=$($_.Exception.Message)" | Set-Content (Join-Path $report 'result.txt')
     throw
 }
+
+

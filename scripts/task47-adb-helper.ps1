@@ -1,10 +1,14 @@
 function Invoke-AdbBounded {
-    param([string]$Adb,[string]$Serial,[string[]]$Args,[int]$TimeoutSec=20,[string]$ReportDir)
-    $job = Start-Job -ScriptBlock { param($a,$s,$args) & $a -s $s @args 2>&1 } -ArgumentList $Adb,$Serial,$Args
-    if (-not (Wait-Job $job -Timeout $TimeoutSec)) { Stop-Job $job -Force; Remove-Job $job -Force; throw "adb timeout after ${TimeoutSec}s: $($Args -join ' ')" }
-    $out = Receive-Job $job; $code = $job.ChildJobs[0].JobStateInfo.Reason; Remove-Job $job -Force
+    param([string]$Adb,[string]$Serial,[string[]]$CommandArgs,[int]$TimeoutSec=20,[string]$ReportDir)
+    $psi = [Diagnostics.ProcessStartInfo]::new(); $psi.FileName = $Adb; $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+    $allArgs = @('-s', $Serial) + @($CommandArgs)
+    $psi.Arguments = (($allArgs | ForEach-Object { $v = [string]$_; if ($v -match '[\s"]') { '"' + ($v -replace '([\\"])','\$1') + '"' } else { $v } }) -join ' ')
+    $process = [Diagnostics.Process]::new(); $process.StartInfo = $psi; [void]$process.Start()
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync(); $stderrTask = $process.StandardError.ReadToEndAsync()
+    if (-not $process.WaitForExit($TimeoutSec * 1000)) { $process.Kill(); $process.Dispose(); throw "ADB_TIMEOUT: $($CommandArgs -join ' ')" }
+    $stdoutTask.Wait(); $stderrTask.Wait(); $out = $stdoutTask.Result + $stderrTask.Result; $code = $process.ExitCode; $process.Dispose()
     if ($ReportDir) { $out | Set-Content (Join-Path $ReportDir 'adb-last.txt') }
-    if ($LASTEXITCODE -ne 0 -and $code) { throw "adb failed: $($Args -join ' ') $code" }
+    if ($code -ne 0) { throw "ADB_EXIT_$code`: $($CommandArgs -join ' ')`n$out" }
     $out
 }
 
