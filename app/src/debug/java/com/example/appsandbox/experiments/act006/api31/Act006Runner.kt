@@ -2,6 +2,10 @@ package com.example.appsandbox.experiments.act006.api31
 
 import android.app.Activity
 import android.os.Bundle
+import com.example.appsandbox.experiments.act006.core.Act006Expected
+import com.example.appsandbox.experiments.act006.core.Act006InputSnapshot
+import com.example.appsandbox.experiments.act006.core.Act006Phase
+import com.example.appsandbox.experiments.act006.core.Act006StateMachine
 import com.example.appsandbox.model.resolver.GuestComponentType
 import com.example.appsandbox.storage.ArtifactState
 import com.example.appsandbox.storage.GuestArtifactVerifier
@@ -39,7 +43,26 @@ class Act006Runner : Activity() {
         if (!Activity::class.java.isAssignableFrom(raw)) return failure("NON_ACTIVITY_CLASS")
         @Suppress("UNCHECKED_CAST") val guestClass = raw as Class<out Activity>
         val adapter = Act006Api31Adapter()
-        return adapter.execute(this, guestClass, if (caseId == "wrong-fingerprint") "wrong" else adapter.fingerprint, caseId == "access-denied")
+        val requestedFingerprint = if (caseId == "wrong-fingerprint") "wrong" else adapter.fingerprint
+        val preparation = adapter.prepare(this, requestedFingerprint, caseId == "access-denied")
+        if (preparation is Act006Api31Adapter.Preparation.Rejected) return preparation.result
+        preparation as Act006Api31Adapter.Preparation.Ready
+        val snapshot = Act006InputSnapshot(runId, "$runId-operation", instance.instanceId, revision.revisionId,
+            actualSha, className, componentName.flattenToShortString(), requestedFingerprint)
+        val expected = Act006Expected(instance.instanceId, revision.revisionId, actualSha, declared.className,
+            componentName.flattenToShortString(), adapter.fingerprint)
+        val core = Act006StateMachine(runId, Act006Api31Executor(guestClass, preparation)).execute(snapshot, expected)
+        return Act006AttachResult(
+            outcome = if (core.phase == Act006Phase.REJECTED) "REJECTED" else "PROCESS_RECOVERY_REQUIRED",
+            reason = core.reason.name,
+            classLoaded = true,
+            constructed = core.counters.constructorCompleted == 1,
+            attachInvokeAttempted = core.counters.attachAttempted == 1,
+            attachCompleted = core.counters.attachCompleted == 1,
+            lifecycle = core.counters.lifecycleAttempted != 0,
+            exceptionType = if (core.error == null) "none" else "executor",
+            detail = core.error ?: "none"
+        )
     }
 
     private fun failure(reason: String, error: Throwable? = null) = Act006AttachResult("REJECTED", reason,

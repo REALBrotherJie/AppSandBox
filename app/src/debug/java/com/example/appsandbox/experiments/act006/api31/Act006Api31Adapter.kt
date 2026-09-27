@@ -2,6 +2,8 @@ package com.example.appsandbox.experiments.act006.api31
 
 import android.app.Activity
 import android.os.Build
+import com.example.appsandbox.experiments.act006.core.Act006AttachExecutor
+import com.example.appsandbox.experiments.act006.core.Act006InputSnapshot
 import java.lang.reflect.Method
 
 data class Act006AttachResult(val outcome: String, val reason: String, val classLoaded: Boolean = false,
@@ -11,25 +13,24 @@ data class Act006AttachResult(val outcome: String, val reason: String, val class
 class Act006Api31Adapter {
     val fingerprint = "android.app.Activity#attach(Context,ActivityThread,Instrumentation,IBinder,int,Application,Intent,ActivityInfo,CharSequence,Activity,String,NonConfigurationInstances,Configuration,String,IVoiceInteractor,Window,ActivityConfigCallback,IBinder,IBinder)@31"
 
-    fun execute(host: Activity, guestClass: Class<out Activity>, requestedFingerprint: String, denyAccess: Boolean): Act006AttachResult {
-        if (Build.VERSION.SDK_INT != 31) return rejected("API_MISMATCH", true)
-        if (requestedFingerprint != fingerprint) return rejected("WRONG_ADAPTER_FINGERPRINT", true)
-        if (denyAccess) return rejected("ACCESS_DENIED", true)
+    sealed class Preparation {
+        data class Ready(val method: Method, val arguments: Array<Any?>) : Preparation()
+        data class Rejected(val result: Act006AttachResult) : Preparation()
+    }
+
+    fun prepare(host: Activity, requestedFingerprint: String, denyAccess: Boolean): Preparation {
+        if (Build.VERSION.SDK_INT != 31) return Preparation.Rejected(rejected("API_MISMATCH", true))
+        if (requestedFingerprint != fingerprint) return Preparation.Rejected(rejected("WRONG_ADAPTER_FINGERPRINT", true))
+        if (denyAccess) return Preparation.Rejected(rejected("ACCESS_DENIED", true))
         val method = findExactAttach() ?: return Act006AttachResult("REJECTED", "ACCESS_DENIED", true,
-            detail = "Activity.attach not exposed by device reflection; invocation not attempted")
-        val args = try { resolveHostArguments(host, method) } catch (error: Throwable) { return rejected("PARAMETER_SOURCE_UNAVAILABLE", true, error) }
-        try { method.isAccessible = true } catch (error: Throwable) { return rejected("ACCESS_DENIED", true, error) }
-        val guest = try { guestClass.getDeclaredConstructor().newInstance() } catch (error: Throwable) {
-            return rejected("CONSTRUCTOR_FAILED", true, error)
+            detail = "Activity.attach not exposed by device reflection; invocation not attempted").let(Preparation::Rejected)
+        val args = try { resolveHostArguments(host, method) } catch (error: Throwable) {
+            return Preparation.Rejected(rejected("PARAMETER_SOURCE_UNAVAILABLE", true, error))
         }
-        return try {
-            method.invoke(guest, *args)
-            Act006AttachResult("PROCESS_RECOVERY_REQUIRED", "ATTACH_COMPLETED", true, true, true, true)
-        } catch (error: Throwable) {
-            val cause = root(error)
-            Act006AttachResult("PROCESS_RECOVERY_REQUIRED", "ATTACH_FAILED", true, true, true, false,
-                exceptionType = cause.javaClass.name, detail = cause.message.orEmpty())
+        try { method.isAccessible = true } catch (error: Throwable) {
+            return Preparation.Rejected(rejected("ACCESS_DENIED", true, error))
         }
+        return Preparation.Ready(method, args)
     }
 
     private fun findExactAttach(): Method? = Activity::class.java.declaredMethods.singleOrNull {
@@ -60,5 +61,15 @@ class Act006Api31Adapter {
         private val HOST_FIELDS = listOf("mMainThread", "mInstrumentation", "mToken", "mIdent", "mApplication", "mIntent",
             "mActivityInfo", "mTitle", "mParent", "mEmbeddedID", "mLastNonConfigurationInstances", "mCurrentConfig", "mReferrer",
             "mVoiceInteractor", "mWindow", "mActivityConfigCallback", "mAssistToken", "mShareableActivityToken")
+    }
+}
+
+class Act006Api31Executor(
+    private val guestClass: Class<out Activity>, private val preparation: Act006Api31Adapter.Preparation.Ready
+) : Act006AttachExecutor {
+    override fun construct(input: Act006InputSnapshot): Any = guestClass.getDeclaredConstructor().newInstance()
+    override fun attach(instance: Any, input: Act006InputSnapshot) {
+        try { preparation.method.invoke(instance, *preparation.arguments) }
+        catch (error: Throwable) { throw generateSequence(error) { it.cause }.last() }
     }
 }

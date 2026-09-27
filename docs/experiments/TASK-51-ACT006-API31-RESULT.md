@@ -9,6 +9,7 @@ Status: REJECTED
 - The corrected runner imports the fixture through `GuestStore`, creates a real instance, re-reads both registries, hashes the committed read-only `base.apk`, and validates its declared Activity.
 - The Guest Activity class was loaded from the committed APK by an independent `DexClassLoader`; Host classpath substitution is rejected.
 - API31 `Activity.attach` is not exposed by device reflection on `7b670025`. The adapter therefore returned `ACCESS_DENIED` before resolving hidden Host fields, constructing the Guest, or invoking attach.
+- The authorized path is wired to the process-singleton `Act006StateMachine` and an API31 executor. Capability preparation gates that state machine, so this device run did not enter it; common attempted/completed counters do not claim a hidden-method invocation.
 - No bypass was attempted. Guest lifecycle, view calls, Instrumentation replacement, transaction/Binder mutation, Hook/native/JVMTI remain absent.
 
 ## Device matrix
