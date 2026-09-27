@@ -124,7 +124,11 @@ class GuestStore(private val context: Context) : com.example.appsandbox.resolver
             throw GuestStoreException(ArtifactState.CORRUPT, "Cannot read registry: ${error.message}")
         }
         return try {
-            GuestRegistryCodec.decode(text)
+            GuestRegistryCodec.decode(text).also {
+                if (org.json.JSONObject(text).optInt("schemaVersion", -1) == 3) {
+                    writeRecordsAtomically(it)
+                }
+            }
         } catch (error: GuestRegistryCodecException) {
             throw GuestStoreException(ArtifactState.CORRUPT, error.message ?: "Malformed Guest registry")
         }

@@ -11,23 +11,25 @@
             <intent-filter android:priority="10" android:autoVerify="true">
                 <action android:name="com.example.intent.VIEW" />
                 <action android:name="com.example.intent.EDIT" />
+                <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="com.example.intent.DEFAULT" />
                 <category android:name="com.example.intent.IMAGE" />
                 <data
                     android:mimeType="image/*"
-                    android:scheme="HTTPS"
-                    android:host="Example.COM"
+                    android:scheme="https"
+                    android:host="example.com"
                     android:path="/images" />
             </intent-filter>
             <intent-filter android:priority="10" android:autoVerify="true">
                 <action android:name="com.example.intent.VIEW" />
                 <action android:name="com.example.intent.EDIT" />
+                <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="com.example.intent.DEFAULT" />
                 <category android:name="com.example.intent.IMAGE" />
                 <data
                     android:mimeType="image/*"
-                    android:scheme="HTTPS"
-                    android:host="Example.COM"
+                    android:scheme="https"
+                    android:host="example.com"
                     android:path="/images" />
             </intent-filter>
         </activity>
@@ -38,7 +40,9 @@
             android:exported="true">
             <intent-filter android:priority="5">
                 <action android:name="com.example.intent.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="com.example.intent.DEFAULT" />
+                <category android:name="com.example.intent.IMAGE" />
                 <data
                     android:mimeType="image/png"
                     android:scheme="https"
@@ -52,6 +56,7 @@
             android:exported="true">
             <intent-filter android:priority="100">
                 <action android:name="com.example.intent.DISABLED" />
+                <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="com.example.intent.DEFAULT" />
             </intent-filter>
         </activity>
@@ -63,6 +68,7 @@
             android:permission="com.example.appsandbox.intentfilterfixture.permission.PROTECTED">
             <intent-filter>
                 <action android:name="com.example.intent.PROTECTED" />
+                <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="com.example.intent.DEFAULT" />
             </intent-filter>
         </activity>

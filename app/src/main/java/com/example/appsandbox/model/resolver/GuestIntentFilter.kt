@@ -100,14 +100,14 @@ data class GuestIntentData(
             (if (path != null) 3 else 0)
 
     companion object {
-        private val SCHEME = Regex("[a-z][a-z0-9+.-]*")
-        private val HOST = Regex("[a-z0-9](?:[a-z0-9.-]{0,253}[a-z0-9])?")
-        private val IPV6 = Regex("\\[[0-9a-f:]+]")
+        private val SCHEME = Regex("[A-Za-z][A-Za-z0-9+.-]*")
+        private val HOST = Regex("[A-Za-z0-9](?:[A-Za-z0-9.-]{0,253}[A-Za-z0-9])?")
+        private val IPV6 = Regex("\\[[0-9A-Fa-f:]+]")
 
         fun normalize(scheme: String?, host: String?, path: String?): GuestIntentData? {
             if (scheme == null && host == null && path == null) return null
-            val normalizedScheme = scheme?.lowercase(Locale.US)
-            val normalizedHost = host?.lowercase(Locale.US)
+            val normalizedScheme = scheme
+            val normalizedHost = host
             if (normalizedScheme != null &&
                 (normalizedScheme.length > 255 || !SCHEME.matches(normalizedScheme))
             ) {

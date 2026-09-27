@@ -78,7 +78,7 @@ class GuestImplicitIntentResolverTest {
     }
 
     @Test
-    fun URIDataNormalizesSchemeAndHostAndRejectsUnsupportedRequestParts() {
+    fun URIDataPreservesFrameworkCaseSemanticsAndRejectsUnsupportedRequestParts() {
         val component = component(
             "revision-a",
             "UriActivity",
@@ -97,7 +97,11 @@ class GuestImplicitIntentResolverTest {
         )
         val resolver = resolver(record("revision-a", listOf(component)))
 
-        assertResolved(resolver.resolve(request("revision-a", uri = "https://example.com/images")))
+        assertRejected(
+            resolver.resolve(request("revision-a", uri = "https://example.com/images")),
+            GuestImplicitResolutionReason.NO_MATCH
+        )
+        assertResolved(resolver.resolve(request("revision-a", uri = "HTTPS://Example.COM/images")))
         assertRejected(
             resolver.resolve(request("revision-a", uri = "https://example.com/other")),
             GuestImplicitResolutionReason.NO_MATCH

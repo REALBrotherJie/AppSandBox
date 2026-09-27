@@ -63,7 +63,7 @@ class GuestRegistryCodecTest {
     }
 
     @Test
-    fun oldRegistrySchemaFailsClosedWithoutArrayFallback() {
+    fun schemaThreeMigratesAndOlderRegistryFailsClosedWithoutArrayFallback() {
         val old = """{"schemaVersion":2,"records":[]}"""
         try {
             GuestRegistryCodec.decode(old)
@@ -71,13 +71,13 @@ class GuestRegistryCodecTest {
         } catch (error: GuestRegistryCodecException) {
             assertTrue(error.message.orEmpty().contains("Unsupported Guest registry schema"))
         }
-        val task40 = """{"schemaVersion":3,"records":[]}"""
-        try {
-            GuestRegistryCodec.decode(task40)
-            throw AssertionError("expected Task-40 schema rejection")
-        } catch (error: GuestRegistryCodecException) {
-            assertTrue(error.message.orEmpty().contains("Unsupported Guest registry schema"))
-        }
+        val task40 = JSONObject(GuestRegistryCodec.encode(listOf(record))).put("schemaVersion", 3)
+        val oldRecord = task40.getJSONArray("records").getJSONObject(0)
+        oldRecord.put("schemaVersion", 3)
+        oldRecord.getJSONArray("components").getJSONObject(0).remove("intentFilters")
+        val migrated = GuestRegistryCodec.decode(task40.toString()).single()
+        assertEquals(GuestPackageRecord.CURRENT_SCHEMA_VERSION, migrated.schemaVersion)
+        assertTrue(migrated.components.single().intentFilters.isEmpty())
     }
 
     @Test

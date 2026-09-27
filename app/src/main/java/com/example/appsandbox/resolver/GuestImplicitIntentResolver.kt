@@ -142,8 +142,8 @@ class GuestImplicitIntentResolver(private val revisions: GuestRevisionSource) {
             return filter.mimeTypes.isNotEmpty() || intent.uri == null
         }
         val uri = intent.uri ?: return false
-        return filter.data.scheme?.equals(uri.scheme, ignoreCase = true) != false &&
-            (filter.data.host == null || filter.data.host.equals(uri.host, ignoreCase = true)) &&
+        return filter.data.scheme?.equals(uri.scheme) != false &&
+            (filter.data.host == null || filter.data.host == uri.host) &&
             (filter.data.path == null || filter.data.path == uri.path)
     }
 
@@ -188,12 +188,12 @@ class GuestImplicitIntentResolver(private val revisions: GuestRevisionSource) {
             throw IllegalArgumentException("URI is invalid")
         }
         val uri = URI(raw)
-        val scheme = uri.scheme?.lowercase(Locale.US)
+        val scheme = uri.scheme
             ?: throw IllegalArgumentException("URI has no scheme")
         if (uri.userInfo != null || uri.port != -1 || uri.query != null || uri.fragment != null) {
             throw IllegalArgumentException("URI pattern is unsupported")
         }
-        val host = uri.host?.lowercase(Locale.US)
+        val host = uri.host
         if (uri.rawAuthority != null && host == null) {
             throw IllegalArgumentException("URI host is invalid")
         }

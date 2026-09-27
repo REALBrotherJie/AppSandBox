@@ -14,6 +14,9 @@ import com.example.appsandbox.storage.GuestStore
 class Task43ImplicitResolverAutomationActivity : Activity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        val runId = intent.getStringExtra("runId")
+        val report = runId?.let { File(filesDir, "task47-$it.result") }
+        report?.writeText("status=STARTED\nrunId=$runId\napi=${android.os.Build.VERSION.SDK_INT}\nphase=resolver\nerrorCode=\n")
         val packageName = intent.getStringExtra(EXTRA_PACKAGE)
         val revisionOrdinal = intent.getIntExtra(EXTRA_REVISION_ORDINAL, 0)
         val revision = packageName?.let {
@@ -26,9 +29,7 @@ class Task43ImplicitResolverAutomationActivity : Activity() {
             revision == null -> "REJECTED reason=revision-not-found"
             else -> resolve(revision.revisionId, packageName)
         }
-        intent.getStringExtra("runId")?.let { runId ->
-            File(filesDir, "task47-$runId.result").writeText("status=PASS\nrunId=$runId\napi=${android.os.Build.VERSION.SDK_INT}\nphase=resolver\n$text\n")
-        }
+        report?.writeText("status=PASS\nrunId=$runId\napi=${android.os.Build.VERSION.SDK_INT}\nphase=resolver\nerrorCode=\n$text\n")
         setContentView(TextView(this).apply {
             this.text = text
             textSize = 14f

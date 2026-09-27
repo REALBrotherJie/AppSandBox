@@ -17,7 +17,7 @@ function A([string[]]$argv) {
 function ReadReport {
     $path = "files/task47-$runId.result"
     for ($i=0; $i -lt 20; $i++) {
-        try { $text = (A @('shell','run-as','com.example.appsandbox','cat',$path)) -join "`n"; if ($text -match 'status=PASS|status=FAIL') { return $text } } catch {}
+        try { $text = (A @('shell','run-as','com.example.appsandbox','cat',$path)) -join "`n"; if ($text -match "runId=$([regex]::Escape($runId))" -and $text -match 'status=PASS|status=FAIL') { return $text } } catch {}
         Start-Sleep -Milliseconds 250
     }
     throw 'automation report timeout'
@@ -72,6 +72,7 @@ function ImportApk([string]$name) {
 }
 
 function Resolve(
+    [string]$caseId,
     [int]$ordinal,
     [string]$type,
     [string]$action,
@@ -95,7 +96,7 @@ function Resolve(
     if ($uri) { $args += @('--es', 'uri', $uri) }
     A $args | Out-Null
     $result = ReadReport
-    $result | Set-Content (Join-Path $report "resolve-$ordinal-$action.txt")
+    $result | Set-Content (Join-Path $report "resolve-$caseId.txt")
     if ($result -notmatch $pattern) { $script:caseFailures += $message }
 }
 
@@ -133,15 +134,15 @@ ImportApk 'task43-intent-v1.apk'
 Stage $intentV2 'task43-intent-v2.apk'
 ImportApk 'task43-intent-v2.apk'
 
-Resolve 0 'activity' 'com.example.intent.VIEW' @('com.example.intent.DEFAULT', 'com.example.intent.IMAGE') 'image/png' 'https://example.com/images' 'AMBIGUOUS|REJECTED reason=ambiguous' 'v1 exact/wildcard Activity did not return ambiguity'
-Resolve 0 'activity' 'com.example.intent.EDIT' @('com.example.intent.DEFAULT', 'com.example.intent.IMAGE') 'image/png' 'https://example.com/images' 'RESOLVED count=1' 'multiple-action filter did not resolve'
-Resolve 0 'receiver' 'com.example.intent.PING' @('com.example.intent.DEFAULT') '' '' 'RESOLVED count=1' 'Receiver filter did not resolve'
-Resolve 0 'activity' 'com.example.intent.DISABLED' @('com.example.intent.DEFAULT') '' '' 'REJECTED reason=disabled' 'disabled filter did not fail closed'
-Resolve 0 'activity' 'com.example.intent.PROTECTED' @('com.example.intent.DEFAULT') '' '' 'REJECTED reason=permission-required' 'permission filter did not fail closed'
-Resolve 1 'activity' 'com.example.intent.REVISION_V1' @() '' '' 'REJECTED reason=no-match' 'old revision filter leaked into v2'
-Resolve 1 'activity' 'com.example.intent.REVISION_V2' @() '' '' 'RESOLVED count=1' 'v2-only filter did not resolve'
-Resolve 1 'receiver' 'com.example.intent.PING' @() '' '' 'REJECTED reason=not-exported' 'v2 non-exported Receiver did not fail closed'
-Resolve 0 'activity' 'com.example.intent.VIEW' @('com.example.intent.DEFAULT', 'com.example.intent.IMAGE') 'image/png' 'https://example.com/images?query=1' 'REJECTED reason=invalid-request' 'unsupported URI query did not fail closed'
+Resolve 'view-ambiguous' 0 'activity' 'com.example.intent.VIEW' @('com.example.intent.DEFAULT', 'com.example.intent.IMAGE') 'image/png' 'https://example.com/images' 'AMBIGUOUS candidates=2' 'v1 exact/wildcard Activity did not return stable ambiguity'
+Resolve 'edit-resolved' 0 'activity' 'com.example.intent.EDIT' @('com.example.intent.DEFAULT', 'com.example.intent.IMAGE') 'image/png' 'https://example.com/images' 'RESOLVED count=1' 'multiple-action filter did not resolve'
+Resolve 'receiver-resolved' 0 'receiver' 'com.example.intent.PING' @('com.example.intent.DEFAULT') '' '' 'RESOLVED count=1' 'Receiver filter did not resolve'
+Resolve 'disabled' 0 'activity' 'com.example.intent.DISABLED' @('com.example.intent.DEFAULT') '' '' 'REJECTED reason=disabled' 'disabled filter did not fail closed'
+Resolve 'protected' 0 'activity' 'com.example.intent.PROTECTED' @('com.example.intent.DEFAULT') '' '' 'REJECTED reason=permission-required' 'permission filter did not fail closed'
+Resolve 'old-revision' 1 'activity' 'com.example.intent.REVISION_V1' @() '' '' 'REJECTED reason=no-match' 'old revision filter leaked into v2'
+Resolve 'new-revision' 1 'activity' 'com.example.intent.REVISION_V2' @() '' '' 'RESOLVED count=1' 'v2-only filter did not resolve'
+Resolve 'receiver-not-exported' 1 'receiver' 'com.example.intent.PING' @() '' '' 'REJECTED reason=not-exported' 'v2 non-exported Receiver did not fail closed'
+Resolve 'query-rejected' 0 'activity' 'com.example.intent.VIEW' @('com.example.intent.DEFAULT', 'com.example.intent.IMAGE') 'image/png' 'https://example.com/images?query=1' 'REJECTED reason=invalid-request' 'unsupported URI query did not fail closed'
 
 if ((RunAs @('find', 'files/guest-instances', '-type', 'f', '-print')) -ne $baselineInstances) {
     throw 'implicit resolver imports changed instance or state files'

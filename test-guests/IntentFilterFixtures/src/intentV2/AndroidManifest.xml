@@ -6,6 +6,7 @@
             android:exported="true">
             <intent-filter android:priority="20">
                 <action android:name="com.example.intent.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="com.example.intent.DEFAULT" />
                 <data
                     android:mimeType="image/png"
