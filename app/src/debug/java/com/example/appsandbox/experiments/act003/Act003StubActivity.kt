@@ -9,12 +9,14 @@ import com.example.appsandbox.model.resolver.GuestComponentType
 import com.example.appsandbox.storage.GuestInstanceStore
 import com.example.appsandbox.storage.GuestStore
 import java.io.File
+import com.example.appsandbox.experiments.act006.api36.*
 
 class Act003StubActivity : Activity() {
     private val validLaunchId by lazy { intent.getStringExtra(EXTRA_LAUNCH_ID)?.takeIf { it.isNotBlank() } }
     private val experiment by lazy { intent.getStringExtra(EXTRA_EXPERIMENT) }
     private val report by lazy {
         File(filesDir, when {
+            experiment == EXPERIMENT_ACT006 -> "task52-${validLaunchId ?: "invalid"}.result"
             experiment == EXPERIMENT_ACT005 -> "task49-${validLaunchId ?: "invalid"}.result"
             experiment == EXPERIMENT_ACT004A && validLaunchId == null -> ACT004A_INVALID_REPORT
             experiment == EXPERIMENT_ACT004A -> ACT004A_VALID_REPORT
@@ -35,6 +37,7 @@ class Act003StubActivity : Activity() {
             return
         }
         if (experiment == EXPERIMENT_ACT005) runAct005()
+        if (experiment == EXPERIMENT_ACT006) runAct006()
         setContentView(TextView(this).apply { text = "ACT003_HOST_STUB" })
         append("launchResult=VALID")
         append("packageName=$packageName")
@@ -125,6 +128,31 @@ class Act003StubActivity : Activity() {
         append("hostFallback=ACT003_STUB")
     }
 
+    private fun runAct006() {
+        val launchId = requireNotNull(validLaunchId)
+        val scenario = intent.getStringExtra(EXTRA_SCENARIO) ?: "valid"
+        val instance = runCatching { GuestInstanceStore(this).get(intent.getStringExtra(EXTRA_INSTANCE_ID).orEmpty()) }.getOrNull()
+        val revision = runCatching { GuestStore(this).findRevision(instance?.guestRevisionId.orEmpty()) }.getOrNull()
+        val apk = revision?.apkPath?.let(::File)
+        val expected = revision?.sha256.orEmpty()
+        val result = if (apk == null || revision == null) Act006Result(Act006Reason.STALE_REVISION, false, "NOT_CALLED", false, false, false, false, false, false, false, "missing")
+        else Act006Api36Adapter().attach(Act006Request(if (scenario == "api-mismatch") 31 else android.os.Build.VERSION.SDK_INT, apk, "com.example.appsandbox.testguest.runtime.GuestMainActivity", if (scenario == "sha-mismatch") "0".repeat(64) else expected, expected, this, scenario == "attach-fault"))
+        append("act006.scenario=$scenario")
+        append("act006.reason=${result.reason}")
+        append("act006.constructor=${result.constructor}")
+        append("act006.attachReturn=${result.attachReturn}")
+        append("act006.baseContext=${result.baseContext}")
+        append("act006.application=${result.application}")
+        append("act006.intent=${result.intent}")
+        append("act006.activityInfo=${result.activityInfo}")
+        append("act006.window=${result.window}")
+        append("act006.token=${result.token}")
+        append("act006.lifecycle=${result.lifecycle}")
+        append("act006.fingerprint=${result.fingerprint}")
+        append("hostFallback=ACT003_STUB")
+        append("guestActivityRecord=false")
+    }
+
     private fun append(value: String) {
         report.parentFile?.mkdirs()
         report.appendText(value + "\n")
@@ -144,6 +172,7 @@ class Act003StubActivity : Activity() {
         const val EXTRA_ARTIFACT_SHA = "artifactSha256"
         const val EXPERIMENT_ACT004A = "act004a-negative"
         const val EXPERIMENT_ACT005 = "act005-p1"
+        const val EXPERIMENT_ACT006 = "act006-api36"
         const val VALID_REPORT = "task22-stub-valid.txt"
         const val INVALID_REPORT = "task22-stub-invalid.txt"
         const val ACT004A_VALID_REPORT = "task24-host-stub.txt"
