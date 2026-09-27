@@ -10,6 +10,7 @@ import com.example.appsandbox.resolver.GuestComponentResolver
 import com.example.appsandbox.resolver.GuestResolutionReason
 import com.example.appsandbox.resolver.GuestResolutionResult
 import com.example.appsandbox.resolver.GuestRevisionSource
+import com.example.appsandbox.resolver.GuestImplicitResolutionResult
 import com.example.appsandbox.storage.GuestArtifactVerifier
 import com.example.appsandbox.storage.GuestInstanceBinding
 
@@ -46,6 +47,20 @@ class GuestDispatchEngine(
             )
         }
         return prepareResolved(request, resolution)
+    }
+
+    fun prepareImplicit(
+        request: GuestDispatchRequest,
+        resolution: GuestImplicitResolutionResult
+    ): GuestDispatchResult = when (resolution) {
+        is GuestImplicitResolutionResult.Resolved ->
+            if (resolution.candidates.size == 1) {
+                prepareResolved(request, GuestDispatchResolution.implicit(resolution.candidates.single().component))
+            } else rejected(request.operationId, GuestDispatchFailure(GuestDispatchFailureReason.AMBIGUOUS_RESOLUTION))
+        is GuestImplicitResolutionResult.Ambiguous ->
+            rejected(request.operationId, GuestDispatchFailure(GuestDispatchFailureReason.AMBIGUOUS_RESOLUTION))
+        is GuestImplicitResolutionResult.Rejected ->
+            rejected(request.operationId, GuestDispatchFailure(GuestDispatchFailureReason.RESOLUTION_REJECTED))
     }
 
     fun prepareResolved(

@@ -15,6 +15,28 @@ data class GuestComponentIdentity(
     val type: GuestComponentType
 )
 
+data class GuestIntentSnapshot(
+    val explicit: Boolean,
+    val action: String?,
+    val categories: List<String>,
+    val dataUri: String?,
+    val mimeType: String?,
+    val flags: Int
+)
+
+data class GuestPlanIdentity(
+    val guestId: String,
+    val internalGuestId: String,
+    val instanceId: String,
+    val revisionId: String,
+    val packageName: String,
+    val component: GuestComponentIdentity,
+    val operationId: String,
+    val callerScope: GuestCallerScope,
+    val artifactSha256: String?,
+    val intent: GuestIntentSnapshot?
+)
+
 enum class GuestDispatchOperation(val code: String) {
     START_ACTIVITY("start-activity"),
     START_SERVICE("start-service"),
@@ -52,6 +74,7 @@ enum class GuestDispatchFailureReason(val code: String) {
     COMPONENT_NOT_EXPORTED("component-not-exported"),
     COMPONENT_PERMISSION_REQUIRED("component-permission-required"),
     RESOLUTION_REJECTED("resolution-rejected"),
+    AMBIGUOUS_RESOLUTION("ambiguous-resolution"),
     UNSUPPORTED_OPERATION("unsupported-operation"),
     RUNTIME_UNAVAILABLE("runtime-unavailable"),
     DUPLICATE_OPERATION("duplicate-operation"),
@@ -114,6 +137,20 @@ sealed interface GuestDispatchPlan {
     val namespace: GuestLogicalNamespace
     val logicalResourceId: String
     val operation: GuestDispatchOperation
+
+    val identity: GuestPlanIdentity
+        get() = GuestPlanIdentity(
+            guestId = component.packageName,
+            internalGuestId = component.packageName,
+            instanceId = instanceId,
+            revisionId = component.revisionId,
+            packageName = component.packageName,
+            component = GuestComponentIdentity(component.revisionId, component.packageName, component.className, component.type),
+            operationId = operationId,
+            callerScope = callerScope,
+            artifactSha256 = null,
+            intent = null
+        )
 
     fun matches(request: GuestDispatchRequest): Boolean =
         runCatching {
@@ -214,6 +251,17 @@ sealed interface GuestDispatchResolution {
             }
 
         fun implicit(component: GuestComponent) = Resolved(component, Source.IMPLICIT)
+
+        fun fromImplicit(result: com.example.appsandbox.resolver.GuestImplicitResolutionResult): GuestDispatchResolution =
+            when (result) {
+                is com.example.appsandbox.resolver.GuestImplicitResolutionResult.Resolved ->
+                    if (result.candidates.size == 1) Resolved(result.candidates.single().component, Source.IMPLICIT)
+                    else Rejected(GuestResolutionReason.NOT_FOUND)
+                is com.example.appsandbox.resolver.GuestImplicitResolutionResult.Ambiguous ->
+                    Rejected(GuestResolutionReason.NOT_FOUND)
+                is com.example.appsandbox.resolver.GuestImplicitResolutionResult.Rejected ->
+                    Rejected(GuestResolutionReason.NOT_FOUND)
+            }
     }
 }
 

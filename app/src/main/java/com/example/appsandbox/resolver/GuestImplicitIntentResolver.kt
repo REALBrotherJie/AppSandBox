@@ -19,8 +19,11 @@ data class GuestImplicitIntentRequest(
     val action: String,
     val categories: List<String> = emptyList(),
     val mimeType: String? = null,
-    val uri: String? = null
+    val uri: String? = null,
+    val policy: GuestImplicitResolutionPolicy = GuestImplicitResolutionPolicy.DEFAULT_ONLY
 )
+
+enum class GuestImplicitResolutionPolicy { DEFAULT_ONLY, GENERAL }
 
 data class GuestImplicitIntent(
     val action: String,
@@ -40,6 +43,7 @@ enum class GuestImplicitResolutionReason(val code: String) {
     REVISION_NOT_FOUND("revision-not-found"),
     PACKAGE_MISMATCH("package-mismatch"),
     NO_MATCH("no-match"),
+    AMBIGUOUS("ambiguous"),
     REVISION_MISMATCH("revision-mismatch"),
     DISABLED("disabled"),
     NOT_EXPORTED("not-exported"),
@@ -55,6 +59,7 @@ data class GuestImplicitCandidate(
 
 sealed interface GuestImplicitResolutionResult {
     data class Resolved(val candidates: List<GuestImplicitCandidate>) : GuestImplicitResolutionResult
+    data class Ambiguous(val candidates: List<GuestImplicitCandidate>) : GuestImplicitResolutionResult
 
     data class Rejected(
         val reason: GuestImplicitResolutionReason,
@@ -90,6 +95,9 @@ class GuestImplicitIntentResolver(private val revisions: GuestRevisionSource) {
                 component.intentFilters
                     .asSequence()
                     .filter { filterMatches(it, intent) }
+                    .filter { request.policy == GuestImplicitResolutionPolicy.GENERAL ||
+                        request.componentType != GuestComponentType.ACTIVITY ||
+                        "android.intent.category.DEFAULT" in it.categories }
                     .map { GuestImplicitCandidate(component, it) }
             }
             .sortedWith(candidateComparator)
@@ -101,9 +109,8 @@ class GuestImplicitIntentResolver(private val revisions: GuestRevisionSource) {
         val resolved = matches.filter { candidate ->
             componentAllowed(candidate.component, revision, request.callerScope)
         }
-        if (resolved.isNotEmpty()) {
-            return GuestImplicitResolutionResult.Resolved(resolved)
-        }
+        if (resolved.size == 1) return GuestImplicitResolutionResult.Resolved(resolved)
+        if (resolved.size > 1) return GuestImplicitResolutionResult.Ambiguous(resolved)
         return request.rejected(
             denialReason(matches.first().component, revision, request.callerScope)
         )
