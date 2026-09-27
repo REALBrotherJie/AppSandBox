@@ -41,9 +41,15 @@ class Act006Api31Adapter {
 
     private fun resolveHostArguments(host: Activity, method: Method): Array<Any?> {
         check(method.parameterCount == HOST_FIELDS.size + 1)
+        check(android.os.IInterface::class.java.isAssignableFrom(method.parameterTypes[14])) { "voice parameter is not IInterface" }
+        check(method.parameterTypes[15].isAssignableFrom(android.view.Window::class.java)) { "window parameter mismatch" }
         return (listOf<Any?>(host.baseContext) + HOST_FIELDS.mapIndexed { fieldIndex, name ->
             val field = Activity::class.java.getDeclaredField(name); field.isAccessible = true
-            field.get(host).also { if (method.parameterTypes[fieldIndex + 1].isPrimitive) check(it != null) { "$name is null" } }
+            field.get(host).also {
+                if (method.parameterTypes[fieldIndex + 1].isPrimitive) check(it != null) { "$name is null" }
+                if (name == "mVoiceInteractor") check(it == null || method.parameterTypes[fieldIndex + 1].isInstance(it)) { "voice source mismatch" }
+                if (name == "mWindow") error("Host Window ownership is not safely transferable")
+            }
         }).toTypedArray()
     }
 
