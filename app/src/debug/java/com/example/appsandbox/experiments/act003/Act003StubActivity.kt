@@ -3,6 +3,11 @@ package com.example.appsandbox.experiments.act003
 import android.app.Activity
 import android.os.Bundle
 import android.widget.TextView
+import com.example.appsandbox.experiments.act005.Act005P1Selector
+import com.example.appsandbox.experiments.act005.Act005Request
+import com.example.appsandbox.model.resolver.GuestComponentType
+import com.example.appsandbox.storage.GuestInstanceStore
+import com.example.appsandbox.storage.GuestStore
 import java.io.File
 
 class Act003StubActivity : Activity() {
@@ -10,6 +15,7 @@ class Act003StubActivity : Activity() {
     private val experiment by lazy { intent.getStringExtra(EXTRA_EXPERIMENT) }
     private val report by lazy {
         File(filesDir, when {
+            experiment == EXPERIMENT_ACT005 -> "task49-${validLaunchId ?: "invalid"}.result"
             experiment == EXPERIMENT_ACT004A && validLaunchId == null -> ACT004A_INVALID_REPORT
             experiment == EXPERIMENT_ACT004A -> ACT004A_VALID_REPORT
             validLaunchId == null -> INVALID_REPORT
@@ -28,6 +34,7 @@ class Act003StubActivity : Activity() {
             finish()
             return
         }
+        if (experiment == EXPERIMENT_ACT005) runAct005()
         setContentView(TextView(this).apply { text = "ACT003_HOST_STUB" })
         append("launchResult=VALID")
         append("packageName=$packageName")
@@ -75,6 +82,49 @@ class Act003StubActivity : Activity() {
         append("hostSurvived=true")
     }
 
+    private fun runAct005() {
+        val launchId = requireNotNull(validLaunchId)
+        val scenario = intent.getStringExtra(EXTRA_SCENARIO) ?: "valid"
+        val instanceId = intent.getStringExtra(EXTRA_INSTANCE_ID).orEmpty()
+        val storedInstance = runCatching { GuestInstanceStore(this).get(instanceId) }.getOrNull()
+        val storedRevision = runCatching { GuestStore(this).findRevision(storedInstance?.guestRevisionId.orEmpty()) }.getOrNull()
+        val guestClass = when (scenario) {
+            "missing-class" -> "com.example.appsandbox.testguest.runtime.MissingActivity"
+            "non-activity" -> "com.example.appsandbox.testguest.runtime.GuestProbe"
+            "component-stale" -> "com.example.appsandbox.testguest.runtime.StaleActivity"
+            else -> intent.getStringExtra(EXTRA_GUEST_COMPONENT).orEmpty()
+        }
+        val revision = when (scenario) {
+            "missing-class", "non-activity" -> storedRevision?.copy(components = storedRevision.components +
+                requireNotNull(storedRevision.components.firstOrNull { it.type == GuestComponentType.ACTIVITY }).copy(className = guestClass,
+                    intentFilters = emptyList()))
+            else -> storedRevision
+        }
+        val request = Act005Request(
+            launchId = launchId,
+            instanceId = instanceId,
+            revisionId = if (scenario == "stale-revision") "stale-revision" else intent.getStringExtra(EXTRA_REVISION_ID).orEmpty(),
+            artifactSha256 = if (scenario == "artifact-mismatch") "0".repeat(64) else intent.getStringExtra(EXTRA_ARTIFACT_SHA).orEmpty(),
+            guestActivityClass = guestClass,
+            hostStubComponent = componentName.flattenToShortString(),
+            forcedApi = if (scenario == "api-mismatch") if (android.os.Build.VERSION.SDK_INT == 31) 36 else 31 else null,
+            denyAccess = scenario == "access-denied"
+        )
+        val result = Act005P1Selector(codeCacheDir).select(request, storedInstance, revision)
+        append("act005.scenario=$scenario")
+        append("act005.adapter=${result.capability.adapter}")
+        append("act005.capability=${result.capability.access}")
+        append("act005.fingerprint=${result.capability.fingerprint}")
+        append("act005.phases=${result.phases.joinToString("->")}")
+        append("act005.reason=${result.reason}")
+        append("act005.selectedClass=${result.selectedClass ?: "none"}")
+        append("act005.hostFallback=${result.hostFallback}")
+        append("guestObjectConstructed=${result.guestObjectConstructed}")
+        append("guestAttached=${result.guestAttached}")
+        append("guestLifecycle=${result.guestLifecycle}")
+        append("hostFallback=ACT003_STUB")
+    }
+
     private fun append(value: String) {
         report.parentFile?.mkdirs()
         report.appendText(value + "\n")
@@ -90,7 +140,10 @@ class Act003StubActivity : Activity() {
         const val EXTRA_INSTANCE_ID = "instanceId"
         const val EXTRA_ORIGINAL_ACTION = "originalAction"
         const val EXTRA_EXPERIMENT = "experiment"
+        const val EXTRA_SCENARIO = "scenario"
+        const val EXTRA_ARTIFACT_SHA = "artifactSha256"
         const val EXPERIMENT_ACT004A = "act004a-negative"
+        const val EXPERIMENT_ACT005 = "act005-p1"
         const val VALID_REPORT = "task22-stub-valid.txt"
         const val INVALID_REPORT = "task22-stub-invalid.txt"
         const val ACT004A_VALID_REPORT = "task24-host-stub.txt"
