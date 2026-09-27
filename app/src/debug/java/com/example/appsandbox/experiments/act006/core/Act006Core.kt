@@ -23,6 +23,7 @@ data class Act006Counters(
     val lifecycleAttempted: Int = 0, val lifecycleCompleted: Int = 0
 )
 
+/** Counters cover this interface boundary; device adapters must track hidden-method invokeAttempted separately. */
 interface Act006AttachExecutor {
     fun construct(input: Act006InputSnapshot): Any
     fun attach(instance: Any, input: Act006InputSnapshot)
@@ -162,8 +163,11 @@ object Act006ResultCodec {
             Act006Phase.PROCESS_RECOVERY_REQUIRED -> if (r.reason != Act006Reason.ATTACH_FAILED || c != Act006Counters(1, 1, 1, 0, 0, 0)) invalid()
             Act006Phase.REJECTED -> when (r.reason) {
                 Act006Reason.NONE, Act006Reason.ATTACH_FAILED -> invalid()
-                Act006Reason.CONSTRUCTOR_FAILED -> if (c != Act006Counters(constructorAttempted = 1)) invalid()
-                else -> if (c != Act006Counters()) invalid()
+                Act006Reason.CONSTRUCTOR_FAILED -> if (
+                    r.phases != listOf(Act006Phase.RECEIVED, Act006Phase.VALIDATED, Act006Phase.REJECTED) ||
+                    c != Act006Counters(constructorAttempted = 1)
+                ) invalid()
+                else -> if (r.phases != listOf(Act006Phase.RECEIVED, Act006Phase.REJECTED) || c != Act006Counters()) invalid()
             }
             else -> invalid()
         }

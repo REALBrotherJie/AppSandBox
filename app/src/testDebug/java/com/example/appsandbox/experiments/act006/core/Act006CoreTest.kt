@@ -89,4 +89,18 @@ class Act006CoreTest {
         )
         corrupt.forEach { assertThrows(IllegalArgumentException::class.java) { Act006ResultCodec.decode(it) } }
     }
+
+    @Test fun codecRejectsImpossibleRejectedPaths() {
+        val validation = machine().execute(input.copy(instanceId = "stale"), expected)
+        val validationJson = Act006ResultCodec.encode(validation)
+        val constructor = machine(executor = Executor(failConstruct = true)).execute(input, expected)
+        val constructorJson = Act006ResultCodec.encode(constructor)
+        assertEquals(validation, Act006ResultCodec.decode(validationJson))
+        assertEquals(constructor.copy(error = null), Act006ResultCodec.decode(constructorJson))
+        val forgeries = listOf(
+            validationJson.replace("RECEIVED,REJECTED", "RECEIVED,VALIDATED,REJECTED"),
+            constructorJson.replace("RECEIVED,VALIDATED,REJECTED", "RECEIVED,REJECTED")
+        )
+        forgeries.forEach { assertThrows(IllegalArgumentException::class.java) { Act006ResultCodec.decode(it) } }
+    }
 }
