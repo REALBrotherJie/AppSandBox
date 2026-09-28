@@ -6,6 +6,7 @@
         <activity android:name=".automation.Task48IntentFilterParityActivity" android:exported="true" />
         <activity android:name=".automation.Task48LogicalMatrixActivity" android:exported="true" />
         <activity android:name=".automation.Task49SetupActivity" android:exported="true" />
+        <activity android:name=".automation.Task55Api31Activity" android:exported="true" />
         <activity android:name=".experiments.act006.api31.Act006Runner" android:exported="true" />
         <activity android:name=".experiments.act006.api31.Act006SetupActivity" android:exported="true" />
         <activity android:name=".experiments.v1.ExperimentActivity" android:exported="true" />
