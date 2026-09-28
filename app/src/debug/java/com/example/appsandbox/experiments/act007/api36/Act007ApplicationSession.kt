@@ -1,57 +1,26 @@
 package com.example.appsandbox.experiments.act007.api36
 
-import android.app.Application
-import android.app.Instrumentation
 import android.content.Context
-import android.content.pm.ApplicationInfo
-import com.example.appsandbox.experiments.exp003c1.Exp003c1ControlledContext
+import com.example.appsandbox.experiments.act007.core.*
 import com.example.appsandbox.model.GuestInstanceRecord
 import com.example.appsandbox.model.GuestPackageRecord
-import com.example.appsandbox.storage.GuestArtifactVerifier
-import dalvik.system.DexClassLoader
+import com.example.appsandbox.packageinfo.GuestPackageReader
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 
-data class Act007SessionResult(val outcome: String, val constructor: Int, val onCreate: Int, val loader: String, val error: String = "")
+data class Act007SessionResult(val outcome: String, val constructor: Int = 0, val onCreate: Int = 0, val loader: String = "", val error: String = "")
 
 object Act007ApplicationSessions {
-    private data class Active(val app: Application, val loader: DexClassLoader)
-    private val active = ConcurrentHashMap<String, Active>()
-
+    private fun controller(host: Context) = GuestApplicationSessionController(GuestApplicationSessionRegistry(File(host.filesDir, "act007-sessions.json")))
     fun start(host: Context, instance: GuestInstanceRecord, revision: GuestPackageRecord, className: String? = null): Act007SessionResult {
         require(android.os.Build.VERSION.SDK_INT == 36) { "API36 required" }
-        require(GuestArtifactVerifier.sha256(File(revision.apkPath)).equals(revision.sha256, true)) { "artifact SHA mismatch" }
-        require(instance.guestRevisionId == revision.revisionId && instance.guestSha256 == revision.sha256) { "instance binding mismatch" }
-        check(active[instance.instanceId] == null) { "session already active" }
-        val apk = File(revision.apkPath)
-        val loader = DexClassLoader(apk.path, host.codeCacheDir.path, null, host.classLoader)
-        @Suppress("DEPRECATION")
-        val info = ApplicationInfo(requireNotNull(host.packageManager.getPackageArchiveInfo(apk.path, 0)?.applicationInfo)).apply {
-            sourceDir = apk.path; publicSourceDir = apk.path; dataDir = instance.dataRoot
-        }
-        val context = Exp003c1ControlledContext(host.applicationContext, loader,
-            host.packageManager.getResourcesForApplication(info), info, File(instance.dataRoot), instance.instanceId)
-        val target = className ?: requireNotNull(info.className)
-        var constructed = 0
-        return try {
-            val app = Instrumentation().newApplication(loader, target, context).also { constructed = 1; context.bindApplication(it) }
-            Instrumentation().callApplicationOnCreate(app)
-            active[instance.instanceId] = Active(app, loader)
-            state(instance).writeText("status=RUNNING\nclass=$target\nloader=${app.javaClass.classLoader.javaClass.name}\nonCreate=1\n")
-            Act007SessionResult("RUNNING", constructed, 1, app.javaClass.classLoader.javaClass.name)
-        } catch (t: Throwable) {
-            state(instance).writeText("status=FAILED\nclass=$target\nconstructor=$constructed\nonCreateAttempted=1\nerror=${root(t)}\n")
-            Act007SessionResult("FAILED", constructed, 1, loader.javaClass.name, root(t))
-        }
+        val declared = requireNotNull(GuestPackageReader(host).readApplicationInfo(revision.apkPath).className)
+        val target = className ?: declared
+        val sha = requireNotNull(revision.sha256)
+        val request = GuestApplicationSessionRequest("run-${System.nanoTime()}", "start-${System.nanoTime()}", instance.instanceId, revision.revisionId, sha, revision.packageName, target, instance.dataRoot)
+        val expected = GuestApplicationSessionExpected(instance.instanceId, revision.revisionId, sha, revision.packageName, target, instance.dataRoot, File(host.filesDir, "guest-instances").path)
+        val snapshot = runCatching { controller(host).start(request, expected, C1GuestApplicationSessionExecutor.create(host, instance, revision, target)) }.getOrElse { return Act007SessionResult("FAILED", error = it.javaClass.name + ":" + it.message) }
+        return Act007SessionResult(snapshot.state.name, snapshot.constructorCompleted, snapshot.onCreateCompleted, "DexClassLoader", snapshot.detail ?: "")
     }
-
-    fun stop(instance: GuestInstanceRecord): Boolean {
-        val removed = active.remove(instance.instanceId) != null
-        state(instance).writeText("status=STOPPED\n")
-        return removed
-    }
-
-    fun isActive(instanceId: String) = active.containsKey(instanceId)
-    private fun state(instance: GuestInstanceRecord) = File(instance.dataRoot, "files/application-session.state").apply { parentFile!!.mkdirs() }
-    private fun root(t: Throwable): String { var x=t; while(x.cause != null)x=x.cause!!; return x.javaClass.name + ":" + (x.message ?: "") }
+    fun stop(host: Context, instance: GuestInstanceRecord): Boolean = controller(host).snapshots().firstOrNull { it.request.instanceId == instance.instanceId && it.state == GuestApplicationSessionState.RUNNING }?.let { controller(host).stop(it.request.runId, "stop-${System.nanoTime()}"); true } ?: false
+    fun isActive(host: Context, instanceId: String) = controller(host).snapshots().any { it.request.instanceId == instanceId && it.state == GuestApplicationSessionState.RUNNING }
 }
