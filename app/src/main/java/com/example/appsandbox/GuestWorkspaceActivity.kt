@@ -84,7 +84,8 @@ class GuestWorkspaceActivity : Activity() {
     }
     private fun buildUi() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 24) }
-        root.addView(TextView(this).apply { text = "Guest workspace\npackage=${instance.guestPackageName}\ninstance=${instance.instanceId}\nrevision=${instance.guestRevisionId}\ncontract=v${contract.version}"; textSize = 16f })
+        val appSession = File(instance.dataRoot, "files/application-session.state").takeIf { it.isFile }?.readText()?.trim() ?: "status=NOT_STARTED"
+        root.addView(TextView(this).apply { text = "Guest workspace\npackage=${instance.guestPackageName}\ninstance=${instance.instanceId}\nrevision=${instance.guestRevisionId}\ncontract=v${contract.version}\napplicationSession=$appSession"; textSize = 16f })
         state = TextView(this).apply { textSize = 22f; setPadding(0, 24, 0, 24) }
         val actions = LinearLayout(this)
         if (contract.version == 1) {

@@ -9,6 +9,7 @@
         <activity android:name=".automation.Task55Api31Activity" android:exported="true" />
         <activity android:name=".experiments.act006.api31.Act006Runner" android:exported="true" />
         <activity android:name=".experiments.act006.api31.Act006SetupActivity" android:exported="true" />
+        <activity android:name=".experiments.act007.api36.Act007RunnerActivity" android:exported="true" />
         <activity android:name=".experiments.v1.ExperimentActivity" android:exported="true" />
         <activity android:name=".experiments.task27.Task27DemoActivity" android:exported="true" />
         <activity
