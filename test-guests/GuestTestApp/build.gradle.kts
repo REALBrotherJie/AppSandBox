@@ -14,5 +14,8 @@ android {
         versionName = "1.0"
     }
     flavorDimensions += "behavior"
-    productFlavors { create("throwing") { dimension = "behavior" } }
+    productFlavors {
+        create("normal") { dimension = "behavior" }
+        create("throwing") { dimension = "behavior" }
+    }
 }
