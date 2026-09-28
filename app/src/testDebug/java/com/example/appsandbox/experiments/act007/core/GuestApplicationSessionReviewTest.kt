@@ -118,4 +118,34 @@ class GuestApplicationSessionReviewTest {
         val result = runCatching { GuestApplicationSessionController(registry).start(request, expected, RecordingExecutor()) }
         assertTrue(result.isFailure)
     }
+
+    @Test fun partialTempWriteKeepsOldRegistryAndCleansTemp() {
+        val base = temporary.newFolder(); val file = File(base, "sessions.json")
+        val normal = GuestApplicationSessionRegistry(file); normal.update { emptyList() }; val old = file.readBytes()
+        val io = object : GuestApplicationSessionRegistryIo {
+            override fun write(path: File, text: String) { path.outputStream().use { it.write(text.take(3).toByteArray()) }; error("partial") }
+            override fun copy(from: File, to: File, overwrite: Boolean) = from.copyTo(to, overwrite).let { true }
+            override fun delete(path: File) = !path.exists() || path.delete()
+            override fun publish(from: File, to: File) = from.renameTo(to)
+        }
+        assertTrue(runCatching { GuestApplicationSessionRegistry(file, io).update { emptyList() } }.isFailure)
+        assertEquals(old.toList(), file.readBytes().toList())
+        assertTrue(!File(base, "sessions.json.tmp").exists())
+    }
+
+    @Test fun backupCopyFailureAndPublishFailurePreserveReadableOldState() {
+        val base = temporary.newFolder(); val file = File(base, "sessions.json"); val normal = GuestApplicationSessionRegistry(file)
+        normal.update { emptyList() }; val old = file.readBytes()
+        fun failing(copyFail: Boolean, publishFail: Boolean) = object : GuestApplicationSessionRegistryIo {
+            override fun write(path: File, text: String) = path.writeText(text)
+            override fun copy(from: File, to: File, overwrite: Boolean): Boolean { if (copyFail) error("copy"); from.copyTo(to, overwrite); return true }
+            override fun delete(path: File) = !path.exists() || path.delete()
+            override fun publish(from: File, to: File) = !publishFail && from.renameTo(to)
+        }
+        assertTrue(runCatching { GuestApplicationSessionRegistry(file, failing(true, false)).update { emptyList() } }.isFailure)
+        assertEquals(old.toList(), file.readBytes().toList())
+        assertTrue(runCatching { GuestApplicationSessionRegistry(file, failing(false, true)).update { emptyList() } }.isFailure)
+        assertEquals(old.toList(), file.readBytes().toList())
+        assertEquals(0, normal.readAll().size)
+    }
 }
