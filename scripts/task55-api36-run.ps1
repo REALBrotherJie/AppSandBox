@@ -18,6 +18,7 @@ $throwing=if($ThrowingApkPath){(Resolve-Path $ThrowingApkPath).Path}else{Join-Pa
 foreach($p in @($hostApk,$guest,$throwing)){if(!(Test-Path -LiteralPath $p)){throw "missing artifact $p"}}
 function Sha([string]$p){(Get-FileHash -Algorithm SHA256 -LiteralPath $p).Hash.ToLowerInvariant()}
 $hostSha=Sha $hostApk;$guestSha=Sha $guest;$throwingSha=Sha $throwing
+if(!$ExpectedHostSha256 -or !$ExpectedGuestSha256 -or !$ExpectedThrowingSha256){throw 'all three frozen SHA-256 values are required'}
 if($ExpectedHostSha256 -and $hostSha -ne $ExpectedHostSha256.ToLowerInvariant()){throw 'host SHA-256 mismatch'}
 if($ExpectedGuestSha256 -and $guestSha -ne $ExpectedGuestSha256.ToLowerInvariant()){throw 'guest SHA-256 mismatch'}
 if($ExpectedThrowingSha256 -and $throwingSha -ne $ExpectedThrowingSha256.ToLowerInvariant()){throw 'throwing guest SHA-256 mismatch'}
@@ -31,4 +32,4 @@ $deadline=(Get-Date).AddSeconds(30);$t='';while((Get-Date)-lt $deadline){$t=(A @
 $a=[regex]::Match($t,'instanceA=([0-9a-f-]{36})').Groups[1].Value;A @('shell','am','start','-W','-n','com.example.appsandbox/.automation.Task29AutomationActivity','--es','instanceId',$a)|Out-Null;Start-Sleep -Seconds 1
 $ui=A @('shell','dumpsys','activity','activities');if($ui-notmatch'GuestWorkspaceActivity'){throw 'Workspace not resumed'}
 $packages=A @('shell','pm','list','packages','com.example.appsandbox.testguest');if($packages-match'package:com.example.appsandbox.testguest'){throw 'Guest installed'};if($ui-match'ActivityRecord\{[^\r\n]*com\.example\.appsandbox\.testguest/'){throw 'Guest ActivityRecord'}
-"status=PASS`nserial=$Serial`napi=36`nrunId=$run`nhostSha256=$hostSha`nguestSha256=$guestSha`nthrowingSha256=$throwingSha`napplicationOnCreate=true`nrestart=true`ndualIsolation=true`nthrowingGuest=true`nworkspaceResumed=true`nguestInstalled=false`nguestActivityRecord=false`nactivityAttach=0`nactivityLifecycle=0"|Set-Content (Join-Path $out 'result.txt')
+"status=PASS`nserial=$Serial`napi=$ExpectedApi`nrunId=$run`nhostSha256=$hostSha`nguestSha256=$guestSha`nthrowingSha256=$throwingSha`napplicationOnCreate=true`nrestart=true`ndualIsolation=true`nthrowingGuest=true`nworkspaceResumed=true`nguestInstalled=false`nguestActivityRecord=false`nactivityAttach=0`nactivityLifecycle=0"|Set-Content (Join-Path $out 'result.txt')
