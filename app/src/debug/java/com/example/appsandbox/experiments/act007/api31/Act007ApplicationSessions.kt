@@ -4,35 +4,13 @@ import android.content.Context
 import com.example.appsandbox.experiments.act007.core.*
 import com.example.appsandbox.storage.GuestInstanceStore
 import com.example.appsandbox.storage.GuestStore
-import com.example.appsandbox.packageinfo.GuestPackageReader
 import java.io.File
 
-data class Act007SessionResult(val outcome: String, val reason: String, val instanceId: String, val constructed: Int = 0, val onCreateAttempted: Int = 0, val onCreateCompleted: Int = 0, val loader: String = "none", val dataRoot: String = "none")
+data class Act007SessionResult(val outcome:String,val reason:String,val instanceId:String,val runId:String="",val detail:String="")
 object Act007ApplicationSessions {
-    private fun controller(context: Context) = GuestApplicationSessionController(GuestApplicationSessionRegistry(File(context.filesDir, "act007-sessions.json")))
-    fun start(context: Context, instanceId: String, throwing: Boolean = false): Act007SessionResult {
-        val instance = GuestInstanceStore(context).get(instanceId) ?: return Act007SessionResult("REJECTED", "MISSING_INSTANCE", instanceId)
-        val revision = GuestStore(context).findRevision(instance.guestRevisionId) ?: return Act007SessionResult("REJECTED", "MISSING_REVISION", instanceId)
-        val declared = requireNotNull(GuestPackageReader(context).readApplicationInfo(revision.apkPath).className)
-        val target = if (throwing) "com.example.appsandbox.testguest.runtime.Exp003OnCreateThrowingApplication" else declared
-        val sha = requireNotNull(revision.sha256)
-        val request = GuestApplicationSessionRequest("run-${System.nanoTime()}", "start-${System.nanoTime()}", instance.instanceId, revision.revisionId, sha, revision.packageName, target, instance.dataRoot)
-        val expected = GuestApplicationSessionExpected(instance.instanceId, revision.revisionId, sha, revision.packageName, target, instance.dataRoot, File(context.filesDir, "guest-instances").path)
-        val snapshot = runCatching { controller(context).start(request, expected, C1GuestApplicationSessionExecutor.create(context, instance, revision, target)) }.getOrElse { return Act007SessionResult("REJECTED", "CONSTRUCTION_FAILED:${it.javaClass.simpleName}", instanceId) }
-        return Act007SessionResult(snapshot.state.name, snapshot.failure.name, instanceId, snapshot.constructorCompleted, snapshot.onCreateAttempted, snapshot.onCreateCompleted, "DexClassLoader", instance.dataRoot)
-    }
-    fun stop(context: Context, instanceId: String): Act007SessionResult {
-        val current = controller(context).snapshots().firstOrNull { it.request.instanceId == instanceId && it.state == GuestApplicationSessionState.RUNNING } ?: return Act007SessionResult("REJECTED", "NOT_RUNNING", instanceId)
-        val stopped = controller(context).stop(current.request.runId, "stop-${System.nanoTime()}")
-        return Act007SessionResult(stopped.state.name, stopped.failure.name, instanceId)
-    }
-    fun status(context: Context, instanceId: String) = if (controller(context).snapshots().any { it.request.instanceId == instanceId && it.state == GuestApplicationSessionState.RUNNING }) "RUNNING" else "STOPPED"
-    fun start(context: Context, instanceId: String, runId: String, operationId: String): Act007SessionResult = start(context, instanceId, false).copy()
-    fun stop(context: Context, runId: String, operationId: String): Act007SessionResult {
-        val snapshot = controller(context).snapshots().firstOrNull { it.request.runId == runId }
-            ?: return Act007SessionResult("REJECTED", "INVALID_INPUT", "")
-        val stopped = controller(context).stop(runId, operationId)
-        return Act007SessionResult(stopped.state.name, stopped.failure.name, snapshot.request.instanceId)
-    }
-    fun format(result: Act007SessionResult) = "outcome=${result.outcome}\nreason=${result.reason}\ninstanceId=${result.instanceId}\nconstructed=${result.constructed}\nonCreateAttempted=${result.onCreateAttempted}\nonCreateCompleted=${result.onCreateCompleted}\nloader=${result.loader}\ndataRoot=${result.dataRoot}"
+ private fun c(x:Context)=GuestApplicationSessionController(GuestApplicationSessionRegistry(File(x.filesDir,"act007/application-sessions.json")))
+ fun start(x:Context,i:String,r:String,o:String):Act007SessionResult=try{val a=requireNotNull(GuestInstanceStore(x).get(i));val g=requireNotNull(GuestStore(x).findRevision(a.guestRevisionId));val n=requireNotNull(x.packageManager.getPackageArchiveInfo(g.apkPath,0)?.applicationInfo?.className);val q=GuestApplicationSessionRequest(r,o,a.instanceId,a.guestRevisionId,a.guestSha256,a.guestPackageName,n,a.dataRoot);val e=GuestApplicationSessionExpected(a.instanceId,a.guestRevisionId,a.guestSha256,a.guestPackageName,n,a.dataRoot,File(x.filesDir,"guest-instances").canonicalPath);val s=c(x).start(q,e,C1GuestApplicationSessionExecutor.create(x,a,g,n));Act007SessionResult(s.state.name,s.failure.name,i,r,s.detail.orEmpty())}catch(t:Throwable){Act007SessionResult("FAILED","INTERNAL",i,r,t.message.orEmpty())}
+ fun stop(x:Context,r:String,o:String):Act007SessionResult{val s=c(x).stop(r,o);return Act007SessionResult(s.state.name,s.failure.name,s.request.instanceId,r,s.detail.orEmpty())}
+ fun status(x:Context,i:String)=c(x).snapshots().count{it.request.instanceId==i}
+ fun format(r:Act007SessionResult)="outcome=${r.outcome}\nreason=${r.reason}\ninstanceId=${r.instanceId}\nsessionRunId=${r.runId}\ndetail=${r.detail.take(240)}"
 }

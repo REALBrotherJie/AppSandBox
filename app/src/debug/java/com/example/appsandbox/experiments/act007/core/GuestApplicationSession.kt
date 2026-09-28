@@ -157,6 +157,7 @@ class GuestApplicationSessionController(
         validate(request, expected)?.let { return rejected(request, it) }
         var reserved: GuestApplicationSessionSnapshot? = null
         var claimed = false
+        var claimedKey: String? = null
         try { registry.update { all ->
             val sameOperation = all.firstOrNull { it.request.operationId == request.operationId }
             if (sameOperation != null) {
@@ -172,9 +173,10 @@ class GuestApplicationSessionController(
                 constructorAttempted = 1, updatedAt = now())
             inFlight[sessionKey(request.runId)] = true
             claimed = true
+            claimedKey = sessionKey(request.runId)
             all + reserved!!
         } } catch (error: Throwable) {
-            inFlight.remove(sessionKey(request.runId))
+            claimedKey?.let(inFlight::remove)
             throw error
         }
         val initial = requireNotNull(reserved)
@@ -208,7 +210,7 @@ class GuestApplicationSessionController(
         if (operationId.isBlank()) return rejected(emptyRequest(runId, operationId), GuestApplicationFailure.INVALID_INPUT)
         var stopping: GuestApplicationSessionSnapshot? = null
         var rejected: GuestApplicationSessionSnapshot? = null
-        registry.update { all ->
+        try { registry.update { all ->
             val current = all.firstOrNull { it.request.runId == runId }
             if (current == null) { rejected = rejected(emptyRequest(runId, operationId), GuestApplicationFailure.INVALID_INPUT); return@update all }
             if (current.state == GuestApplicationSessionState.STOPPED && current.lastOperationId == operationId) { stopping = current; return@update all }
@@ -221,6 +223,9 @@ class GuestApplicationSessionController(
             stopping = current.copy(state = GuestApplicationSessionState.STOPPING, updatedAt = now(), lastOperationId = operationId)
             inFlight[sessionKey(runId)] = true
             all.map { if (it.request.runId == runId) stopping!! else it }
+        } } catch (error: Throwable) {
+            inFlight.remove(sessionKey(runId))
+            throw error
         }
         rejected?.let { return it }
         val reserved = requireNotNull(stopping)
