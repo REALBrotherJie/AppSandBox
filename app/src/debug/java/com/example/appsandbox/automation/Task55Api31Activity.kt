@@ -16,7 +16,7 @@ class Task55Api31Activity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         instanceId = intent.getStringExtra("instanceId").orEmpty()
-        currentRunId = Act007ApplicationSessions.latest(this, instanceId)?.request?.runId
+        currentRunId = Act007ApplicationSessions.latest(this, instanceId)?.takeIf { it.state in setOf(com.example.appsandbox.experiments.act007.core.GuestApplicationSessionState.RUNNING, com.example.appsandbox.experiments.act007.core.GuestApplicationSessionState.STARTING, com.example.appsandbox.experiments.act007.core.GuestApplicationSessionState.STOPPING) }?.request?.runId
         if (intent.getStringExtra("action") == null) buildWorkspaceUi() else runAutomation()
     }
 
@@ -115,3 +115,4 @@ class Task55Api31Activity : Activity() {
             ?: "outcome=NEW\nreason=NONE"
     }
 }
+
