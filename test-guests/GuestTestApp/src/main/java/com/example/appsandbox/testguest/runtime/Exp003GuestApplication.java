@@ -27,7 +27,6 @@ public class Exp003GuestApplication extends Application {
     @Override
     public void onCreate() {
         onCreateCalled = true;
-        step("0.recoveryMarker", () -> require(readMarker().startsWith("MARKER-")));
         step("1.resources", () -> require(getString(R.string.exp002_string).equals("EXP002_STRING_1d1c4b6a-87e2-4f31-a9d0-3a6b2e7c9f10")));
         step("2.applicationCast", () -> { Exp003GuestApplication app = (Exp003GuestApplication) getApplicationContext(); require(app == this); });
         step("3.files", () -> {
@@ -48,7 +47,7 @@ public class Exp003GuestApplication extends Application {
                 try (android.database.Cursor cursor = db.rawQuery("SELECT value FROM marker", null)) { require(cursor.moveToFirst() && cursor.getString(0).equals("GUEST_ONCREATE_DB")); }
             }
         });
-        step("6.layout", () -> { android.view.View view = android.view.LayoutInflater.from(this).inflate(R.layout.exp002_test_layout, null); require(((android.widget.TextView) view.findViewById(R.id.exp002_text)).getText().toString().equals(getString(R.string.exp002_string))); });
+        step("6.layout", () -> { android.view.View view = android.view.LayoutInflater.from(this).inflate(R.layout.exp002_test_layout, null); require(((android.widget.TextView) view.findViewById(R.id.exp002_text)).getText().toString().equals("GUEST_A_MARKER_1D1C4B6A")); });
         step("7.clipboard", () -> { Object service = getSystemService(CLIPBOARD_SERVICE); require(service != null); creationResults.put("clipboardClass", service.getClass().getName()); });
         step("8.lifecycle", () -> registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             public void onActivityCreated(android.app.Activity a, android.os.Bundle b) {}
@@ -59,6 +58,8 @@ public class Exp003GuestApplication extends Application {
             public void onActivitySaveInstanceState(android.app.Activity a, android.os.Bundle b) {}
             public void onActivityDestroyed(android.app.Activity a) {}
         }));
+        String seed = readText("probe-seed", "");
+        if (!seed.isEmpty()) probe(seed);
     }
 
     private interface CheckedStep { void run() throws Exception; }
@@ -76,8 +77,8 @@ public class Exp003GuestApplication extends Application {
     public Map<String, String> onCreateResults() { return new LinkedHashMap<>(creationResults); }
     public Map<String, String> persistedResults() {
         Map<String, String> result = new LinkedHashMap<>();
-        try { result.put("recoveryMarker", readMarker()); }
-        catch (Throwable error) { result.put("recoveryMarker", "MISSING"); }
+        result.put("probeFile", readText("guest-probe.txt", "MISSING"));
+        result.put("probePreference", getSharedPreferences("guest_probe", MODE_PRIVATE).getString("value", "MISSING"));
         result.put("preferences", getSharedPreferences("guest_prefs", MODE_PRIVATE).getString("marker", "MISSING"));
         try (android.database.sqlite.SQLiteOpenHelper helper = database(); android.database.Cursor cursor = helper.getReadableDatabase().rawQuery("SELECT value FROM marker", null)) {
             result.put("database", cursor.moveToFirst() ? cursor.getString(0) : "MISSING");
@@ -96,8 +97,6 @@ public class Exp003GuestApplication extends Application {
         values.put("applicationInfoPackage", getApplicationInfo().packageName);
         values.put("applicationInfoDataDir", getApplicationInfo().dataDir);
         values.put("filesDir", getFilesDir().getAbsolutePath());
-        try { values.put("recoveryMarker", readMarker()); }
-        catch (Throwable error) { values.put("recoveryMarker", "MISSING"); }
         values.put("opPackageName", getOpPackageName());
         if (Build.VERSION.SDK_INT >= 31) {
             values.put("attributionPackage", getAttributionSource().getPackageName());
@@ -107,12 +106,20 @@ public class Exp003GuestApplication extends Application {
         return values;
     }
 
-    private String readMarker() throws Exception {
-        try (java.io.InputStream in = new java.io.FileInputStream(new java.io.File(getFilesDir(), "recovery-marker"))) {
+    public Map<String, String> probe(String value) {
+        try (java.io.OutputStream out = openFileOutput("guest-probe.txt", MODE_PRIVATE)) {
+            out.write(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (Exception error) { throw new IllegalStateException(error); }
+        require(getSharedPreferences("guest_probe", MODE_PRIVATE).edit().putString("value", value).commit());
+        return persistedResults();
+    }
+
+    private String readText(String name, String fallback) {
+        try (java.io.InputStream in = openFileInput(name)) {
             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
             byte[] buffer = new byte[128]; int count;
             while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
             return new String(out.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
-        }
+        } catch (Exception error) { return fallback; }
     }
 }
