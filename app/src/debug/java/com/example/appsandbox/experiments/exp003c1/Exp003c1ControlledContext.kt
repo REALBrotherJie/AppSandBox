@@ -76,7 +76,8 @@ class Exp003c1ControlledContext private constructor(
         derive(baseContext, packageManager.getResourcesForApplication(info, config))
     override fun createDeviceProtectedStorageContext(): Context {
         val base = baseContext.createDeviceProtectedStorageContext()
-        return derive(base, root = File(base.filesDir, "task15-instances/${name(instanceId)}"), dp = true)
+        val namespace = name(requireNotNull(root.parentFile).name)
+        return derive(base, root = File(base.filesDir, "$namespace/${name(instanceId)}"), dp = true)
     }
     override fun isDeviceProtectedStorage() = dp
     override fun createAttributionContext(tag: String?): Context = derive(baseContext.createAttributionContext(tag))
