@@ -6,11 +6,75 @@ import com.example.appsandbox.storage.GuestInstanceStore
 import com.example.appsandbox.storage.GuestStore
 import java.io.File
 
-data class Act007SessionResult(val outcome:String,val reason:String,val instanceId:String,val runId:String="",val detail:String="",val constructed:Int=0,val onCreateAttempted:Int=0,val onCreateCompleted:Int=0)
+data class Act007SessionResult(
+    val outcome: String,
+    val reason: String,
+    val instanceId: String,
+    val runId: String = "",
+    val detail: String = ""
+)
+
 object Act007ApplicationSessions {
- private fun c(x:Context)=GuestApplicationSessionController(GuestApplicationSessionRegistry(File(x.filesDir,"act007-application-sessions.json")))
- fun start(x:Context,i:String,r:String,o:String):Act007SessionResult=try{val a=requireNotNull(GuestInstanceStore(x).get(i));val g=requireNotNull(GuestStore(x).findRevision(a.guestRevisionId));val n=requireNotNull(x.packageManager.getPackageArchiveInfo(g.apkPath,0)?.applicationInfo?.className);val q=GuestApplicationSessionRequest(r,o,a.instanceId,a.guestRevisionId,a.guestSha256,a.guestPackageName,n,a.dataRoot);val e=GuestApplicationSessionExpected(a.instanceId,a.guestRevisionId,a.guestSha256,a.guestPackageName,n,a.dataRoot,File(x.filesDir,"guest-instances").canonicalPath);val s=c(x).start(q,e,C1GuestApplicationSessionExecutor.create(x,a,g,n));Act007SessionResult(s.state.name,s.failure.name,i,r,s.detail.orEmpty())}catch(t:Throwable){Act007SessionResult("FAILED","INTERNAL",i,r,t.message.orEmpty())}
- fun stop(x:Context,r:String,o:String):Act007SessionResult{val s=c(x).stop(r,o);return Act007SessionResult(s.state.name,s.failure.name,s.request.instanceId,r,s.detail.orEmpty())}
- fun status(x:Context,i:String)=c(x).snapshots().count{it.request.instanceId==i}
- fun format(r:Act007SessionResult)="outcome=${r.outcome}\nreason=${r.reason}\ninstanceId=${r.instanceId}\nsessionRunId=${r.runId}\nconstructed=${r.constructed}\nonCreateAttempted=${r.onCreateAttempted}\nonCreateCompleted=${r.onCreateCompleted}\ndetail=${r.detail.take(240)}"
+    private fun controller(context: Context) = GuestApplicationSessionController(
+        GuestApplicationSessionRegistry(File(context.filesDir, "act007-application-sessions.json"))
+    )
+
+    fun latest(context: Context, instanceId: String): GuestApplicationSessionSnapshot? =
+        controller(context).snapshots().lastOrNull { it.request.instanceId == instanceId }
+
+    fun canDelete(context: Context, instanceId: String): Boolean =
+        latest(context, instanceId)?.state !in setOf(
+            GuestApplicationSessionState.NEW,
+            GuestApplicationSessionState.STARTING,
+            GuestApplicationSessionState.RUNNING,
+            GuestApplicationSessionState.STOPPING
+        )
+
+    fun start(context: Context, instanceId: String, runId: String, operationId: String): Act007SessionResult = try {
+        val instance = requireNotNull(GuestInstanceStore(context).get(instanceId))
+        val revision = requireNotNull(GuestStore(context).findRevision(instance.guestRevisionId))
+        val applicationClass = requireNotNull(
+            context.packageManager.getPackageArchiveInfo(revision.apkPath, 0)?.applicationInfo?.className
+        )
+        val request = GuestApplicationSessionRequest(
+            runId, operationId, instance.instanceId, instance.guestRevisionId,
+            instance.guestSha256, instance.guestPackageName, applicationClass, instance.dataRoot
+        )
+        val expected = GuestApplicationSessionExpected(
+            instance.instanceId, instance.guestRevisionId, instance.guestSha256,
+            instance.guestPackageName, applicationClass, instance.dataRoot,
+            File(context.filesDir, "guest-instances").canonicalPath
+        )
+        val snapshot = controller(context).start(
+            request, expected,
+            C1GuestApplicationSessionExecutor.create(context, instance, revision, applicationClass)
+        )
+        Act007SessionResult(
+            snapshot.state.name, snapshot.failure.name, instanceId, runId,
+            snapshot.detail.orEmpty()
+        )
+    } catch (error: Throwable) {
+        Act007SessionResult("FAILED", "INTERNAL", instanceId, runId, error.message.orEmpty())
+    }
+
+    fun stop(context: Context, runId: String, operationId: String): Act007SessionResult {
+        val snapshot = controller(context).stop(runId, operationId)
+        return Act007SessionResult(
+            snapshot.state.name, snapshot.failure.name,
+            snapshot.request.instanceId, runId, snapshot.detail.orEmpty()
+        )
+    }
+
+    fun delete(context: Context, instanceId: String): Boolean {
+        check(canDelete(context, instanceId)) { "ACTIVE_SESSION" }
+        return GuestInstanceStore(context).delete(instanceId)
+    }
+
+    fun format(result: Act007SessionResult): String = buildString {
+        appendLine("outcome=${result.outcome}")
+        appendLine("reason=${result.reason}")
+        appendLine("instanceId=${result.instanceId}")
+        appendLine("sessionRunId=${result.runId}")
+        if (result.detail.isNotBlank()) append("detail=${result.detail.take(240)}")
+    }.trimEnd()
 }
