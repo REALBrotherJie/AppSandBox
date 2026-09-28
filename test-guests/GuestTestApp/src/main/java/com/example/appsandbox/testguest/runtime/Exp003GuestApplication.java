@@ -59,7 +59,11 @@ public class Exp003GuestApplication extends Application {
             public void onActivityDestroyed(android.app.Activity a) {}
         }));
         String seed = readText("probe-seed", "");
-        if (!seed.isEmpty()) probe(seed);
+        if (!seed.isEmpty()) {
+            probe(seed);
+            require(deleteFile("probe-seed"));
+            require(!new java.io.File(getFilesDir(), "probe-seed").exists());
+        }
     }
 
     private interface CheckedStep { void run() throws Exception; }
@@ -79,6 +83,7 @@ public class Exp003GuestApplication extends Application {
         Map<String, String> result = new LinkedHashMap<>();
         result.put("probeFile", readText("guest-probe.txt", "MISSING"));
         result.put("probePreference", getSharedPreferences("guest_probe", MODE_PRIVATE).getString("value", "MISSING"));
+        result.put("probeSeedExists", Boolean.toString(new java.io.File(getFilesDir(), "probe-seed").exists()));
         result.put("preferences", getSharedPreferences("guest_prefs", MODE_PRIVATE).getString("marker", "MISSING"));
         try (android.database.sqlite.SQLiteOpenHelper helper = database(); android.database.Cursor cursor = helper.getReadableDatabase().rawQuery("SELECT value FROM marker", null)) {
             result.put("database", cursor.moveToFirst() ? cursor.getString(0) : "MISSING");

@@ -115,6 +115,7 @@ class Act007RunnerActivity : Activity() {
     private fun checkProbe(results: Map<String, String>, expected: String) {
         check(results["probeFile"] == expected)
         check(results["probePreference"] == expected)
+        check(results["probeSeedExists"] == "false")
     }
 
     private fun checkObserve(values: Map<String, String>, dataRoot: String) {
