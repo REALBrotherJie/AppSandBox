@@ -39,7 +39,8 @@ data class GuestApplicationSessionSnapshot(
     val onCreateAttempted: Int = 0,
     val onCreateCompleted: Int = 0,
     val updatedAt: Long,
-    val detail: String? = null
+    val detail: String? = null,
+    val lastOperationId: String? = null
 )
 
 interface GuestApplicationSessionExecutor {
@@ -66,10 +67,7 @@ class GuestApplicationSessionRegistry(private val file: File) {
         val temp = File(file.parentFile, file.name + ".tmp")
         val backup = File(file.parentFile, file.name + ".bak")
         temp.writeText(encode(values))
-        if (file.exists()) {
-            if (backup.exists()) backup.delete()
-            check(file.renameTo(backup)) { "cannot backup session registry" }
-        }
+        if (file.exists()) check(file.copyTo(backup, overwrite = true).let { true }) { "cannot backup session registry" }
         try {
             check(temp.renameTo(file)) { "cannot publish session registry" }
             backup.delete()
@@ -81,8 +79,11 @@ class GuestApplicationSessionRegistry(private val file: File) {
 
     private fun recoverInterruptedWrite() {
         val backup = File(file.parentFile, file.name + ".bak")
-        if (!file.exists() && backup.exists()) check(backup.renameTo(file))
-        if (file.exists()) backup.delete()
+        if (!file.exists() && backup.exists()) check(backup.copyTo(file, overwrite = true).let { true })
+        if (file.exists()) {
+            runCatching { decode(file.readText()) }.onSuccess { backup.delete() }
+                .onFailure { if (backup.exists()) { file.delete(); backup.copyTo(file, overwrite = true); decode(file.readText()); backup.delete() } }
+        }
         File(file.parentFile, file.name + ".tmp").delete()
     }
 
@@ -94,7 +95,7 @@ class GuestApplicationSessionRegistry(private val file: File) {
             .put("state", value.state.name).put("failure", value.failure.name)
             .put("constructorAttempted", value.constructorAttempted).put("constructorCompleted", value.constructorCompleted)
             .put("onCreateAttempted", value.onCreateAttempted).put("onCreateCompleted", value.onCreateCompleted)
-            .put("updatedAt", value.updatedAt).put("detail", value.detail)
+            .put("updatedAt", value.updatedAt).put("detail", value.detail).put("lastOperationId", value.lastOperationId)
     }).toString()
 
     private fun decode(raw: String): List<GuestApplicationSessionSnapshot> = try {
@@ -107,7 +108,7 @@ class GuestApplicationSessionRegistry(private val file: File) {
             GuestApplicationSessionSnapshot(request, GuestApplicationSessionState.valueOf(o.getString("state")),
                 GuestApplicationFailure.valueOf(o.getString("failure")), o.getInt("constructorAttempted"),
                 o.getInt("constructorCompleted"), o.getInt("onCreateAttempted"), o.getInt("onCreateCompleted"),
-                o.getLong("updatedAt"), o.optString("detail").takeIf { it.isNotEmpty() })
+                o.getLong("updatedAt"), o.optString("detail").takeIf { it.isNotEmpty() }, o.optString("lastOperationId").takeIf { it.isNotEmpty() })
         }.also { values ->
             require(values.map { it.request.runId }.distinct().size == values.size)
             require(values.all(::validSnapshot))
@@ -133,7 +134,7 @@ class GuestApplicationSessionController(
     private val registry: GuestApplicationSessionRegistry,
     private val now: () -> Long = System::currentTimeMillis
 ) {
-    private val live = ConcurrentHashMap<String, Pair<GuestApplicationSessionExecutor, Any?>>()
+    private val live get() = liveSessions
 
     fun start(request: GuestApplicationSessionRequest, expected: GuestApplicationSessionExpected, executor: GuestApplicationSessionExecutor): GuestApplicationSessionSnapshot {
         validate(request, expected)?.let { return rejected(request, it) }
@@ -163,7 +164,12 @@ class GuestApplicationSessionController(
             executor.callOnCreate(application, request)
             val running = starting.copy(state = GuestApplicationSessionState.RUNNING, constructorCompleted = 1,
                 onCreateAttempted = 1, onCreateCompleted = 1, updatedAt = now())
-            update(running); live[request.runId] = executor to application; running
+            live[request.runId] = executor to application
+            try { update(running); running } catch (error: Throwable) {
+                live.remove(request.runId)
+                runCatching { executor.close(application) }
+                finishFailure(starting.copy(constructorCompleted = 1, onCreateAttempted = 1), GuestApplicationFailure.INVALID_TRANSITION, error)
+            }
         } catch (error: Throwable) {
             runCatching { executor.close(application) }
             finishFailure(starting.copy(constructorCompleted = 1, onCreateAttempted = 1), GuestApplicationFailure.ON_CREATE_FAILED, error)
@@ -176,15 +182,17 @@ class GuestApplicationSessionController(
         registry.update { all ->
             val current = all.firstOrNull { it.request.runId == runId }
             if (current == null) { rejected = rejected(emptyRequest(runId, operationId), GuestApplicationFailure.INVALID_INPUT); return@update all }
-            if (current.state == GuestApplicationSessionState.STOPPED && current.request.operationId == operationId) { stopping = current; return@update all }
+            if (current.state == GuestApplicationSessionState.STOPPED && current.lastOperationId == operationId) { stopping = current; return@update all }
             if (current.state != GuestApplicationSessionState.RUNNING) { rejected = rejected(current.request.copy(operationId = operationId), GuestApplicationFailure.INVALID_TRANSITION); return@update all }
-            stopping = current.copy(request = current.request.copy(operationId = operationId), state = GuestApplicationSessionState.STOPPING, updatedAt = now())
+            if (current.lastOperationId != null && current.lastOperationId != operationId) { rejected = rejected(current, GuestApplicationFailure.DUPLICATE_OPERATION); return@update all }
+            stopping = current.copy(state = GuestApplicationSessionState.STOPPING, updatedAt = now(), lastOperationId = operationId)
             all.map { if (it.request.runId == runId) stopping!! else it }
         }
         rejected?.let { return it }
         val reserved = requireNotNull(stopping)
         if (reserved.state == GuestApplicationSessionState.STOPPED) return reserved
         val handle = live.remove(runId)
+        if (handle == null) return finishFailure(reserved, GuestApplicationFailure.CRASH_RECOVERY, IllegalStateException("live session unavailable"))
         return try {
             handle?.first?.close(handle.second)
             reserved.copy(state = GuestApplicationSessionState.STOPPED, updatedAt = now()).also(::update)
@@ -194,7 +202,8 @@ class GuestApplicationSessionController(
     fun recoverInterrupted(): List<GuestApplicationSessionSnapshot> {
         val recovered = mutableListOf<GuestApplicationSessionSnapshot>()
         registry.update { all -> all.map { snapshot ->
-            if (snapshot.state in setOf(GuestApplicationSessionState.NEW, GuestApplicationSessionState.STARTING, GuestApplicationSessionState.STOPPING)) {
+            if (snapshot.state in setOf(GuestApplicationSessionState.NEW, GuestApplicationSessionState.STARTING, GuestApplicationSessionState.STOPPING) ||
+                (snapshot.state == GuestApplicationSessionState.RUNNING && !live.containsKey(snapshot.request.runId))) {
                 snapshot.copy(state = GuestApplicationSessionState.FAILED, failure = GuestApplicationFailure.CRASH_RECOVERY,
                     updatedAt = now()).also(recovered::add)
             } else snapshot
@@ -215,7 +224,7 @@ class GuestApplicationSessionController(
         val expectedRoot = runCatching { File(e.dataRoot).canonicalFile }.getOrElse { return GuestApplicationFailure.DATA_ROOT_MISMATCH }
         val allowed = runCatching { File(e.allowedDataRoot).canonicalFile }.getOrElse { return GuestApplicationFailure.PATH_ESCAPE }
         if (root != expectedRoot) return GuestApplicationFailure.DATA_ROOT_MISMATCH
-        if (root.parentFile != allowed || java.nio.file.Files.isSymbolicLink(root.toPath())) return GuestApplicationFailure.PATH_ESCAPE
+        if (root.parentFile != allowed || hasSymlinkInPath(File(e.allowedDataRoot), File(r.dataRoot))) return GuestApplicationFailure.PATH_ESCAPE
         return null
     }
 
@@ -225,6 +234,22 @@ class GuestApplicationSessionController(
     private fun update(snapshot: GuestApplicationSessionSnapshot) = registry.update { all -> all.map { if (it.request.runId == snapshot.request.runId) snapshot else it } }
     private fun rejected(request: GuestApplicationSessionRequest, failure: GuestApplicationFailure) = GuestApplicationSessionSnapshot(request, GuestApplicationSessionState.FAILED, failure, updatedAt = now())
     private fun emptyRequest(runId: String, operationId: String) = GuestApplicationSessionRequest(runId, operationId, "", "", "", "", "", "")
+
+    private fun hasSymlinkInPath(base: File, target: File): Boolean {
+        var current = target.absoluteFile
+        val basePath = base.absoluteFile.toPath()
+        while (current.toPath().startsWith(basePath)) {
+            if (java.nio.file.Files.isSymbolicLink(current.toPath())) return true
+            if (current == base.absoluteFile) return false
+            current = current.parentFile ?: return true
+        }
+        return true
+    }
+
+    companion object {
+        private val liveSessions = ConcurrentHashMap<String, Pair<GuestApplicationSessionExecutor, Any?>>()
+        internal fun clearLiveForTest() { liveSessions.clear() }
+    }
 }
 
 class C1GuestApplicationSessionExecutor private constructor(

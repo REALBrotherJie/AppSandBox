@@ -151,4 +151,31 @@ class GuestApplicationSessionTest {
         controller.stop(f.request.runId, "stop-a")
         assertEquals("A", File(f.request.dataRoot, "marker").readText()); assertEquals("B", File(requestB.dataRoot, "marker").readText())
     }
+
+    @Test fun stopFromAnotherControllerClosesSharedLiveHandleWithoutChangingStartIdentity() {
+        val f = fixture(); val executor = Executor()
+        assertEquals(GuestApplicationSessionState.RUNNING, GuestApplicationSessionController(f.registry).start(f.request, f.expected, executor).state)
+        val stopped = GuestApplicationSessionController(f.registry).stop(f.request.runId, "stop-cross-controller")
+        assertEquals(GuestApplicationSessionState.STOPPED, stopped.state)
+        assertEquals(f.request, stopped.request)
+        assertEquals("stop-cross-controller", stopped.lastOperationId)
+        assertEquals(1, executor.closes.get())
+    }
+
+    @Test fun runningWithoutSharedLiveIsRecoveredAsCrash() {
+        val f = fixture(); val first = GuestApplicationSessionController(f.registry)
+        assertEquals(GuestApplicationSessionState.RUNNING, first.start(f.request, f.expected, Executor()).state)
+        GuestApplicationSessionController.clearLiveForTest()
+        assertEquals(GuestApplicationFailure.CRASH_RECOVERY, first.recoverInterrupted().single().failure)
+    }
+
+    @Test fun symlinkedDataRootIsRejectedBeforeExecutor() {
+        val f = fixture(); val outside = File(f.base, "outside").apply { mkdirs() }
+        val link = File(f.expected.allowedDataRoot, "link")
+        try { Files.createSymbolicLink(link.toPath(), outside.toPath()) } catch (_: UnsupportedOperationException) { return } catch (_: java.nio.file.FileSystemException) { return }
+        val executor = Executor()
+        val result = GuestApplicationSessionController(f.registry).start(f.request.copy(dataRoot = link.path), f.expected.copy(dataRoot = link.path), executor)
+        assertEquals(GuestApplicationFailure.PATH_ESCAPE, result.failure)
+        assertEquals(0, executor.constructs.get())
+    }
 }
