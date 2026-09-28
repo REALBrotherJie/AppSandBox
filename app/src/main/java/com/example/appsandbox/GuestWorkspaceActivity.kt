@@ -95,7 +95,14 @@ class GuestWorkspaceActivity : Activity() {
         actions.addView(Button(this).apply { text = "Close workspace"; setOnClickListener { finishAndRemoveTask() } })
         actions.addView(Button(this).apply { text = "Delete current instance"; setOnClickListener {
             android.app.AlertDialog.Builder(this@GuestWorkspaceActivity).setTitle("Delete current instance?").setNegativeButton("Cancel", null)
-                .setPositiveButton("Confirm delete instance") { _, _ -> runCatching { store.delete(instance.instanceId) }.onSuccess { finishAndRemoveTask() }.onFailure { show(it.message ?: "Unable to delete instance") } }.show()
+                .setPositiveButton("Confirm delete instance") { _, _ -> runCatching {
+                    if (BuildConfig.DEBUG) {
+                        val c = Class.forName("com.example.appsandbox.experiments.act007.api31.Act007ApplicationSessions")
+                        val ok = c.getMethod("canDelete", android.content.Context::class.java, String::class.java).invoke(null, this@GuestWorkspaceActivity, instance.instanceId) as Boolean
+                        check(ok) { "Active session must be stopped before deletion" }
+                    }
+                    store.delete(instance.instanceId)
+                }.onSuccess { finishAndRemoveTask() }.onFailure { show(it.message ?: "Unable to delete instance") } }.show()
         } })
         guestRoot = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(state); root.addView(actions); root.addView(guestRoot, LinearLayout.LayoutParams(-1, 0, 1f)); setContentView(root)

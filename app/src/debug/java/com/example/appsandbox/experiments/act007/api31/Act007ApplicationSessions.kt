@@ -11,7 +11,10 @@ data class Act007SessionResult(
     val reason: String,
     val instanceId: String,
     val runId: String = "",
-    val detail: String = ""
+    val detail: String = "",
+    val constructed: Int = 0,
+    val onCreateAttempted: Int = 0,
+    val onCreateCompleted: Int = 0
 )
 
 object Act007ApplicationSessions {
@@ -22,7 +25,7 @@ object Act007ApplicationSessions {
     fun latest(context: Context, instanceId: String): GuestApplicationSessionSnapshot? =
         controller(context).snapshots().lastOrNull { it.request.instanceId == instanceId }
 
-    fun canDelete(context: Context, instanceId: String): Boolean =
+    @JvmStatic fun canDelete(context: Context, instanceId: String): Boolean =
         latest(context, instanceId)?.state !in setOf(
             GuestApplicationSessionState.NEW,
             GuestApplicationSessionState.STARTING,
@@ -51,7 +54,7 @@ object Act007ApplicationSessions {
         )
         Act007SessionResult(
             snapshot.state.name, snapshot.failure.name, instanceId, runId,
-            snapshot.detail.orEmpty()
+            snapshot.detail.orEmpty(), snapshot.constructorCompleted, snapshot.onCreateAttempted, snapshot.onCreateCompleted
         )
     } catch (error: Throwable) {
         Act007SessionResult("FAILED", "INTERNAL", instanceId, runId, error.message.orEmpty())
@@ -75,6 +78,9 @@ object Act007ApplicationSessions {
         appendLine("reason=${result.reason}")
         appendLine("instanceId=${result.instanceId}")
         appendLine("sessionRunId=${result.runId}")
+        appendLine("constructed=${result.constructed}")
+        appendLine("onCreateAttempted=${result.onCreateAttempted}")
+        appendLine("onCreateCompleted=${result.onCreateCompleted}")
         if (result.detail.isNotBlank()) append("detail=${result.detail.take(240)}")
     }.trimEnd()
 }
