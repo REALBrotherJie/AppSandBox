@@ -269,11 +269,22 @@ class C1GuestApplicationSessionExecutor private constructor(
     private val loader: DexClassLoader,
     private val applicationClass: Class<out Application>
 ) : GuestApplicationSessionExecutor {
+    private var lastApplication: Application? = null
     override fun construct(request: GuestApplicationSessionRequest): Any {
         check(applicationClass.classLoader === loader) { GuestApplicationFailure.WRONG_CLASSLOADER.name }
-        return instrumentation.newApplication(loader, applicationClass.name, context).also { context.bindApplication(it) }
+        return instrumentation.newApplication(loader, applicationClass.name, context).also { context.bindApplication(it); lastApplication = it }
     }
     override fun callOnCreate(application: Any, request: GuestApplicationSessionRequest) = instrumentation.callApplicationOnCreate(application as Application)
+
+    fun observe(): Map<String, String> = lastApplication?.let { app ->
+        runCatching { app.javaClass.getMethod("observe").invoke(app) as Map<String, String> }.getOrDefault(emptyMap())
+    } ?: emptyMap()
+    fun onCreateResults(): Map<String, String> = lastApplication?.let { app ->
+        runCatching { app.javaClass.getMethod("onCreateResults").invoke(app) as Map<String, String> }.getOrDefault(emptyMap())
+    } ?: emptyMap()
+    fun persistedResults(): Map<String, String> = lastApplication?.let { app ->
+        runCatching { app.javaClass.getMethod("persistedResults").invoke(app) as Map<String, String> }.getOrDefault(emptyMap())
+    } ?: emptyMap()
 
     companion object {
         fun create(host: Context, instance: GuestInstanceRecord, revision: GuestPackageRecord, applicationClassName: String): C1GuestApplicationSessionExecutor {
