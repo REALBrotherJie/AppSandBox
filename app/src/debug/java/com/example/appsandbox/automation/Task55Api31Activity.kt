@@ -21,8 +21,8 @@ class Task55Api31Activity : Activity() {
                     "outcome=READY\ninstanceA=${a.instanceId}\ninstanceB=${b.instanceId}\nrevisionId=${record.revisionId}"
                 }
                 "start", "restart", "throwing" -> format(Act007ApplicationSessions.start(this, intent.getStringExtra("instanceId").orEmpty(), action == "throwing"))
-                "stop" -> format(Act007ApplicationSessions.stop(intent.getStringExtra("instanceId").orEmpty()))
-                "status" -> "outcome=${Act007ApplicationSessions.status(intent.getStringExtra("instanceId").orEmpty())}\nreason=NONE"
+                "stop" -> format(Act007ApplicationSessions.stop(this, intent.getStringExtra("instanceId").orEmpty()))
+                "status" -> "outcome=${Act007ApplicationSessions.status(this, intent.getStringExtra("instanceId").orEmpty())}\nreason=NONE"
                 else -> "outcome=REJECTED\nreason=INVALID_ACTION"
             }
         }.getOrElse { "outcome=REJECTED\nreason=INTERNAL:${it.javaClass.simpleName}" }

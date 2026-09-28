@@ -50,6 +50,7 @@ interface GuestApplicationSessionExecutor {
 }
 
 class GuestApplicationSessionRegistry(private val file: File) {
+    internal val namespace: String get() = file.absoluteFile.normalize().path
     private val lock = locks.computeIfAbsent(file.absoluteFile.normalize().path) { Any() }
 
     fun readAll(): List<GuestApplicationSessionSnapshot> = synchronized(lock) {
@@ -69,6 +70,7 @@ class GuestApplicationSessionRegistry(private val file: File) {
         temp.writeText(encode(values))
         if (file.exists()) check(file.copyTo(backup, overwrite = true).let { true }) { "cannot backup session registry" }
         try {
+            if (file.exists()) check(file.delete()) { "cannot remove old session registry" }
             check(temp.renameTo(file)) { "cannot publish session registry" }
             backup.delete()
         } catch (error: Throwable) {
@@ -135,6 +137,7 @@ class GuestApplicationSessionController(
     private val now: () -> Long = System::currentTimeMillis
 ) {
     private val live get() = liveSessions
+    private val namespace get() = registry.namespace
 
     fun start(request: GuestApplicationSessionRequest, expected: GuestApplicationSessionExpected, executor: GuestApplicationSessionExecutor): GuestApplicationSessionSnapshot {
         validate(request, expected)?.let { return rejected(request, it) }
@@ -149,29 +152,34 @@ class GuestApplicationSessionController(
             if (all.any { it.request.instanceId == request.instanceId && it.state in setOf(GuestApplicationSessionState.NEW, GuestApplicationSessionState.STARTING, GuestApplicationSessionState.RUNNING, GuestApplicationSessionState.STOPPING) }) {
                 reserved = rejected(request, GuestApplicationFailure.CONCURRENT_OPERATION); return@update all
             }
-            reserved = GuestApplicationSessionSnapshot(request, GuestApplicationSessionState.NEW, updatedAt = now())
+            reserved = GuestApplicationSessionSnapshot(request, GuestApplicationSessionState.STARTING,
+                constructorAttempted = 1, updatedAt = now())
+            inFlight[sessionKey(request.runId)] = true
             all + reserved!!
         }
         val initial = requireNotNull(reserved)
-        if (initial.state != GuestApplicationSessionState.NEW) return initial
-        val starting = initial.copy(state = GuestApplicationSessionState.STARTING, constructorAttempted = 1, updatedAt = now())
-        update(starting)
+        if (initial.state != GuestApplicationSessionState.STARTING) return initial
+        val starting = initial
         val application = try { executor.construct(request) } catch (error: Throwable) {
+            inFlight.remove(sessionKey(request.runId))
             return finishFailure(starting, GuestApplicationFailure.CONSTRUCTION_FAILED, error)
         }
-        update(starting.copy(constructorCompleted = 1, onCreateAttempted = 1, updatedAt = now()))
+        try { update(starting.copy(constructorCompleted = 1, onCreateAttempted = 1, updatedAt = now())) } catch (error: Throwable) {
+            inFlight.remove(sessionKey(request.runId)); runCatching { executor.close(application) }
+            return finishFailure(starting, GuestApplicationFailure.INVALID_TRANSITION, error)
+        }
         return try {
             executor.callOnCreate(application, request)
             val running = starting.copy(state = GuestApplicationSessionState.RUNNING, constructorCompleted = 1,
                 onCreateAttempted = 1, onCreateCompleted = 1, updatedAt = now())
-            live[request.runId] = executor to application
-            try { update(running); running } catch (error: Throwable) {
-                live.remove(request.runId)
+            live[sessionKey(request.runId)] = executor to application
+            try { update(running); inFlight.remove(sessionKey(request.runId)); running } catch (error: Throwable) {
+                live.remove(sessionKey(request.runId)); inFlight.remove(sessionKey(request.runId))
                 runCatching { executor.close(application) }
                 finishFailure(starting.copy(constructorCompleted = 1, onCreateAttempted = 1), GuestApplicationFailure.INVALID_TRANSITION, error)
             }
         } catch (error: Throwable) {
-            runCatching { executor.close(application) }
+            inFlight.remove(sessionKey(request.runId)); runCatching { executor.close(application) }
             finishFailure(starting.copy(constructorCompleted = 1, onCreateAttempted = 1), GuestApplicationFailure.ON_CREATE_FAILED, error)
         }
     }
@@ -184,14 +192,14 @@ class GuestApplicationSessionController(
             if (current == null) { rejected = rejected(emptyRequest(runId, operationId), GuestApplicationFailure.INVALID_INPUT); return@update all }
             if (current.state == GuestApplicationSessionState.STOPPED && current.lastOperationId == operationId) { stopping = current; return@update all }
             if (current.state != GuestApplicationSessionState.RUNNING) { rejected = rejected(current.request.copy(operationId = operationId), GuestApplicationFailure.INVALID_TRANSITION); return@update all }
-            if (current.lastOperationId != null && current.lastOperationId != operationId) { rejected = rejected(current, GuestApplicationFailure.DUPLICATE_OPERATION); return@update all }
+            if (current.lastOperationId != null && current.lastOperationId != operationId) { rejected = rejected(current.request, GuestApplicationFailure.DUPLICATE_OPERATION); return@update all }
             stopping = current.copy(state = GuestApplicationSessionState.STOPPING, updatedAt = now(), lastOperationId = operationId)
             all.map { if (it.request.runId == runId) stopping!! else it }
         }
         rejected?.let { return it }
         val reserved = requireNotNull(stopping)
         if (reserved.state == GuestApplicationSessionState.STOPPED) return reserved
-        val handle = live.remove(runId)
+        val handle = live.remove(sessionKey(runId))
         if (handle == null) return finishFailure(reserved, GuestApplicationFailure.CRASH_RECOVERY, IllegalStateException("live session unavailable"))
         return try {
             handle?.first?.close(handle.second)
@@ -202,8 +210,9 @@ class GuestApplicationSessionController(
     fun recoverInterrupted(): List<GuestApplicationSessionSnapshot> {
         val recovered = mutableListOf<GuestApplicationSessionSnapshot>()
         registry.update { all -> all.map { snapshot ->
-            if (snapshot.state in setOf(GuestApplicationSessionState.NEW, GuestApplicationSessionState.STARTING, GuestApplicationSessionState.STOPPING) ||
-                (snapshot.state == GuestApplicationSessionState.RUNNING && !live.containsKey(snapshot.request.runId))) {
+            if (!inFlight.containsKey(sessionKey(snapshot.request.runId)) &&
+                (snapshot.state in setOf(GuestApplicationSessionState.NEW, GuestApplicationSessionState.STARTING, GuestApplicationSessionState.STOPPING) ||
+                (snapshot.state == GuestApplicationSessionState.RUNNING && !live.containsKey(sessionKey(snapshot.request.runId))))) {
                 snapshot.copy(state = GuestApplicationSessionState.FAILED, failure = GuestApplicationFailure.CRASH_RECOVERY,
                     updatedAt = now()).also(recovered::add)
             } else snapshot
@@ -234,6 +243,7 @@ class GuestApplicationSessionController(
     private fun update(snapshot: GuestApplicationSessionSnapshot) = registry.update { all -> all.map { if (it.request.runId == snapshot.request.runId) snapshot else it } }
     private fun rejected(request: GuestApplicationSessionRequest, failure: GuestApplicationFailure) = GuestApplicationSessionSnapshot(request, GuestApplicationSessionState.FAILED, failure, updatedAt = now())
     private fun emptyRequest(runId: String, operationId: String) = GuestApplicationSessionRequest(runId, operationId, "", "", "", "", "", "")
+    private fun sessionKey(runId: String) = "$namespace::$runId"
 
     private fun hasSymlinkInPath(base: File, target: File): Boolean {
         var current = target.absoluteFile
@@ -248,6 +258,7 @@ class GuestApplicationSessionController(
 
     companion object {
         private val liveSessions = ConcurrentHashMap<String, Pair<GuestApplicationSessionExecutor, Any?>>()
+        private val inFlight = ConcurrentHashMap<String, Boolean>()
         internal fun clearLiveForTest() { liveSessions.clear() }
     }
 }

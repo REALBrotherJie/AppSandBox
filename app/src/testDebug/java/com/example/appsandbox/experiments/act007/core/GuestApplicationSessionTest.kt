@@ -1,6 +1,7 @@
 package com.example.appsandbox.experiments.act007.core
 
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
 import java.nio.file.Files
@@ -172,10 +173,21 @@ class GuestApplicationSessionTest {
     @Test fun symlinkedDataRootIsRejectedBeforeExecutor() {
         val f = fixture(); val outside = File(f.base, "outside").apply { mkdirs() }
         val link = File(f.expected.allowedDataRoot, "link")
-        try { Files.createSymbolicLink(link.toPath(), outside.toPath()) } catch (_: UnsupportedOperationException) { return } catch (_: java.nio.file.FileSystemException) { return }
+        try { Files.createSymbolicLink(link.toPath(), outside.toPath()) } catch (_: UnsupportedOperationException) { assumeTrue("symlink unsupported", false) } catch (_: java.nio.file.FileSystemException) { assumeTrue("symlink unsupported", false) }
         val executor = Executor()
         val result = GuestApplicationSessionController(f.registry).start(f.request.copy(dataRoot = link.path), f.expected.copy(dataRoot = link.path), executor)
         assertEquals(GuestApplicationFailure.PATH_ESCAPE, result.failure)
         assertEquals(0, executor.constructs.get())
+    }
+
+    @Test fun sameRunIdInDifferentRegistriesDoesNotShareOrCloseLiveHandle() {
+        val a = fixture(); val baseB = Files.createTempDirectory("act007-b").toFile(); val rootB = File(baseB, "instances/instance-a").apply { mkdirs() }
+        val requestB = a.request.copy(dataRoot = rootB.path)
+        val expectedB = a.expected.copy(dataRoot = rootB.path, allowedDataRoot = rootB.parentFile.path)
+        val registryB = GuestApplicationSessionRegistry(File(baseB, "sessions.json")); val executorB = Executor()
+        val executorA = Executor(); assertEquals(GuestApplicationSessionState.RUNNING, GuestApplicationSessionController(a.registry).start(a.request, a.expected, executorA).state)
+        assertEquals(GuestApplicationSessionState.RUNNING, GuestApplicationSessionController(registryB).start(requestB, expectedB, executorB).state)
+        GuestApplicationSessionController(a.registry).stop(a.request.runId, "stop-a")
+        assertEquals(1, executorA.closes.get()); assertEquals(0, executorB.closes.get())
     }
 }
