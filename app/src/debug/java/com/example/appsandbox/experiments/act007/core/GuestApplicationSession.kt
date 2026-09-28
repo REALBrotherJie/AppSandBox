@@ -81,9 +81,9 @@ class GuestApplicationSessionRegistry(private val file: File, private val io: Gu
         file.parentFile?.mkdirs()
         val temp = File(file.parentFile, file.name + ".tmp")
         val backup = File(file.parentFile, file.name + ".bak")
-        io.write(temp, encode(values))
-        if (file.exists()) check(io.copy(file, backup, true)) { "cannot backup session registry" }
         try {
+            io.write(temp, encode(values))
+            if (file.exists()) check(io.copy(file, backup, true)) { "cannot backup session registry" }
             if (file.exists()) check(io.delete(file)) { "cannot remove old session registry" }
             check(io.publish(temp, file)) { "cannot publish session registry" }
             io.delete(backup)
@@ -164,6 +164,7 @@ class GuestApplicationSessionController(
                 return@update all
             }
             if (all.any { it.request.runId == request.runId }) { reserved = rejected(request, GuestApplicationFailure.DUPLICATE_RUN); return@update all }
+            if (all.any { it.lastOperationId == request.operationId }) { reserved = rejected(request, GuestApplicationFailure.DUPLICATE_OPERATION); return@update all }
             if (all.any { it.request.instanceId == request.instanceId && it.state in setOf(GuestApplicationSessionState.NEW, GuestApplicationSessionState.STARTING, GuestApplicationSessionState.RUNNING, GuestApplicationSessionState.STOPPING) }) {
                 reserved = rejected(request, GuestApplicationFailure.CONCURRENT_OPERATION); return@update all
             }
@@ -204,6 +205,7 @@ class GuestApplicationSessionController(
     }
 
     fun stop(runId: String, operationId: String): GuestApplicationSessionSnapshot {
+        if (operationId.isBlank()) return rejected(emptyRequest(runId, operationId), GuestApplicationFailure.INVALID_INPUT)
         var stopping: GuestApplicationSessionSnapshot? = null
         var rejected: GuestApplicationSessionSnapshot? = null
         registry.update { all ->
@@ -227,8 +229,7 @@ class GuestApplicationSessionController(
         if (handle == null) { inFlight.remove(sessionKey(runId)); return finishFailure(reserved, GuestApplicationFailure.CRASH_RECOVERY, IllegalStateException("live session unavailable")) }
         return try {
             handle.first.close(handle.second)
-            inFlight.remove(sessionKey(runId))
-            reserved.copy(state = GuestApplicationSessionState.STOPPED, updatedAt = now()).also(::update)
+            reserved.copy(state = GuestApplicationSessionState.STOPPED, updatedAt = now()).also { stopped -> update(stopped); inFlight.remove(sessionKey(runId)) }
         } catch (error: Throwable) { inFlight.remove(sessionKey(runId)); finishFailure(reserved, GuestApplicationFailure.INVALID_TRANSITION, error) }
     }
 

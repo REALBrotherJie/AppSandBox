@@ -27,4 +27,12 @@ object Act007ApplicationSessions {
         return Act007SessionResult(stopped.state.name, stopped.failure.name, instanceId)
     }
     fun status(context: Context, instanceId: String) = if (controller(context).snapshots().any { it.request.instanceId == instanceId && it.state == GuestApplicationSessionState.RUNNING }) "RUNNING" else "STOPPED"
+    fun start(context: Context, instanceId: String, runId: String, operationId: String): Act007SessionResult = start(context, instanceId, false).copy()
+    fun stop(context: Context, runId: String, operationId: String): Act007SessionResult {
+        val snapshot = controller(context).snapshots().firstOrNull { it.request.runId == runId }
+            ?: return Act007SessionResult("REJECTED", "INVALID_INPUT", "")
+        val stopped = controller(context).stop(runId, operationId)
+        return Act007SessionResult(stopped.state.name, stopped.failure.name, snapshot.request.instanceId)
+    }
+    fun format(result: Act007SessionResult) = "outcome=${result.outcome}\nreason=${result.reason}\ninstanceId=${result.instanceId}\nconstructed=${result.constructed}\nonCreateAttempted=${result.onCreateAttempted}\nonCreateCompleted=${result.onCreateCompleted}\nloader=${result.loader}\ndataRoot=${result.dataRoot}"
 }
