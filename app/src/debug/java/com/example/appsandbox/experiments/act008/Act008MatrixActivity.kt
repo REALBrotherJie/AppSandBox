@@ -67,6 +67,7 @@ class Act008MatrixActivity : Activity() {
                 complete(commandId, snapshot)
             }
         })
+        var recovering = false
         val connection = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName, binder: IBinder) {
                 val data = Bundle().apply {
@@ -79,7 +80,13 @@ class Act008MatrixActivity : Activity() {
                 runCatching { Messenger(binder).send(Message.obtain(null, what).apply { replyTo = reply; this.data = data }) }
                     .onFailure { completeFailure(commandId, "SEND_FAILED") }
             }
-            override fun onServiceDisconnected(name: ComponentName) = Unit
+            override fun onServiceDisconnected(name: ComponentName) {
+                if (what != Act008SessionProtocol.MSG_START || recovering) return completeFailure(commandId, "RUNTIME_DISCONNECTED")
+                recovering = true
+                activeConnection = null
+                timeout.postDelayed({ bindRecoveryRead(commandId, requestId, reply) }, 200L)
+            }
+            override fun onBindingDied(name: ComponentName) = onServiceDisconnected(name)
         }
         activeConnection = connection
         val timeoutMs = (intent.getStringExtra("timeoutMs")?.toLongOrNull()
@@ -87,6 +94,32 @@ class Act008MatrixActivity : Activity() {
         timeout.postDelayed({ completeFailure(commandId, "TIMEOUT") }, timeoutMs)
         if (!bindService(Intent(this, Act008GuestApplicationRuntimeService::class.java), connection, Context.BIND_AUTO_CREATE)) {
             completeFailure(commandId, "BIND_FAILED")
+        }
+    }
+
+    private fun bindRecoveryRead(commandId: String, requestId: String, reply: Messenger) {
+        val connection = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName, binder: IBinder) {
+                val data = Bundle().apply {
+                    putInt(Act008SessionProtocol.KEY_VERSION, Act008SessionProtocol.VERSION)
+                    putString(Act008SessionProtocol.KEY_REQUEST_ID, requestId)
+                    putString(Act008SessionProtocol.KEY_OPERATION_ID, intent.getStringExtra("operationId").orEmpty())
+                    putString(Act008SessionProtocol.KEY_RUN_ID, intent.getStringExtra("sessionRunId").orEmpty())
+                    putString(Act008SessionProtocol.KEY_INSTANCE_ID, intent.getStringExtra("instanceId").orEmpty())
+                }
+                runCatching {
+                    Messenger(binder).send(Message.obtain(null, Act008SessionProtocol.MSG_READ).apply {
+                        replyTo = reply
+                        this.data = data
+                    })
+                }.onFailure { completeFailure(commandId, "RECOVERY_SEND_FAILED") }
+            }
+            override fun onServiceDisconnected(name: ComponentName) = completeFailure(commandId, "RECOVERY_DISCONNECTED")
+            override fun onBindingDied(name: ComponentName) = completeFailure(commandId, "RECOVERY_BINDING_DIED")
+        }
+        activeConnection = connection
+        if (!bindService(Intent(this, Act008GuestApplicationRuntimeService::class.java), connection, Context.BIND_AUTO_CREATE)) {
+            completeFailure(commandId, "RECOVERY_BIND_FAILED")
         }
     }
 
