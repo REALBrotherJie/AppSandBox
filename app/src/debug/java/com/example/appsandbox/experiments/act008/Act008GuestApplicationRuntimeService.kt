@@ -87,13 +87,10 @@ internal class Act008RuntimeCoordinator(private val service: Service) {
     private fun read(data: Bundle): Act008SessionSnapshot {
         val instanceId = data.id(Act008SessionProtocol.KEY_INSTANCE_ID)
         return runCatching {
-            val snapshots = controller.snapshots().map { snapshot ->
-                Act008SessionSnapshot("", snapshot.request.operationId, snapshot.request.runId, snapshot.request.instanceId,
-                    Act008SessionState.valueOf(snapshot.state.name), map(snapshot.failure), snapshot.detail.orEmpty(), Process.myPid(), snapshot.updatedAt)
-            }
+            val snapshots = controller.snapshots()
             val runId = data.getString(Act008SessionProtocol.KEY_RUN_ID).orEmpty()
-            if (runId.isNotBlank()) Act008SnapshotSelector.exact(snapshots, instanceId, runId)
-            else snapshots.lastOrNull { it.instanceId == instanceId }
+            if (runId.isNotBlank()) snapshots.lastOrNull { it.request.instanceId == instanceId && it.request.runId == runId }
+            else snapshots.lastOrNull { it.request.instanceId == instanceId }
         }
             .fold({ it?.let { snapshot -> from(data, snapshot) } ?: base(data, Act008SessionState.NEW) }, { failure(data, it) })
     }
