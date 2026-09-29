@@ -53,8 +53,18 @@ data class LogicalActivityRecord(
                 "launchId", "instanceId", "revisionId", "packageName",
                 "sha256", "componentName", "state", "resultCode"
             )
-            require(value.keys().asSequence().toSet() - required <= setOf("resultMessage"))
+            require(
+                value.keys().asSequence().toSet().minus(required)
+                    .all { it == "resultMessage" }
+            )
             require(required.all(value::has))
+            require((required - "resultCode").all { value.get(it) is String }) {
+                "logical Activity identity fields must be strings"
+            }
+            require(value.get("resultCode") is Int) { "logical Activity result code must be an integer" }
+            require(!value.has("resultMessage") || value.get("resultMessage") is String) {
+                "logical Activity result message must be a string"
+            }
             val record = LogicalActivityRecord(
                 value.getString("launchId"),
                 value.getString("instanceId"),

@@ -36,8 +36,36 @@ class GuestActivityUiStateTest {
     fun resultRequiresExactLaunchAndBoundIdentity() {
         val closed = record.copy(state = LogicalActivityState.CLOSED, resultCode = 0, resultMessage = "back")
         assertTrue(GuestActivityUiState.boundTo(closed, instance, revision, record.packageName, sha))
-        assertTrue(GuestActivityUiState.acceptsResult(closed, launch, launch, 0))
-        assertFalse(GuestActivityUiState.acceptsResult(closed, launch, "44444444-4444-4444-4444-444444444444", 0))
+        assertTrue(GuestActivityUiState.acceptsResult(closed, launch, launch, instance, instance, revision, revision, 0))
+        assertFalse(GuestActivityUiState.acceptsResult(closed, launch, "44444444-4444-4444-4444-444444444444", instance, instance, revision, revision, 0))
+        assertFalse(GuestActivityUiState.acceptsResult(closed, launch, launch, instance, "44444444-4444-4444-4444-444444444444", revision, revision, 0))
+        assertFalse(GuestActivityUiState.acceptsResult(closed, launch, launch, instance, instance, revision, "44444444-4444-4444-4444-444444444444", 0))
         assertFalse(GuestActivityUiState.boundTo(closed, instance, revision, record.packageName, "b".repeat(64)))
+        assertFalse(GuestActivityUiState.acceptsResult(record, launch, launch, instance, instance, revision, revision, 0))
+        assertFalse(GuestActivityUiState.acceptsResult(closed, launch, launch, instance, instance, revision, revision, -1))
+        assertFalse(GuestActivityUiState.acceptsResult(closed, null, launch, instance, instance, revision, revision, 0))
+    }
+
+    @Test
+    fun persistedClosedResultIsSelectedWithoutAnInMemoryPendingLaunch() {
+        val closed = record.copy(state = LogicalActivityState.CLOSED, resultCode = -1, resultMessage = "completed")
+        assertEquals(closed, GuestActivityUiState.completedResult(closed, instance, revision, record.packageName, sha))
+        assertNull(GuestActivityUiState.completedResult(record, instance, revision, record.packageName, sha))
+        assertNull(GuestActivityUiState.completedResult(null, instance, revision, record.packageName, sha))
+    }
+
+    @Test
+    fun persistedResultForAnotherBindingFailsClosed() {
+        val closed = record.copy(state = LogicalActivityState.CLOSED, resultCode = -1, resultMessage = "completed")
+        listOf(
+            closed.copy(instanceId = "44444444-4444-4444-4444-444444444444"),
+            closed.copy(revisionId = "44444444-4444-4444-4444-444444444444"),
+            closed.copy(packageName = "com.example.other"),
+            closed.copy(sha256 = "b".repeat(64))
+        ).forEach { mismatched ->
+            assertTrue(runCatching {
+                GuestActivityUiState.completedResult(mismatched, instance, revision, record.packageName, sha)
+            }.exceptionOrNull() is IllegalArgumentException)
+        }
     }
 }

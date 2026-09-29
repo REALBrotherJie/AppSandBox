@@ -14,8 +14,33 @@ object GuestActivityUiState {
         return record.launchId
     }
 
-    fun acceptsResult(record: LogicalActivityRecord?, expectedLaunchId: String?, actualLaunchId: String?, resultCode: Int): Boolean =
+    fun completedResult(
+        record: LogicalActivityRecord?,
+        instanceId: String,
+        revisionId: String,
+        packageName: String,
+        sha256: String
+    ): LogicalActivityRecord? {
+        if (record == null) return null
+        require(boundTo(record, instanceId, revisionId, packageName, sha256)) {
+            "Persisted logical Activity identity mismatch"
+        }
+        return record.takeIf { it.state == LogicalActivityState.CLOSED }
+    }
+
+    fun acceptsResult(
+        record: LogicalActivityRecord?,
+        expectedLaunchId: String?,
+        actualLaunchId: String?,
+        expectedInstanceId: String?,
+        actualInstanceId: String?,
+        expectedRevisionId: String?,
+        actualRevisionId: String?,
+        resultCode: Int
+    ): Boolean =
         record != null && record.state == LogicalActivityState.CLOSED &&
             !expectedLaunchId.isNullOrBlank() && actualLaunchId == expectedLaunchId &&
-            record.launchId == expectedLaunchId && record.resultCode == resultCode
+            record.launchId == expectedLaunchId && record.resultCode == resultCode &&
+            actualInstanceId == expectedInstanceId && record.instanceId == expectedInstanceId &&
+            actualRevisionId == expectedRevisionId && record.revisionId == expectedRevisionId
 }

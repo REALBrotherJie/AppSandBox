@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application>
+    <application android:name=".automation.Task57ProbeApplication">
         <service
             android:name=".experiments.act008.Act008GuestApplicationRuntimeService"
             android:exported="false"
@@ -15,7 +15,8 @@
         <activity android:name=".experiments.act006.api31.Act006SetupActivity" android:exported="true" />
         <activity android:name=".experiments.act007.api36.Act007RunnerActivity" android:exported="true" />
         <activity android:name=".experiments.act008.Act008MatrixActivity" android:exported="true" />
-        <activity android:name=".automation.Task57AutomationActivity" android:exported="true" />
+        <activity android:name=".automation.Task57AutomationActivity" android:exported="true"
+            android:taskAffinity="com.example.appsandbox.task57.automation" />
         <activity android:name=".experiments.v1.ExperimentActivity" android:exported="true" />
         <activity android:name=".experiments.task27.Task27DemoActivity" android:exported="true" />
         <activity

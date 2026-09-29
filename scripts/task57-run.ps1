@@ -16,8 +16,8 @@ $run = [guid]::NewGuid().ToString('N')
 $report = Join-Path $root "build/reports/task57/$Serial/$run"
 New-Item -ItemType Directory -Force $report | Out-Null
 . (Join-Path $PSScriptRoot 'task47-adb-helper.ps1')
-function A([string[]]$args, [int]$timeout = 30) {
-    Invoke-AdbBounded -Adb $adb -Serial $Serial -CommandArgs $args -TimeoutSec $timeout -ReportDir $report
+function A([string[]]$commandArgs, [int]$timeout = 30) {
+    Invoke-AdbBounded -Adb $adb -Serial $Serial -CommandArgs $commandArgs -TimeoutSec $timeout -ReportDir $report
 }
 function Sha([string]$path) { (Get-FileHash -Algorithm SHA256 -LiteralPath (Resolve-Path $path)).Hash.ToLowerInvariant() }
 if ((Sha $HostApkPath) -ne $ExpectedHostSha256.ToLowerInvariant()) { throw 'Host SHA-256 mismatch' }
@@ -26,7 +26,7 @@ if ((A @('shell', 'getprop', 'ro.build.version.sdk')).Trim() -ne [string]$Expect
 function Value([string]$text, [string]$key) {
     $m = [regex]::Match($text, "(?m)^$([regex]::Escape($key))=(.*)$")
     if (!$m.Success) { throw "missing $key" }
-    $m.Groups[2].Value.Trim()
+    $m.Groups[1].Value.Trim()
 }
 function WaitReport([string]$id, [int]$seconds = 30) {
     $deadline = (Get-Date).AddSeconds($seconds)
@@ -43,12 +43,21 @@ function WaitReport([string]$id, [int]$seconds = 30) {
 }
 function RunTask([string]$action, [hashtable]$extras = @{}) {
     $id = [guid]::NewGuid().ToString('N')
-    $args = @('shell', 'am', 'start', '-W', '--activity-clear-task', '-n',
+    # Clear the runner task for one-shot commands. Workspace commands reuse the
+    # runner task so they must be dispatched through onNewIntent.
+    $launchArgs = @('shell', 'am', 'start', '-W')
+    if ($action -ne 'openWorkspace') { $launchArgs += '--activity-clear-task' }
+    $launchArgs += @('-n',
         'com.example.appsandbox/.automation.Task57AutomationActivity',
         '--es', 'commandId', $id, '--es', 'action', $action)
-    foreach ($entry in $extras.GetEnumerator()) { $args += @('--es', $entry.Key, [string]$entry.Value) }
-    A $args | Out-Null
-    WaitReport $id
+    foreach ($entry in $extras.GetEnumerator()) { $launchArgs += @('--es', $entry.Key, [string]$entry.Value) }
+    ($launchArgs -join "`n") | Set-Content (Join-Path $report "$id-launch-args.txt")
+    $launchOutput = A $launchArgs 60
+    $launchOutput | Set-Content (Join-Path $report "$id-launch.txt")
+    if ($launchOutput -notmatch '(?m)^Status: ok\s*$') { throw "Task57 launch failed: $launchOutput" }
+    $result = WaitReport $id
+    if ((Value $result 'status') -ne 'PASS') { throw "Task57 $action failed: $result" }
+    return $result
 }
 function UiXml {
     $path = Join-Path $report 'ui.xml'
@@ -83,9 +92,9 @@ function Tap([string]$prefix) {
     }
     throw "UI element not found: $prefix"
 }
-function OpenInstance([string]$prefix) {
-    RunTask 'openWorkspace' @{ instancePrefix = $prefix } | Out-Null
-    AssertUi ('Guest workspace.*instance=' + [regex]::Escape($prefix)) "Workspace not opened for $prefix"
+function OpenInstance([string]$instanceId) {
+    RunTask 'openWorkspace' @{ instancePrefix = $instanceId.Substring(0, 8) } | Out-Null
+    AssertUi ('Guest workspace.*instance=' + [regex]::Escape($instanceId)) "Workspace not opened for $instanceId"
 }
 function StateJson([string]$instance) {
     A @('shell', 'run-as', 'com.example.appsandbox', 'cat', "files/guest-instances/$instance/files/logical-activity.json")
@@ -110,6 +119,7 @@ $setup = RunTask 'setup' @{
 }
 if ((Value $setup 'status') -ne 'PASS') { throw "setup failed: $setup" }
 $idA = Value $setup 'instanceA'; $idB = Value $setup 'instanceB'
+$idA2 = Value $setup 'instanceA2'
 $revA = Value $setup 'revisionA'; $revB = Value $setup 'revisionB'
 $pkg = Value $setup 'packageName'; $exported = Value $setup 'exportedActivity'
 $private = Value $setup 'nonExportedActivity'
@@ -117,10 +127,10 @@ if ($idA -eq $idB -or $revA -eq $revB) { throw 'A/B setup did not isolate instan
 if ((Value $setup 'shaA') -ne $ExpectedNormalSha256.ToLowerInvariant() -or
     (Value $setup 'shaB') -ne $ExpectedNormalSha256.ToLowerInvariant()) { throw 'normal Guest SHA mismatch in registry' }
 
-$negative = RunTask 'negative' @{ packageName = $pkg; revisionId = $revA; nonExportedActivity = $private }
+$negative = RunTask 'negative' @{ packageName = $pkg; revisionId = $revA; nonExportedActivity = $private; disabledActivity = (Value $setup 'disabledActivity') }
 if ((Value $negative 'nonExported') -ne 'REJECTED' -or (Value $negative 'unknown') -ne 'REJECTED') { throw 'negative resolver gate failed' }
 
-OpenInstance $idA.Substring(0, 8)
+OpenInstance $idA
 AssertUi ('Open Activity ' + [regex]::Escape($exported.Substring($exported.LastIndexOf('.') + 1))) 'exported Activity action missing'
 Tap ('Open Activity ' + $exported.Substring($exported.LastIndexOf('.') + 1))
 AssertUi 'Logical Activity' 'carrier did not open'
@@ -130,6 +140,41 @@ Tap 'Guest Increment'
 AssertUi 'Counter: 1' 'carrier Guest action failed'
 $openState = StateJson $idA
 if ($openState -notmatch '"state":"OPEN"') { throw 'logical Activity state was not persisted OPEN' }
+$original = $openState | ConvertFrom-Json
+$recreated = RunTask 'recreate'
+if ((Value $recreated 'recreation') -ne 'VERIFIED') { throw 'carrier recreation not confirmed' }
+AssertUi 'Logical Activity' 'carrier did not resume after recreation'
+AssertUi 'Counter: 1' 'counter lost on recreation'
+if (((StateJson $idA | ConvertFrom-Json).record.launchId) -ne $original.record.launchId) { throw 'recreation changed launch' }
+
+$hostPidBefore = (A @('shell', 'pidof', 'com.example.appsandbox')).Trim()
+A @('shell', 'am', 'force-stop', 'com.example.appsandbox') | Out-Null
+OpenInstance $idA
+Tap ('Open Activity ' + $exported.Substring($exported.LastIndexOf('.') + 1))
+AssertUi 'Logical Activity' 'carrier not recovered after Host restart'
+AssertUi 'Counter: 1' 'Host restart lost counter'
+$hostPidAfter = (A @('shell', 'pidof', 'com.example.appsandbox')).Trim()
+if (!$hostPidAfter -or $hostPidAfter -eq $hostPidBefore) { throw 'Host restart not observed' }
+if (((StateJson $idA | ConvertFrom-Json).record.launchId) -ne $original.record.launchId) { throw 'Host restart changed OPEN launch' }
+
+$runtimePidBefore = (A @('shell', 'pidof', 'com.example.appsandbox:guest_runtime')).Trim()
+if ($runtimePidBefore -notmatch '^\d+$') { throw 'runtime process missing' }
+$terminated = RunTask 'terminate'
+if ((Value $terminated 'terminationAcknowledged') -ne 'true') { throw 'runtime termination not acknowledged' }
+Start-Sleep -Milliseconds 600
+OpenInstance $idA
+Tap ('Open Activity ' + $exported.Substring($exported.LastIndexOf('.') + 1))
+AssertUi 'Logical Activity' 'carrier recovery unavailable'
+Tap 'Guest Increment'
+AssertUi 'Counter: 2' 'runtime recovery lost or duplicated action'
+$runtimeDeadline = (Get-Date).AddSeconds(10)
+do {
+    $runtimePidAfter = (A @('shell', 'pidof', 'com.example.appsandbox:guest_runtime')).Trim()
+    if ($runtimePidAfter -match '^\d+$' -and $runtimePidAfter -ne $runtimePidBefore) { break }
+    Start-Sleep -Milliseconds 300
+} while ((Get-Date) -lt $runtimeDeadline)
+if (!$runtimePidAfter -or $runtimePidAfter -eq $runtimePidBefore) { throw 'runtime-only death not observed' }
+if ((A @('shell', 'pidof', 'com.example.appsandbox')).Trim() -ne $hostPidAfter) { throw 'Host died with runtime' }
 Tap 'Return logical result'
 Start-Sleep -Seconds 1
 $closedState = StateJson $idA
@@ -146,22 +191,42 @@ A @('shell', 'input', 'keyevent', '4') | Out-Null
 Start-Sleep -Milliseconds 800
 if ((StateJson $idA) -notmatch '"resultMessage":"back"') { throw 'carrier back result not persisted' }
 
+OpenInstance $idA2
+AssertUi 'Counter: 0' 'same-revision instance leaked A state'
+Tap ('Open Activity ' + $exported.Substring($exported.LastIndexOf('.') + 1))
+AssertUi ('instance=' + [regex]::Escape($idA2)) 'same-revision carrier wrong identity'
+Tap 'Guest Increment'
+AssertUi 'Counter: 1' 'same-revision instance action failed'
+Tap 'Return logical result'
+
 $malformed = RunTask 'malformed'
 AssertUi 'Logical Activity unavailable' 'malformed carrier input did not fail closed'
 A @('shell', 'input', 'keyevent', '4') | Out-Null
 Start-Sleep -Milliseconds 600
 
-OpenInstance $idB.Substring(0, 8)
+OpenInstance $idB
 AssertUi ('instance=' + [regex]::Escape($idB)) 'B workspace identity missing'
 AssertUi 'Counter: 0' 'B leaked A logical state'
 Tap ('Open Activity ' + $exported.Substring($exported.LastIndexOf('.') + 1))
 AssertUi ('instance=' + [regex]::Escape($idB)) 'B carrier identity missing'
-A @('shell', 'input', 'keyevent', '3') | Out-Null
-Start-Sleep -Milliseconds 600
+$blockedDelete = RunTask 'delete' @{ instanceId = $idB }
+if ((Value $blockedDelete 'deleted') -ne 'false' -or $blockedDelete -notmatch 'logical Activity.*active') {
+    throw "OPEN carrier delete was not rejected: $blockedDelete"
+}
+OpenInstance $idB
+Tap ('Open Activity ' + $exported.Substring($exported.LastIndexOf('.') + 1))
+AssertUi ('instance=' + [regex]::Escape($idB)) 'active logical Activity did not survive delete rejection'
+Tap 'Return logical result'
+$deleted = RunTask 'delete' @{ instanceId = $idA }
+if ((Value $deleted 'deleted') -ne 'true') { throw "closed instance delete failed: $deleted" }
+OpenInstance $idA2
+AssertUi 'Counter: 1' 'deletion affected same-revision instance'
+OpenInstance $idB
+AssertUi 'Counter: 0' 'deletion affected other revision'
 $packages = A @('shell', 'pm', 'list', 'packages', 'com.example.appsandbox.testguest')
 if ($packages -match 'package:') { throw 'Guest package installed' }
 $activities = A @('shell', 'dumpsys', 'activity', 'activities')
 if ($activities -match 'com\.example\.appsandbox\.testguest/\.runtime\.') { throw 'Guest ActivityRecord exists' }
 
-"status=PASS`nserial=$Serial`napi=$ExpectedApi`nrun=$run`ninstanceA=$idA`ninstanceB=$idB`nrevisionA=$revA`nrevisionB=$revB`nexportedActivity=$exported`nnonExportedRejected=PASS`nunknownRejected=PASS`ncarrierIdentity=PASS`ncarrierAction=PASS`nlogicalResult=PASS`nlogicalBack=PASS`nreopenLaunchCorrelation=PASS`nmalformedFailClosed=PASS`nABIsolation=PASS`nguestInstalled=false`nguestActivityRecord=false" | Set-Content (Join-Path $report 'result.txt')
+"status=PASS`nserial=$Serial`napi=$ExpectedApi`nrun=$run`nhostSha256=$ExpectedHostSha256`nguestSha256=$ExpectedNormalSha256`ninstanceA=$idA`ninstanceA2=$idA2`ninstanceB=$idB`nrevisionA=$revA`nrevisionB=$revB`nexportedActivity=$exported`nnonExportedRejected=PASS`nunknownRejected=PASS`ncarrierIdentity=PASS`ncarrierAction=PASS`nlogicalResult=PASS`nlogicalBack=PASS`nreopenLaunchCorrelation=PASS`nmalformedFailClosed=PASS`nrecreation=PASS`nhostRestart=PASS`nruntimeOnlyRecovery=PASS`nhostPidBefore=$hostPidBefore`nhostPidAfter=$hostPidAfter`nruntimePidBefore=$runtimePidBefore`nruntimePidAfter=$runtimePidAfter`nactiveDelete=REJECTED`nstoppedDeleteIsolation=PASS`nABIsolation=PASS`nguestInstalled=false`nguestActivityRecord=false" | Set-Content (Join-Path $report 'result.txt')
 Write-Output (Join-Path $report 'result.txt')

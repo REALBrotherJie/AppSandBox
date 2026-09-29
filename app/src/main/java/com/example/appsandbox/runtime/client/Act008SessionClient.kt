@@ -21,11 +21,14 @@ import java.util.concurrent.ConcurrentHashMap
 class Act008SessionClient(private val context: Context) {
     private val main = Handler(Looper.getMainLooper())
     private val pending = ConcurrentHashMap<String, (Result<Act008SessionSnapshot>) -> Unit>()
-    private val queued = ArrayDeque<() -> Unit>()
+    private val queued = LinkedHashMap<String, () -> Unit>()
     private var service: Messenger? = null
+    // A successful bind owns a registration even before connection, or after disconnection.
     private var bound = false
+    @Volatile private var closed = false
     private val replies = Messenger(object : Handler(Looper.getMainLooper()) {
         override fun handleMessage(message: Message) {
+            if (closed) return
             val snapshot = Act008SessionProtocol.decode(message.data ?: Bundle.EMPTY)
             val requestId = snapshot?.requestId ?: return
             pending.remove(requestId)?.invoke(
@@ -37,13 +40,21 @@ class Act008SessionClient(private val context: Context) {
     })
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
+            if (closed || !bound) return
             service = Messenger(binder)
-            bound = true
-            while (queued.isNotEmpty()) queued.removeFirst().invoke()
+            val requests = queued.values.toList()
+            queued.clear()
+            requests.forEach { it.invoke() }
         }
         override fun onServiceDisconnected(name: ComponentName) = failPending("runtime disconnected")
-        override fun onBindingDied(name: ComponentName) = failPending("runtime binding died")
-        override fun onNullBinding(name: ComponentName) = failPending("runtime unavailable")
+        override fun onBindingDied(name: ComponentName) {
+            releaseBinding()
+            failPending("runtime binding died")
+        }
+        override fun onNullBinding(name: ComponentName) {
+            releaseBinding()
+            failPending("runtime unavailable")
+        }
     }
 
     fun start(instanceId: String, operationId: String, runId: String, callback: (Result<Act008SessionSnapshot>) -> Unit) =
@@ -71,11 +82,20 @@ class Act008SessionClient(private val context: Context) {
         send(Act008SessionProtocol.MSG_TERMINATE_RUNTIME, null, null, null, callback)
 
     fun close() {
+        closed = true
+        if (Looper.myLooper() == main.looper) closeOnMain() else main.post { closeOnMain() }
+    }
+
+    private fun closeOnMain() {
+        releaseBinding()
         failPending("client closed")
-        if (bound) runCatching { context.unbindService(connection) }
+    }
+
+    private fun releaseBinding() {
+        val registered = bound
         bound = false
         service = null
-        queued.clear()
+        if (registered) runCatching { context.unbindService(connection) }
     }
 
     private fun send(
@@ -90,8 +110,16 @@ class Act008SessionClient(private val context: Context) {
             return
         }
         main.post {
+            if (closed) {
+                callback(Result.failure(IllegalStateException("client closed")))
+                return@post
+            }
             val requestId = UUID.randomUUID().toString()
             pending[requestId] = callback
+            main.postDelayed({
+                queued.remove(requestId)
+                pending.remove(requestId)?.invoke(Result.failure(IllegalStateException("runtime timeout")))
+            }, Act008SessionProtocol.REQUEST_TIMEOUT_MS)
             val data = Bundle().apply {
                 putInt(Act008SessionProtocol.KEY_VERSION, Act008SessionProtocol.VERSION)
                 putString(Act008SessionProtocol.KEY_REQUEST_ID, requestId)
@@ -101,27 +129,23 @@ class Act008SessionClient(private val context: Context) {
             }
             val sendNow: () -> Unit = {
                 val target = service
-                if (target == null) {
-                    pending.remove(requestId)
-                    callback(Result.failure(IllegalStateException("runtime unavailable")))
+                if (closed || target == null) {
+                    pending.remove(requestId)?.invoke(Result.failure(IllegalStateException("runtime unavailable")))
                 } else try {
                     target.send(Message.obtain(null, what).apply {
                         replyTo = replies
                         this.data = data
                     })
-                    main.postDelayed({ pending.remove(requestId)?.invoke(Result.failure(IllegalStateException("runtime timeout"))) }, Act008SessionProtocol.REQUEST_TIMEOUT_MS)
                 } catch (_: RemoteException) {
-                    pending.remove(requestId)
-                    callback(Result.failure(IllegalStateException("runtime unavailable")))
+                    pending.remove(requestId)?.invoke(Result.failure(IllegalStateException("runtime unavailable")))
                 }
             }
-            if (!bound) {
-                queued += sendNow
-                val intent = Intent().setComponent(ComponentName(context.packageName, "com.example.appsandbox.experiments.act008.Act008GuestApplicationRuntimeService"))
-                if (service == null && !context.bindService(intent, connection, Context.BIND_AUTO_CREATE)) {
-                    queued.remove(sendNow)
-                    pending.remove(requestId)
-                    callback(Result.failure(IllegalStateException("runtime bind failed")))
+            if (service == null) {
+                queued[requestId] = sendNow
+                if (!bound) {
+                    val intent = Intent().setComponent(ComponentName(context.packageName, "com.example.appsandbox.experiments.act008.Act008GuestApplicationRuntimeService"))
+                    bound = runCatching { context.bindService(intent, connection, Context.BIND_AUTO_CREATE) }.getOrDefault(false)
+                    if (!bound) failPending("runtime bind failed")
                 }
             } else sendNow.invoke()
         }
@@ -129,10 +153,12 @@ class Act008SessionClient(private val context: Context) {
 
     private fun failPending(message: String) {
         service = null
-        bound = false
         queued.clear()
-        pending.values.forEach { it(Result.failure(IllegalStateException(message))) }
+        val callbacks = pending.values.toList()
         pending.clear()
+        callbacks.forEach { callback ->
+            runCatching { callback(Result.failure(IllegalStateException(message))) }
+        }
     }
 
     private fun rememberRun(instanceId: String, runId: String) {

@@ -6,6 +6,13 @@ import java.io.FileOutputStream
 import java.io.StringWriter
 import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
+import java.nio.channels.FileChannel
+import java.nio.file.Files
+import java.nio.file.LinkOption.NOFOLLOW_LINKS
+import java.nio.file.StandardOpenOption
+import java.util.Locale
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 interface InstanceFileOps { fun writeAtomic(target: File, text: String); fun deleteTree(file: File) }
 
@@ -23,25 +30,46 @@ class DefaultInstanceFileOps : InstanceFileOps {
     override fun deleteTree(file: File) { if (file.exists() && !file.deleteRecursively()) error("instance delete failed") }
 }
 
-class GuestInstanceRegistry(private val root: File, private val ops: InstanceFileOps = DefaultInstanceFileOps()) {
+class GuestInstanceRegistry(root: File, private val ops: InstanceFileOps = DefaultInstanceFileOps()) {
+    private val root = root.canonicalFile
     private val registry get() = File(root, "registry.properties")
     private val backup get() = File(root, "registry.properties.bak")
-    private val lock = locks.computeIfAbsent(root.canonicalPath) { Any() }
+    private val lock = locks.computeIfAbsent(
+        if (File.separatorChar == '\\') this.root.path.lowercase(Locale.ROOT) else this.root.path
+    ) { ReentrantLock() }
 
-    fun read(): List<GuestInstanceRecord> = synchronized(lock) {
-        if (!registry.exists() && !backup.exists()) return@synchronized emptyList()
+    // Store callers acquire their instance lock first; registry operations never acquire one.
+    internal fun <T> transaction(action: () -> T): T = lock.withLock {
+        if (lock.holdCount > 1) return@withLock action()
+        var path: File? = root
+        while (path != null) {
+            check(!Files.isSymbolicLink(path.toPath())) { "registry root symbolic link rejected" }
+            path = path.parentFile
+        }
+        check(root.isDirectory || root.mkdirs() || root.isDirectory) { "registry root unavailable" }
+        val file = File(root, ".registry.lock")
+        check(!Files.isSymbolicLink(file.toPath()) && (!file.exists() || file.isFile)) {
+            "invalid registry lock path"
+        }
+        FileChannel.open(file.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE, NOFOLLOW_LINKS).use {
+            it.lock().use { action() }
+        }
+    }
+
+    fun read(): List<GuestInstanceRecord> = transaction {
+        if (!registry.exists() && !backup.exists()) return@transaction emptyList()
         val primary = runCatching { parse(registry) }
-        if (primary.isSuccess) return@synchronized primary.getOrThrow()
+        if (primary.isSuccess) return@transaction primary.getOrThrow()
         val recovered = runCatching { parse(backup) }.getOrElse { throw GuestInstanceStoreException(InstanceStoreState.CORRUPT, "Instance registry and backup are corrupt") }
         runCatching { ops.writeAtomic(registry, serialize(recovered)) }; recovered
     }
 
-    fun write(records: List<GuestInstanceRecord>) = synchronized(lock) { validate(records); ops.writeAtomic(registry, serialize(records)) }
-    fun update(transform: (List<GuestInstanceRecord>) -> List<GuestInstanceRecord>): List<GuestInstanceRecord> = synchronized(lock) {
+    fun write(records: List<GuestInstanceRecord>) = transaction { validate(records); ops.writeAtomic(registry, serialize(records)) }
+    fun update(transform: (List<GuestInstanceRecord>) -> List<GuestInstanceRecord>): List<GuestInstanceRecord> = transaction {
         val next = transform(readUnlocked())
         validate(next); ops.writeAtomic(registry, serialize(next)); next
     }
-    fun deleteRoot(record: GuestInstanceRecord) = synchronized(lock) { validate(listOf(record)); ops.deleteTree(File(record.dataRoot)) }
+    fun deleteRoot(record: GuestInstanceRecord) = transaction { validate(listOf(record)); ops.deleteTree(File(record.dataRoot)) }
 
     private fun parse(file: File): List<GuestInstanceRecord> {
         if (!file.exists()) error("missing registry")
@@ -67,5 +95,5 @@ class GuestInstanceRegistry(private val root: File, private val ops: InstanceFil
         records.forEach { r -> require(UUID_PATTERN.matches(r.instanceId)) { "invalid instanceId" }; require(ids.add(r.instanceId)) { "duplicate instanceId" }; require(r.guestRevisionId.isNotBlank() && r.guestPackageName.isNotBlank() && SHA_PATTERN.matches(r.guestSha256)) { "invalid revision" }; require(r.createdAt >= 0 && r.updatedAt >= r.createdAt) { "invalid timestamps" }; val c = File(r.dataRoot).canonicalFile; require(c.parentFile == base && c.name == r.instanceId) { "dataRoot escaped" }; require(!File(root, r.instanceId).isSymbolicLink()) { "symlink dataRoot" } }
     }
     private fun File.isSymbolicLink() = runCatching { java.nio.file.Files.isSymbolicLink(toPath()) }.getOrDefault(false)
-    companion object { private val locks = ConcurrentHashMap<String, Any>(); private val UUID_PATTERN = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}"); private val SHA_PATTERN = Regex("[0-9a-fA-F]{64}") }
+    companion object { private val locks = ConcurrentHashMap<String, ReentrantLock>(); private val UUID_PATTERN = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}"); private val SHA_PATTERN = Regex("[0-9a-fA-F]{64}") }
 }

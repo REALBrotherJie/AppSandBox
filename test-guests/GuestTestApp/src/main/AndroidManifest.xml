@@ -9,5 +9,6 @@
         <meta-data android:name="com.example.appsandbox.guest.ACTION_SPEC" android:value="guest_actions" />
         <activity android:name=".runtime.GuestMainActivity" android:exported="false" />
         <activity android:name=".runtime.GuestScreenActivity" android:exported="true" />
+        <activity android:name=".runtime.GuestDisabledActivity" android:enabled="false" android:exported="true" />
     </application>
 </manifest>

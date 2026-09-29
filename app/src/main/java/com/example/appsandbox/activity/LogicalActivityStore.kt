@@ -20,6 +20,42 @@ internal fun interface LogicalActivityCommit {
     fun replace(staged: File, target: File)
 }
 
+internal object LogicalActivityInstanceLock {
+    private val locks = ConcurrentHashMap<String, ReentrantLock>()
+
+    fun <T> withLock(instanceRoot: File, action: () -> T): T {
+        val root = instanceRoot.absoluteFile.normalize()
+        require(root.name.matches(Regex("[A-Za-z0-9._-]+")) && root.name !in setOf(".", "..")) {
+            "invalid instance lock name"
+        }
+        val parent = requireNotNull(root.parentFile) { "missing instance parent" }
+        val lockFile = File(parent, ".logical-activity-${root.name}.lock")
+        val key = if (File.separatorChar == '\\') root.path.lowercase(Locale.ROOT) else root.path
+        val localLock = locks.computeIfAbsent(key) { ReentrantLock() }
+        return localLock.withLock locked@{
+            var path: File? = root
+            while (path != null) {
+                if (Files.isSymbolicLink(path.toPath())) {
+                    throw LogicalActivityStoreException("logical Activity symbolic link rejected")
+                }
+                path = path.parentFile
+            }
+            check(parent.isDirectory) { "instance parent unavailable" }
+            if (Files.isSymbolicLink(lockFile.toPath()) ||
+                (lockFile.exists() && !lockFile.isFile)) {
+                throw LogicalActivityStoreException("invalid logical Activity lock path")
+            }
+            // delete() calls current() while holding this same OS lock.
+            if (localLock.holdCount > 1) return@locked action()
+            FileChannel.open(
+                lockFile.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE, NOFOLLOW_LINKS
+            ).use { channel ->
+                channel.lock().use { action() }
+            }
+        }
+    }
+}
+
 class LogicalActivityStore internal constructor(
     instanceRoot: File,
     private val commit: LogicalActivityCommit
@@ -37,16 +73,13 @@ class LogicalActivityStore internal constructor(
     private val directory = File(root, "files")
     private val stateFile = File(directory, STATE_FILE)
     private val tempFile = File(directory, TEMP_FILE)
-    private val lock = locks.computeIfAbsent(
-        if (File.separatorChar == '\\') root.path.lowercase(Locale.ROOT) else root.path
-    ) { ReentrantLock() }
 
-    fun begin(record: LogicalActivityRecord): LogicalActivityRecord = lock.withLock {
+    fun begin(record: LogicalActivityRecord): LogicalActivityRecord = LogicalActivityInstanceLock.withLock(root) {
         beginLocked(record)
     }
 
     // Called after a process restart when the caller wants to reuse a persisted OPEN launch.
-    fun resumeOrBegin(record: LogicalActivityRecord): LogicalActivityRecord = lock.withLock {
+    fun resumeOrBegin(record: LogicalActivityRecord): LogicalActivityRecord = LogicalActivityInstanceLock.withLock(root) {
         beginLocked(record)
     }
 
@@ -63,11 +96,15 @@ class LogicalActivityStore internal constructor(
         if (snapshot?.closedLaunchIds?.contains(record.launchId) == true) {
             fail("closed logical Activity launch cannot reopen")
         }
+        // Keep every replay tombstone; refuse before OPEN rather than making completion impossible.
+        if (snapshot?.closedLaunchIds.orEmpty().size >= MAX_CLOSED) {
+            fail("logical Activity history capacity reached")
+        }
         write(Snapshot(record, snapshot?.closedLaunchIds.orEmpty()))
         return record
     }
 
-    fun complete(launchId: String, resultCode: Int, resultMessage: String?): LogicalActivityRecord = lock.withLock {
+    fun complete(launchId: String, resultCode: Int, resultMessage: String?): LogicalActivityRecord = LogicalActivityInstanceLock.withLock(root) {
         val snapshot = read() ?: fail("logical Activity launch is missing")
         val current = snapshot.record
         if (current.launchId != launchId) fail("stale logical Activity result")
@@ -82,7 +119,7 @@ class LogicalActivityStore internal constructor(
         completed
     }
 
-    fun current(): LogicalActivityRecord? = lock.withLock { read()?.record }
+    fun current(): LogicalActivityRecord? = LogicalActivityInstanceLock.withLock(root) { read()?.record }
 
     private fun validate(record: LogicalActivityRecord) {
         try {
@@ -98,7 +135,7 @@ class LogicalActivityStore internal constructor(
             if (Files.isSymbolicLink(path.toPath())) fail("logical Activity symbolic link rejected")
             path = path.parentFile
         }
-        if (!root.exists() && !root.mkdirs()) fail("logical Activity root unavailable")
+        if (!root.isDirectory) fail("logical Activity root unavailable")
         for (file in listOf(stateFile, tempFile)) {
             if (Files.isSymbolicLink(file.toPath())) fail("logical Activity symbolic link rejected")
             if (file.exists() && !file.isFile) fail("logical Activity state path is not a file")
@@ -123,19 +160,19 @@ class LogicalActivityStore internal constructor(
             }
             val json = JSONObject(bytes.toString(Charsets.UTF_8))
             require(json.keys().asSequence().toSet() == setOf("schemaVersion", "record", "closedLaunchIds"))
-            require(json.getInt("schemaVersion") == SCHEMA_VERSION)
+            require(json.get("schemaVersion") is Int && json.getInt("schemaVersion") == SCHEMA_VERSION)
             val record = LogicalActivityRecord.fromJson(json.getJSONObject("record"))
             validate(record)
             val ids = json.getJSONArray("closedLaunchIds")
             require(ids.length() <= MAX_CLOSED)
             val closed = (0 until ids.length()).map { index ->
+                require(ids.get(index) is String)
                 val id = ids.getString(index)
                 require(GuestActivityLaunchPolicy.resultBelongsTo(id, id))
                 id
             }.toSet()
             require(closed.size == ids.length())
-            require(record.state == LogicalActivityState.CLOSED || record.launchId !in closed)
-            Snapshot(record, closed)
+            Snapshot(record, closed).also(::validateSnapshot)
         } catch (error: LogicalActivityStoreException) {
             throw error
         } catch (error: Exception) {
@@ -146,8 +183,9 @@ class LogicalActivityStore internal constructor(
     private fun write(snapshot: Snapshot) {
         var ownsTemp = false
         try {
+            validateSnapshot(snapshot)
             checkPaths()
-            check(directory.isDirectory || directory.mkdirs()) { "cannot create state directory" }
+            check(directory.isDirectory || directory.mkdir()) { "cannot create state directory" }
             val bytes = JSONObject()
                 .put("schemaVersion", SCHEMA_VERSION)
                 .put("record", snapshot.record.toJson())
@@ -184,12 +222,28 @@ class LogicalActivityStore internal constructor(
         val closedLaunchIds: Set<String>
     )
 
+    private fun validateSnapshot(snapshot: Snapshot) {
+        validate(snapshot.record)
+        require(snapshot.closedLaunchIds.size <= MAX_CLOSED) { "history capacity exceeded" }
+        require(snapshot.closedLaunchIds.all { GuestActivityLaunchPolicy.resultBelongsTo(it, it) }) {
+            "invalid closed launch ID"
+        }
+        require(
+            (snapshot.record.launchId in snapshot.closedLaunchIds) ==
+                (snapshot.record.state == LogicalActivityState.CLOSED)
+        ) { "logical Activity tombstone mismatch" }
+        require(snapshot.record.state != LogicalActivityState.OPEN || snapshot.closedLaunchIds.size < MAX_CLOSED) {
+            "open launch has no completion capacity"
+        }
+    }
+
     private fun fail(message: String): Nothing = throw LogicalActivityStoreException(message)
 
     private companion object {
+        const val STATE_FILE = "logical-activity.json"
+        const val TEMP_FILE = "logical-activity.json.tmp"
         const val SCHEMA_VERSION = 1
         const val MAX_BYTES = 131072
-        const val MAX_CLOSED = 256
-        val locks = ConcurrentHashMap<String, ReentrantLock>()
+        const val MAX_CLOSED = 2048
     }
 }

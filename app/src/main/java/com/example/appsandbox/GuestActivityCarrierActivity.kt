@@ -2,7 +2,10 @@ package com.example.appsandbox
 
 import android.app.Activity
 import android.app.ActivityManager
+import android.os.Build
 import android.os.Bundle
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -40,13 +43,21 @@ class GuestActivityCarrierActivity : Activity() {
     private var actionSession: GuestActionSession? = null
     private var completed = false
     private var usable = false
+    private var unregisterBack: (() -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= 33) {
+            unregisterBack = Api33Back.register(this) {
+                finishWithResult(Activity.RESULT_CANCELED, "back")
+            }
+        }
         runCatching { loadAndRender() }.onFailure { showFailure(it.message ?: "Logical Activity unavailable") }
     }
 
     override fun onDestroy() {
+        unregisterBack?.invoke()
+        unregisterBack = null
         actionSession?.close()
         actionSession = null
         super.onDestroy()
@@ -55,6 +66,16 @@ class GuestActivityCarrierActivity : Activity() {
     @Deprecated("Use the carrier result contract for this logical Activity subset.")
     override fun onBackPressed() {
         finishWithResult(Activity.RESULT_CANCELED, "back")
+    }
+
+    @android.annotation.TargetApi(33)
+    private object Api33Back {
+        fun register(activity: Activity, onBack: () -> Unit): () -> Unit {
+            val dispatcher = activity.onBackInvokedDispatcher
+            val callback = OnBackInvokedCallback { onBack() }
+            dispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback)
+            return { dispatcher.unregisterOnBackInvokedCallback(callback) }
+        }
     }
 
     private fun loadAndRender() {
@@ -182,6 +203,15 @@ class GuestActivityCarrierActivity : Activity() {
         usable = false
         actionSession?.close()
         actionSession = null
+        if (::activityRecord.isInitialized && activityRecord.state == LogicalActivityState.OPEN) {
+            runCatching {
+                LogicalActivityStore(File(record.dataRoot)).complete(
+                    activityRecord.launchId,
+                    Activity.RESULT_CANCELED,
+                    "unavailable"
+                )
+            }
+        }
         setContentView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(TextView(this@GuestActivityCarrierActivity).apply {

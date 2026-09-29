@@ -11,6 +11,7 @@ import com.example.appsandbox.contract.GuestActionViewBinder
 import com.example.appsandbox.contract.GuestActionSession
 import com.example.appsandbox.contract.GuestViewContract
 import com.example.appsandbox.activity.GuestActivityLaunchPolicy
+import com.example.appsandbox.activity.LogicalActivityStore
 import com.example.appsandbox.experiments.GuestWorkspaceContext
 import com.example.appsandbox.model.GuestPackageRecord
 import com.example.appsandbox.model.resolver.GuestComponentType
@@ -25,6 +26,7 @@ import com.example.appsandbox.storage.GuestInstanceBinding
 import com.example.appsandbox.workspace.GuestWorkspaceLaunchPolicy
 import com.example.appsandbox.workspace.GuestWorkspaceTaskPolicy
 import com.example.appsandbox.workspace.GuestActivityLauncher
+import com.example.appsandbox.workspace.GuestActivityUiState
 import dalvik.system.DexClassLoader
 import java.io.File
 
@@ -32,6 +34,8 @@ class GuestWorkspaceActivity : Activity() {
     private lateinit var instance: GuestInstanceRecord
     private lateinit var revision: GuestPackageRecord
     private lateinit var state: TextView
+    private lateinit var logicalResult: TextView
+    private lateinit var logicalStatus: TextView
     private lateinit var guestRoot: LinearLayout
     private lateinit var store: GuestInstanceStore
     private lateinit var contract: GuestViewContract
@@ -40,6 +44,8 @@ class GuestWorkspaceActivity : Activity() {
     private var appRunId: String? = null
     private var logicalActivityLaunchId: String? = null
     private var skipReloadAfterResult = false
+    private var guestRenderGeneration = 0L
+    private var appSessionGeneration = 0L
     private val logicalActivityRequestCode = 9001
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,6 +67,8 @@ class GuestWorkspaceActivity : Activity() {
         reload(intent)
     }
     override fun onDestroy() {
+        guestRenderGeneration++
+        appSessionGeneration++
         actionSession?.close()
         actionSession = null
         appSessionClient?.close()
@@ -72,6 +80,10 @@ class GuestWorkspaceActivity : Activity() {
         super.onSaveInstanceState(outState)
     }
     private fun reload(source: Intent) {
+        guestRenderGeneration++
+        appSessionGeneration++
+        appSessionClient?.close()
+        appSessionClient = null
         actionSession?.close()
         actionSession = null
         val spec = runCatching {
@@ -108,21 +120,50 @@ class GuestWorkspaceActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != logicalActivityRequestCode) return
+        if (!::instance.isInitialized || !::revision.isInitialized || !::state.isInitialized) return
         val expected = logicalActivityLaunchId
         val actual = data?.getStringExtra(GuestActivityLaunchPolicy.EXTRA_RESULT_LAUNCH_ID)
-        if (!GuestActivityLaunchPolicy.resultBelongsTo(expected.orEmpty(), actual)) {
-            state.text = "Ignored stale logical Activity result"
+        val actualInstance = data?.getStringExtra(GuestActivityLaunchPolicy.EXTRA_INSTANCE_ID)
+        val actualRevision = data?.getStringExtra(GuestActivityLaunchPolicy.EXTRA_REVISION_ID)
+        val persisted = runCatching {
+            LogicalActivityStore(File(instance.dataRoot)).current()
+        }.getOrNull()
+        val accepted = GuestActivityUiState.acceptsResult(
+            persisted,
+            expected,
+            actual,
+            instance.instanceId,
+            actualInstance,
+            revision.revisionId,
+            actualRevision,
+            resultCode
+        ) && GuestActivityUiState.boundTo(
+            persisted!!,
+            instance.instanceId,
+            revision.revisionId,
+            revision.packageName,
+            instance.guestSha256
+        )
+        if (!accepted) {
+            logicalStatus.text = "Ignored stale logical Activity result"
+            refreshLogicalResult()
             return
         }
         skipReloadAfterResult = true
         logicalActivityLaunchId = null
-        state.text = data?.getStringExtra(GuestActivityLaunchPolicy.EXTRA_RESULT_MESSAGE)
-            ?: if (resultCode == Activity.RESULT_OK) "Logical Activity completed" else "Logical Activity closed"
+        logicalStatus.text = ""
+        refreshLogicalResult()
+        render()
     }
     private fun buildUi() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 24) }
         root.addView(TextView(this).apply { text = "Guest workspace\npackage=${instance.guestPackageName}\ninstance=${instance.instanceId}\nrevision=${instance.guestRevisionId}\ncontract=v${contract.version}"; textSize = 16f })
         state = TextView(this).apply { textSize = 22f; setPadding(0, 24, 0, 24) }
+        logicalResult = TextView(this).apply { textSize = 16f }
+        logicalStatus = TextView(this).apply { textSize = 16f }
+        root.addView(logicalResult)
+        root.addView(logicalStatus)
+        refreshLogicalResult()
         val actions = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         if (BuildConfig.DEBUG) {
             val appState = TextView(this).apply { textSize = 16f }
@@ -130,7 +171,9 @@ class GuestWorkspaceActivity : Activity() {
             appSessionClient?.close()
             val client = Act008SessionClient(applicationContext)
             appSessionClient = client
+            val callbackGeneration = ++appSessionGeneration
             fun render(result: Result<com.example.appsandbox.experiments.act008.Act008SessionSnapshot>) {
+                if (callbackGeneration != appSessionGeneration) return
                 appState.text = result.fold(
                     { snapshot ->
                         appRunId = snapshot.runId.takeIf { it.isNotBlank() }
@@ -183,7 +226,8 @@ class GuestWorkspaceActivity : Activity() {
                                 component.className,
                                 logicalActivityRequestCode
                             )
-                        }.onFailure { show(it.message ?: "Unable to open logical Activity") }
+                        }.onSuccess { logicalStatus.text = "" }
+                            .onFailure { logicalStatus.text = it.message ?: "Unable to open logical Activity" }
                     }
                 })
             }
@@ -211,7 +255,23 @@ class GuestWorkspaceActivity : Activity() {
             addView(root)
         })
     }
+    private fun refreshLogicalResult() {
+        logicalResult.text = runCatching {
+            GuestActivityUiState.completedResult(
+                LogicalActivityStore(File(instance.dataRoot)).current(),
+                instance.instanceId,
+                revision.revisionId,
+                revision.packageName,
+                instance.guestSha256
+            )?.let {
+                "Logical Activity result\ncomponent=${it.componentName}\nlaunch=${it.launchId}\nresultCode=${it.resultCode}\nmessage=${it.resultMessage.orEmpty()}"
+            } ?: "No completed logical Activity result"
+        }.getOrElse { "Logical Activity result unavailable: ${it.message ?: "Invalid persisted state"}" }
+    }
     private fun render() {
+        val callbackGeneration = ++guestRenderGeneration
+        actionSession?.close()
+        actionSession = null
         state.text = if (contract.version == 1) "Contract v1 static view | Counter: ${counter()}" else "Contract v2 actions validating"
         guestRoot.removeAllViews()
         runCatching {
@@ -226,8 +286,8 @@ class GuestWorkspaceActivity : Activity() {
                 actionSession = session
                 GuestActionViewBinder(
                     session,
-                    onState = { state.text = it },
-                    onFailure = { state.text = "Guest action failed: $it" }
+                    onState = { if (callbackGeneration == guestRenderGeneration) state.text = it },
+                    onFailure = { if (callbackGeneration == guestRenderGeneration) state.text = "Guest action failed: $it" }
                 ).bind(guestView, context.resources, context.packageName, contract)
             }
             guestRoot.addView(guestView)
