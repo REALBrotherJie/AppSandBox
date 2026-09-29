@@ -84,8 +84,7 @@ class GuestWorkspaceActivity : Activity() {
     }
     private fun buildUi() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 24) }
-        val appSession = File(instance.dataRoot, "files/application-session.state").takeIf { it.isFile }?.readText()?.trim() ?: "status=NOT_STARTED"
-        root.addView(TextView(this).apply { text = "Guest workspace\npackage=${instance.guestPackageName}\ninstance=${instance.instanceId}\nrevision=${instance.guestRevisionId}\ncontract=v${contract.version}\napplicationSession=$appSession"; textSize = 16f })
+        root.addView(TextView(this).apply { text = "Guest workspace\npackage=${instance.guestPackageName}\ninstance=${instance.instanceId}\nrevision=${instance.guestRevisionId}\ncontract=v${contract.version}"; textSize = 16f })
         state = TextView(this).apply { textSize = 22f; setPadding(0, 24, 0, 24) }
         val actions = LinearLayout(this)
         if (contract.version == 1) {
@@ -95,14 +94,11 @@ class GuestWorkspaceActivity : Activity() {
         actions.addView(Button(this).apply { text = "Close workspace"; setOnClickListener { finishAndRemoveTask() } })
         actions.addView(Button(this).apply { text = "Delete current instance"; setOnClickListener {
             android.app.AlertDialog.Builder(this@GuestWorkspaceActivity).setTitle("Delete current instance?").setNegativeButton("Cancel", null)
-                .setPositiveButton("Confirm delete instance") { _, _ -> runCatching {
-                    if (BuildConfig.DEBUG) {
-                        val c = Class.forName("com.example.appsandbox.experiments.act007.api31.Act007ApplicationSessions")
-                        val ok = c.getMethod("canDelete", android.content.Context::class.java, String::class.java).invoke(null, this@GuestWorkspaceActivity, instance.instanceId) as Boolean
-                        check(ok) { "Active session must be stopped before deletion" }
-                    }
-                    store.delete(instance.instanceId)
-                }.onSuccess { finishAndRemoveTask() }.onFailure { show(it.message ?: "Unable to delete instance") } }.show()
+                .setPositiveButton("Confirm delete instance") { _, _ ->
+                    runCatching { store.delete(instance.instanceId) }
+                        .onSuccess { finishAndRemoveTask() }
+                        .onFailure { show(it.message ?: "Unable to delete instance") }
+                }.show()
         } })
         guestRoot = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(state); root.addView(actions); root.addView(guestRoot, LinearLayout.LayoutParams(-1, 0, 1f)); setContentView(root)

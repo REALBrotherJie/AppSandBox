@@ -160,7 +160,7 @@ class MainActivity : AppCompatActivity() {
                         .setMessage(instance.instanceId)
                         .setNegativeButton("Cancel", null)
                         .setPositiveButton("Delete") { _, _ ->
-                            runCatching { if (BuildConfig.DEBUG) { val c = Class.forName("com.example.appsandbox.experiments.act007.api31.Act007ApplicationSessions"); val ok = c.getMethod("canDelete", android.content.Context::class.java, String::class.java).invoke(c.getField("INSTANCE").get(null), this@MainActivity, instance.instanceId) as Boolean; check(ok) { "Active session must be stopped before deletion" } }; GuestInstanceStore(this@MainActivity).delete(instance.instanceId) }
+                            runCatching { GuestInstanceStore(this@MainActivity).delete(instance.instanceId) }
                                 .onSuccess { refreshInstances(); refreshLibrary() }
                                 .onFailure { showWorkspaceError(it.message ?: "Unable to delete instance") }
                         }.show()
