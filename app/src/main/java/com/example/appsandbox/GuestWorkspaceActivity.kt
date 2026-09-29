@@ -39,6 +39,7 @@ class GuestWorkspaceActivity : Activity() {
     private var appSessionClient: Act008SessionClient? = null
     private var appRunId: String? = null
     private var logicalActivityLaunchId: String? = null
+    private var skipReloadAfterResult = false
     private val logicalActivityRequestCode = 9001
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +54,10 @@ class GuestWorkspaceActivity : Activity() {
     }
     override fun onResume() {
         super.onResume()
+        if (skipReloadAfterResult) {
+            skipReloadAfterResult = false
+            return
+        }
         reload(intent)
     }
     override fun onDestroy() {
@@ -109,6 +114,7 @@ class GuestWorkspaceActivity : Activity() {
             state.text = "Ignored stale logical Activity result"
             return
         }
+        skipReloadAfterResult = true
         logicalActivityLaunchId = null
         state.text = data?.getStringExtra(GuestActivityLaunchPolicy.EXTRA_RESULT_MESSAGE)
             ?: if (resultCode == Activity.RESULT_OK) "Logical Activity completed" else "Logical Activity closed"
@@ -117,15 +123,19 @@ class GuestWorkspaceActivity : Activity() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 24) }
         root.addView(TextView(this).apply { text = "Guest workspace\npackage=${instance.guestPackageName}\ninstance=${instance.instanceId}\nrevision=${instance.guestRevisionId}\ncontract=v${contract.version}"; textSize = 16f })
         state = TextView(this).apply { textSize = 22f; setPadding(0, 24, 0, 24) }
-        val actions = LinearLayout(this)
+        val actions = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         if (BuildConfig.DEBUG) {
             val appState = TextView(this).apply { textSize = 16f }
             root.addView(appState)
+            appSessionClient?.close()
             val client = Act008SessionClient(applicationContext)
             appSessionClient = client
             fun render(result: Result<com.example.appsandbox.experiments.act008.Act008SessionSnapshot>) {
                 appState.text = result.fold(
-                    { snapshot -> "session=" + snapshot.state + " failure=" + snapshot.failure + " runId=" + snapshot.runId.take(32) + " detail=" + snapshot.detail.take(240) },
+                    { snapshot ->
+                        appRunId = snapshot.runId.takeIf { it.isNotBlank() }
+                        "session=" + snapshot.state + " failure=" + snapshot.failure + " runId=" + snapshot.runId.take(32) + " detail=" + snapshot.detail.take(240)
+                    },
                     { error -> "session unavailable: " + (error.message ?: "").take(240) }
                 )
             }
@@ -193,7 +203,13 @@ class GuestWorkspaceActivity : Activity() {
                 }.show()
         } })
         guestRoot = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(state); root.addView(actions); root.addView(guestRoot, LinearLayout.LayoutParams(-1, 0, 1f)); setContentView(root)
+        root.addView(state)
+        root.addView(actions)
+        root.addView(guestRoot, LinearLayout.LayoutParams(-1, -2))
+        setContentView(android.widget.ScrollView(this).apply {
+            isFillViewport = true
+            addView(root)
+        })
     }
     private fun render() {
         state.text = if (contract.version == 1) "Contract v1 static view | Counter: ${counter()}" else "Contract v2 actions validating"

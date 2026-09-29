@@ -3,9 +3,9 @@ package com.example.appsandbox
 import android.app.Activity
 import android.app.ActivityManager
 import android.os.Bundle
-import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import com.example.appsandbox.activity.GuestActivityLaunchPolicy
 import com.example.appsandbox.activity.GuestActivityLaunchSpec
@@ -26,6 +26,7 @@ import com.example.appsandbox.storage.GuestInstanceBinding
 import com.example.appsandbox.storage.GuestInstanceStore
 import com.example.appsandbox.storage.GuestStore
 import com.example.appsandbox.runtime.client.GuestRuntimeSessionClient
+import com.example.appsandbox.workspace.GuestActivityUiState
 import java.io.File
 import dalvik.system.DexClassLoader
 
@@ -37,8 +38,8 @@ class GuestActivityCarrierActivity : Activity() {
     private lateinit var guestRoot: LinearLayout
     private var contract: GuestViewContract? = null
     private var actionSession: GuestActionSession? = null
-    private var runtimeSession: GuestRuntimeSessionClient? = null
     private var completed = false
+    private var usable = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,8 +49,6 @@ class GuestActivityCarrierActivity : Activity() {
     override fun onDestroy() {
         actionSession?.close()
         actionSession = null
-        runtimeSession?.close()
-        runtimeSession = null
         super.onDestroy()
     }
 
@@ -90,7 +89,13 @@ class GuestActivityCarrierActivity : Activity() {
         require(component.className == spec.componentName) { "Resolved Activity mismatch" }
         contract = GuestPackageReader(this).readContract(revision.apkPath)
         require(contract!!.version == 2) { "Unsupported logical Activity contract" }
-        activityRecord = LogicalActivityStore(File(record.dataRoot)).begin(
+        val store = LogicalActivityStore(File(record.dataRoot))
+        store.current()?.takeIf { it.launchId == spec.launchId }?.let {
+            require(it.state == LogicalActivityState.OPEN) { "Logical Activity launch is already closed" }
+            require(GuestActivityUiState.boundTo(it, spec.instanceId, spec.revisionId, spec.packageName, record.guestSha256) &&
+                it.componentName == spec.componentName) { "Logical Activity identity mismatch" }
+        }
+        activityRecord = store.begin(
             LogicalActivityRecord(
                 spec.launchId,
                 record.instanceId,
@@ -103,6 +108,7 @@ class GuestActivityCarrierActivity : Activity() {
         title = "${revision.packageName} / ${component.className.substringAfterLast('.')}"
         setTaskDescription(ActivityManager.TaskDescription(title.toString()))
         buildUi(revision.apkPath, component.className)
+        usable = true
     }
 
     private fun buildUi(apkPath: String, componentName: String) {
@@ -111,13 +117,13 @@ class GuestActivityCarrierActivity : Activity() {
             setPadding(24, 24, 24, 24)
         }
         root.addView(TextView(this).apply {
-            text = "Logical Activity\npackage=${spec.packageName}\ncomponent=$componentName\ninstance=${spec.instanceId}\nrevision=${spec.revisionId}"
+            text = "Logical Activity\npackage=${spec.packageName}\ncomponent=$componentName\ninstance=${spec.instanceId}\nrevision=${spec.revisionId}\nlaunch=${spec.launchId}"
             textSize = 16f
         })
         state = TextView(this).apply { textSize = 18f; setPadding(0, 16, 0, 16) }
         root.addView(state)
         guestRoot = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(guestRoot, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(guestRoot, LinearLayout.LayoutParams(-1, -2))
         root.addView(Button(this).apply {
             text = "Return logical result"
             setOnClickListener { finishWithResult(Activity.RESULT_OK, "completed") }
@@ -126,7 +132,7 @@ class GuestActivityCarrierActivity : Activity() {
             text = "Back to workspace"
             setOnClickListener { finishWithResult(Activity.RESULT_CANCELED, "back") }
         })
-        setContentView(root)
+        setContentView(ScrollView(this).apply { isFillViewport = true; addView(root) })
 
         val appInfo = GuestPackageReader(this).readApplicationInfo(apkPath)
         val resources = packageManager.getResourcesForApplication(appInfo)
@@ -137,7 +143,6 @@ class GuestActivityCarrierActivity : Activity() {
         require(layoutId != 0) { "Unsupported Guest: layout resource missing" }
         val guestView = android.view.LayoutInflater.from(context).inflate(layoutId, guestRoot, false)
         val session = GuestRuntimeSessionClient(applicationContext, record.instanceId, spec.revisionId)
-        runtimeSession = session
         actionSession = session
         GuestActionViewBinder(
             session,
@@ -149,6 +154,11 @@ class GuestActivityCarrierActivity : Activity() {
 
     private fun finishWithResult(resultCode: Int, message: String) {
         if (completed) return
+        if (!usable) {
+            setResult(Activity.RESULT_CANCELED)
+            finish()
+            return
+        }
         completed = true
         runCatching {
             LogicalActivityStore(File(record.dataRoot)).complete(spec.launchId, resultCode, message)
@@ -162,15 +172,27 @@ class GuestActivityCarrierActivity : Activity() {
             android.content.Intent()
                 .putExtra(GuestActivityLaunchPolicy.EXTRA_RESULT_LAUNCH_ID, spec.launchId)
                 .putExtra(GuestActivityLaunchPolicy.EXTRA_RESULT_MESSAGE, message)
+                .putExtra(GuestActivityLaunchPolicy.EXTRA_INSTANCE_ID, spec.instanceId)
+                .putExtra(GuestActivityLaunchPolicy.EXTRA_REVISION_ID, spec.revisionId)
         )
         finish()
     }
 
     private fun showFailure(message: String) {
-        setContentView(TextView(this).apply {
-            text = "Logical Activity unavailable: $message"
-            textSize = 18f
-            setPadding(24, 24, 24, 24)
+        usable = false
+        actionSession?.close()
+        actionSession = null
+        setContentView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@GuestActivityCarrierActivity).apply {
+                text = "Logical Activity unavailable: $message"
+                textSize = 18f
+                setPadding(24, 24, 24, 24)
+            })
+            addView(Button(this@GuestActivityCarrierActivity).apply {
+                text = "Back to workspace"
+                setOnClickListener { finishWithResult(Activity.RESULT_CANCELED, "back") }
+            })
         })
         setResult(
             Activity.RESULT_CANCELED,
