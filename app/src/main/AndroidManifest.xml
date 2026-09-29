@@ -17,6 +17,10 @@
             android:documentLaunchMode="intoExisting"
             android:exported="false"
             android:launchMode="standard" />
+        <activity
+            android:name=".GuestActivityCarrierActivity"
+            android:exported="false"
+            android:launchMode="standard" />
         <service
             android:name=".runtime.GuestRuntimeService"
             android:exported="false"

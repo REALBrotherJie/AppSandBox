@@ -10,7 +10,10 @@ import android.widget.TextView
 import com.example.appsandbox.contract.GuestActionViewBinder
 import com.example.appsandbox.contract.GuestActionSession
 import com.example.appsandbox.contract.GuestViewContract
+import com.example.appsandbox.activity.GuestActivityLaunchPolicy
 import com.example.appsandbox.experiments.GuestWorkspaceContext
+import com.example.appsandbox.model.GuestPackageRecord
+import com.example.appsandbox.model.resolver.GuestComponentType
 import com.example.appsandbox.model.GuestInstanceRecord
 import com.example.appsandbox.packageinfo.GuestPackageReader
 import com.example.appsandbox.runtime.client.GuestRuntimeSessionClient
@@ -21,11 +24,13 @@ import com.example.appsandbox.storage.GuestStore
 import com.example.appsandbox.storage.GuestInstanceBinding
 import com.example.appsandbox.workspace.GuestWorkspaceLaunchPolicy
 import com.example.appsandbox.workspace.GuestWorkspaceTaskPolicy
+import com.example.appsandbox.workspace.GuestActivityLauncher
 import dalvik.system.DexClassLoader
 import java.io.File
 
 class GuestWorkspaceActivity : Activity() {
     private lateinit var instance: GuestInstanceRecord
+    private lateinit var revision: GuestPackageRecord
     private lateinit var state: TextView
     private lateinit var guestRoot: LinearLayout
     private lateinit var store: GuestInstanceStore
@@ -33,8 +38,11 @@ class GuestWorkspaceActivity : Activity() {
     private var actionSession: GuestActionSession? = null
     private var appSessionClient: Act008SessionClient? = null
     private var appRunId: String? = null
+    private var logicalActivityLaunchId: String? = null
+    private val logicalActivityRequestCode = 9001
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        logicalActivityLaunchId = savedInstanceState?.getString("logicalActivityLaunchId")
         store = GuestInstanceStore(this)
         reload(intent)
     }
@@ -54,6 +62,10 @@ class GuestWorkspaceActivity : Activity() {
         appSessionClient = null
         super.onDestroy()
     }
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("logicalActivityLaunchId", logicalActivityLaunchId)
+        super.onSaveInstanceState(outState)
+    }
     private fun reload(source: Intent) {
         actionSession?.close()
         actionSession = null
@@ -64,12 +76,13 @@ class GuestWorkspaceActivity : Activity() {
             show("Instance unavailable or registry is corrupted"); return
         }
         if (found == null) { show("Instance unavailable or registry is corrupted"); return }
-        val revision = runCatching { GuestStore(this).findRevision(found.guestRevisionId) }.getOrNull()
-        val bindingError = revision?.let { GuestInstanceBinding.validate(found, it) }
-        if (revision == null || bindingError != null) {
+        val loadedRevision = runCatching { GuestStore(this).findRevision(found.guestRevisionId) }.getOrNull()
+        val bindingError = loadedRevision?.let { GuestInstanceBinding.validate(found, it) }
+        if (loadedRevision == null || bindingError != null) {
             show("Guest revision binding is unavailable or inconsistent${bindingError?.let { ": $it" } ?: ""}. Restore the original revision.")
             return
         }
+        revision = loadedRevision
         val artifact = File(found.guestApkPath)
         if (!artifact.isFile || !GuestArtifactVerifier.sha256(artifact).equals(found.guestSha256, true)) {
             show("Guest revision is missing or changed. Re-import the supported Guest before using this instance.")
@@ -86,6 +99,19 @@ class GuestWorkspaceActivity : Activity() {
         title = recentsLabel
         setTaskDescription(ActivityManager.TaskDescription(recentsLabel))
         buildUi(); render()
+    }
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != logicalActivityRequestCode) return
+        val expected = logicalActivityLaunchId
+        val actual = data?.getStringExtra(GuestActivityLaunchPolicy.EXTRA_RESULT_LAUNCH_ID)
+        if (!GuestActivityLaunchPolicy.resultBelongsTo(expected.orEmpty(), actual)) {
+            state.text = "Ignored stale logical Activity result"
+            return
+        }
+        logicalActivityLaunchId = null
+        state.text = data?.getStringExtra(GuestActivityLaunchPolicy.EXTRA_RESULT_MESSAGE)
+            ?: if (resultCode == Activity.RESULT_OK) "Logical Activity completed" else "Logical Activity closed"
     }
     private fun buildUi() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 24) }
@@ -132,6 +158,25 @@ class GuestWorkspaceActivity : Activity() {
             actions.addView(Button(this).apply { text = "Increment"; setOnClickListener { writeCounter(counter() + 1); render() } })
             actions.addView(Button(this).apply { text = "Reset"; setOnClickListener { writeCounter(0); render() } })
         }
+        revision.components
+            .filter { it.type == GuestComponentType.ACTIVITY }
+            .forEach { component ->
+                actions.addView(Button(this).apply {
+                    text = "Open Activity ${component.className.substringAfterLast('.')}"
+                    setOnClickListener {
+                        runCatching {
+                            logicalActivityLaunchId = GuestActivityLauncher.openForResult(
+                                this@GuestWorkspaceActivity,
+                                instance.instanceId,
+                                revision.revisionId,
+                                revision.packageName,
+                                component.className,
+                                logicalActivityRequestCode
+                            )
+                        }.onFailure { show(it.message ?: "Unable to open logical Activity") }
+                    }
+                })
+            }
         actions.addView(Button(this).apply { text = "Close workspace"; setOnClickListener { finishAndRemoveTask() } })
         actions.addView(Button(this).apply { text = "Delete current instance"; setOnClickListener {
             android.app.AlertDialog.Builder(this@GuestWorkspaceActivity).setTitle("Delete current instance?").setNegativeButton("Cancel", null)
