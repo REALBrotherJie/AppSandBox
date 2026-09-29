@@ -47,13 +47,24 @@ class Act008SessionClient(private val context: Context) {
     }
 
     fun start(instanceId: String, operationId: String, runId: String, callback: (Result<Act008SessionSnapshot>) -> Unit) =
-        send(Act008SessionProtocol.MSG_START, instanceId, operationId, runId, callback)
+        send(Act008SessionProtocol.MSG_START, instanceId, operationId, runId) { result ->
+            result.onSuccess { rememberRun(instanceId, it.runId) }
+            callback(result)
+        }
     fun read(instanceId: String, callback: (Result<Act008SessionSnapshot>) -> Unit) =
-        send(Act008SessionProtocol.MSG_READ, instanceId, null, null, callback)
+        read(instanceId, context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(runKey(instanceId), null), callback)
+    fun read(instanceId: String, runId: String?, callback: (Result<Act008SessionSnapshot>) -> Unit) {
+        if (runId.isNullOrBlank()) {
+            callback(Result.failure(IllegalStateException("no persisted session run")))
+        } else send(Act008SessionProtocol.MSG_READ, instanceId, null, runId, callback)
+    }
     fun stop(instanceId: String, operationId: String, runId: String, callback: (Result<Act008SessionSnapshot>) -> Unit) =
         send(Act008SessionProtocol.MSG_STOP, instanceId, operationId, runId, callback)
     fun restart(instanceId: String, operationId: String, runId: String, callback: (Result<Act008SessionSnapshot>) -> Unit) =
-        send(Act008SessionProtocol.MSG_RESTART, instanceId, operationId, runId, callback)
+        send(Act008SessionProtocol.MSG_RESTART, instanceId, operationId, runId) { result ->
+            result.onSuccess { rememberRun(instanceId, it.runId) }
+            callback(result)
+        }
     fun delete(instanceId: String, callback: (Result<Act008SessionSnapshot>) -> Unit) =
         send(Act008SessionProtocol.MSG_DELETE, instanceId, null, null, callback)
     fun terminateRuntime(callback: (Result<Act008SessionSnapshot>) -> Unit) =
@@ -122,5 +133,15 @@ class Act008SessionClient(private val context: Context) {
         queued.clear()
         pending.values.forEach { it(Result.failure(IllegalStateException(message))) }
         pending.clear()
+    }
+
+    private fun rememberRun(instanceId: String, runId: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(runKey(instanceId), runId).apply()
+    }
+
+    private fun runKey(instanceId: String) = "act008.run.$instanceId"
+
+    private companion object {
+        const val PREFS = "act008-session-client"
     }
 }
