@@ -9,4 +9,6 @@ Status: CONFIRMED
 - Host session status reports RUNNING/STOPPED independently per instance. Stopping removes the in-memory Application session without deleting instance data.
 - Guest package remained uninstalled and `dumpsys activity` contained no Guest ActivityRecord.
 - No Activity attach, Guest Activity lifecycle, hidden API, Binder interception, Hook, native or production runtime changes were made.
+- Final frozen-package rerun used the API31-compatible `am start --activity-clear-task` protocol; API31 matrix and expected corrupt-recovery negative both passed.
+- UI smoke passed: Host Workspace resumed after restart, session start/stop completed, active-instance deletion was rejected, and stopped-instance deletion succeeded.
 - Focused JVM, Debug, Release and `git diff --check` gates passed. Raw reports are under ignored `build/reports/task55/`.

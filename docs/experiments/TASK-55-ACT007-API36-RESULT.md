@@ -8,4 +8,5 @@ Status: CONFIRMED
 - Matrix covers start, stop, restart, throwing onCreate and two simultaneously active isolated instances.
 - Host Workspace displays the persisted per-instance Application session state.
 - API36 `emulator-5554` confirmed real Guest `Application.onCreate`, restart, throwing Guest handling and distinct instance data roots.
+- The final shared runner protocol was rerun on API36 with the same immutable APK set and passed, including the expected corrupt-recovery negative.
 - Device inspection confirmed the Guest package remained uninstalled and no Guest ActivityRecord existed; Host Workspace remained the resumed Activity.
