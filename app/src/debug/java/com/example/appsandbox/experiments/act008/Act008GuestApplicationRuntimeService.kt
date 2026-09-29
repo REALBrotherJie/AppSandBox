@@ -33,7 +33,7 @@ class Act008GuestApplicationRuntimeService : Service() {
             val snapshot = if (invalid != null) coordinator.rejected(data, invalid) else coordinator.handle(message.what, data)
             runCatching { message.replyTo?.send(Message.obtain(null, Act008SessionProtocol.MSG_REPLY).apply { this.data = Act008SessionProtocol.encode(snapshot) }) }
             if (message.what == Act008SessionProtocol.MSG_TERMINATE_RUNTIME && invalid == null) {
-                Process.killProcess(Process.myPid())
+                postDelayed({ Process.killProcess(Process.myPid()) }, 100L)
             }
         }
     }
