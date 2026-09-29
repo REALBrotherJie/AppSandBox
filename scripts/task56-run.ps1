@@ -32,12 +32,12 @@ function Assert-Pass([string]$t){if((Value $t 'status')-ne'PASS'){throw "case fa
 function Command([string]$action,[string]$instance,[string]$sessionRun,[string]$operation,[string]$request=([guid]::NewGuid().ToString('N'))){Launch $action @{requestId=$request;instanceId=$instance;sessionRunId=$sessionRun;operationId=$operation}}
 function Host-Pid(){(A @('shell','pidof','com.example.appsandbox')).Trim().Split(' ')[0]}
 function Runtime-Pid(){(A @('shell','pidof','com.example.appsandbox:guest_runtime')).Trim()}
-function Kill-Runtime([string]$pid){
-  if(!$pid -or $pid-eq(Host-Pid)){throw 'invalid runtime PID'}
-  A @('shell','run-as','com.example.appsandbox','sh','-c',"'kill -9 $pid 2>/dev/null || true'")|Out-Null
+function Kill-Runtime([string]$runtimeProcessId){
+  if(!$runtimeProcessId -or $runtimeProcessId-eq(Host-Pid)){throw 'invalid runtime PID'}
+  A @('shell','run-as','com.example.appsandbox','sh','-c',"'kill -9 $runtimeProcessId 2>/dev/null || true'")|Out-Null
   $deadline=(Get-Date).AddSeconds(5)
-  do{$current=Runtime-Pid;if($current-ne$pid){return};Start-Sleep -Milliseconds 100}while((Get-Date)-lt$deadline)
-  throw "runtime PID $pid survived kill"
+  do{$current=Runtime-Pid;if($current-ne$runtimeProcessId){return};Start-Sleep -Milliseconds 100}while((Get-Date)-lt$deadline)
+  throw "runtime PID $runtimeProcessId survived kill"
 }
 function Assert-Probe([string]$instance,[string]$expected){$file=(A @('shell','run-as','com.example.appsandbox','cat',"files/guest-instances/$instance/files/guest-probe.txt")).Trim();if($file-ne$expected){throw 'probe file mismatch'};$prefs=A @('shell','run-as','com.example.appsandbox','cat',"files/guest-instances/$instance/shared_prefs/guest_probe.xml");if($prefs-notmatch[regex]::Escape($expected)){throw 'probe preference mismatch'};$seed=(A @('shell','run-as','com.example.appsandbox','sh','-c',"'if [ -e files/guest-instances/$instance/files/probe-seed ]; then echo PRESENT; else echo ABSENT; fi'")).Trim();if($seed-ne'ABSENT'){throw 'probe seed not consumed'}}
 
