@@ -45,10 +45,13 @@ internal class Act008RuntimeCoordinator(private val service: Service) {
     private val replies = object : LinkedHashMap<String, Act008SessionSnapshot>(128, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Act008SessionSnapshot>?) = size > 128
     }
+    private val requestLedger = Act008RequestLedger()
 
     @Synchronized fun handle(message: Int, data: Bundle): Act008SessionSnapshot {
         val requestId = data.getString(Act008SessionProtocol.KEY_REQUEST_ID).orEmpty()
-        replies[requestId]?.let { return it }
+        val ledger = requestLedger.check(requestId, data.getString(Act008SessionProtocol.KEY_OPERATION_ID).orEmpty(), data.getString(Act008SessionProtocol.KEY_RUN_ID).orEmpty(), data.getString(Act008SessionProtocol.KEY_INSTANCE_ID).orEmpty())
+        if (ledger == false) return base(data, Act008SessionState.FAILED, Act008Failure.DUPLICATE_REQUEST, "requestId already used")
+        if (ledger == true) replies[requestId]?.let { return it }
         val result = when (message) {
             Act008SessionProtocol.MSG_START -> start(data)
             Act008SessionProtocol.MSG_READ -> read(data)
@@ -83,7 +86,15 @@ internal class Act008RuntimeCoordinator(private val service: Service) {
 
     private fun read(data: Bundle): Act008SessionSnapshot {
         val instanceId = data.id(Act008SessionProtocol.KEY_INSTANCE_ID)
-        return runCatching { controller.snapshots().lastOrNull { it.request.instanceId == instanceId } }
+        return runCatching {
+            val snapshots = controller.snapshots().map { snapshot ->
+                Act008SessionSnapshot("", snapshot.request.operationId, snapshot.request.runId, snapshot.request.instanceId,
+                    Act008SessionState.valueOf(snapshot.state.name), map(snapshot.failure), snapshot.detail.orEmpty(), Process.myPid(), snapshot.updatedAt)
+            }
+            val runId = data.getString(Act008SessionProtocol.KEY_RUN_ID).orEmpty()
+            if (runId.isNotBlank()) Act008SnapshotSelector.exact(snapshots, instanceId, runId)
+            else snapshots.lastOrNull { it.instanceId == instanceId }
+        }
             .fold({ it?.let { snapshot -> from(data, snapshot) } ?: base(data, Act008SessionState.NEW) }, { failure(data, it) })
     }
 

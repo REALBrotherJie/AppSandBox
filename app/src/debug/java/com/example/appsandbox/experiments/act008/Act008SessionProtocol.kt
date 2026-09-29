@@ -62,7 +62,7 @@ object Act008SessionProtocol {
         val required = mutableListOf(KEY_REQUEST_ID)
         if (message != MSG_TERMINATE_RUNTIME) required += KEY_INSTANCE_ID
         if (message in setOf(MSG_START, MSG_STOP, MSG_RESTART)) required += KEY_OPERATION_ID
-        if (message in setOf(MSG_START, MSG_STOP, MSG_RESTART)) required += KEY_RUN_ID
+        if (message in setOf(MSG_START, MSG_READ, MSG_STOP, MSG_RESTART)) required += KEY_RUN_ID
         for (key in required) {
             val value = values[key].orEmpty()
             if (value.isBlank()) return Act008Failure.INVALID_REQUEST
