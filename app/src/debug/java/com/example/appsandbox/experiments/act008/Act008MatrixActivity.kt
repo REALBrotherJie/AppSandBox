@@ -83,7 +83,8 @@ class Act008MatrixActivity : Activity() {
                     .onFailure { completeFailure(commandId, "SEND_FAILED") }
             }
             override fun onServiceDisconnected(name: ComponentName) {
-                if (what != Act008SessionProtocol.MSG_START || recovering) return completeFailure(commandId, "RUNTIME_DISCONNECTED")
+                if (recovering) return
+                if (what != Act008SessionProtocol.MSG_START) return completeFailure(commandId, "RUNTIME_DISCONNECTED")
                 recovering = true
                 activeConnection = null
                 timeout.postDelayed({ bindRecoveryRead(commandId, requestId, reply) }, 200L)
