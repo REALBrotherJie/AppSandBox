@@ -14,6 +14,7 @@ import com.example.appsandbox.experiments.GuestWorkspaceContext
 import com.example.appsandbox.model.GuestInstanceRecord
 import com.example.appsandbox.packageinfo.GuestPackageReader
 import com.example.appsandbox.runtime.client.GuestRuntimeSessionClient
+import com.example.appsandbox.runtime.client.Act008SessionClient
 import com.example.appsandbox.storage.GuestInstanceStore
 import com.example.appsandbox.storage.GuestArtifactVerifier
 import com.example.appsandbox.storage.GuestStore
@@ -30,6 +31,8 @@ class GuestWorkspaceActivity : Activity() {
     private lateinit var store: GuestInstanceStore
     private lateinit var contract: GuestViewContract
     private var actionSession: GuestActionSession? = null
+    private var appSessionClient: Act008SessionClient? = null
+    private var appRunId: String? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = GuestInstanceStore(this)
@@ -47,6 +50,8 @@ class GuestWorkspaceActivity : Activity() {
     override fun onDestroy() {
         actionSession?.close()
         actionSession = null
+        appSessionClient?.close()
+        appSessionClient = null
         super.onDestroy()
     }
     private fun reload(source: Intent) {
@@ -87,6 +92,42 @@ class GuestWorkspaceActivity : Activity() {
         root.addView(TextView(this).apply { text = "Guest workspace\npackage=${instance.guestPackageName}\ninstance=${instance.instanceId}\nrevision=${instance.guestRevisionId}\ncontract=v${contract.version}"; textSize = 16f })
         state = TextView(this).apply { textSize = 22f; setPadding(0, 24, 0, 24) }
         val actions = LinearLayout(this)
+        if (BuildConfig.DEBUG) {
+            val appState = TextView(this).apply { textSize = 16f }
+            root.addView(appState)
+            val client = Act008SessionClient(applicationContext)
+            appSessionClient = client
+            fun render(result: Result<com.example.appsandbox.experiments.act008.Act008SessionSnapshot>) {
+                appState.text = result.fold(
+                    { snapshot -> "session=" + snapshot.state + " failure=" + snapshot.failure + " runId=" + snapshot.runId.take(32) + " detail=" + snapshot.detail.take(240) },
+                    { error -> "session unavailable: " + (error.message ?: "").take(240) }
+                )
+            }
+            actions.addView(Button(this).apply {
+                text = "Start session"
+                setOnClickListener {
+                    val run = java.util.UUID.randomUUID().toString()
+                    client.start(instance.instanceId, java.util.UUID.randomUUID().toString(), run, ::render)
+                    appRunId = run
+                }
+            })
+            actions.addView(Button(this).apply {
+                text = "Stop session"
+                setOnClickListener {
+                    val run = appRunId ?: return@setOnClickListener
+                    client.stop(instance.instanceId, java.util.UUID.randomUUID().toString(), run, ::render)
+                }
+            })
+            actions.addView(Button(this).apply {
+                text = "Restart session"
+                setOnClickListener {
+                    val run = java.util.UUID.randomUUID().toString()
+                    client.restart(instance.instanceId, java.util.UUID.randomUUID().toString(), run, ::render)
+                    appRunId = run
+                }
+            })
+            client.read(instance.instanceId, ::render)
+        }
         if (contract.version == 1) {
             actions.addView(Button(this).apply { text = "Increment"; setOnClickListener { writeCounter(counter() + 1); render() } })
             actions.addView(Button(this).apply { text = "Reset"; setOnClickListener { writeCounter(0); render() } })
@@ -95,7 +136,13 @@ class GuestWorkspaceActivity : Activity() {
         actions.addView(Button(this).apply { text = "Delete current instance"; setOnClickListener {
             android.app.AlertDialog.Builder(this@GuestWorkspaceActivity).setTitle("Delete current instance?").setNegativeButton("Cancel", null)
                 .setPositiveButton("Confirm delete instance") { _, _ ->
-                    runCatching { store.delete(instance.instanceId) }
+                    if (BuildConfig.DEBUG) {
+                        val client = appSessionClient ?: Act008SessionClient(applicationContext)
+                        client.delete(instance.instanceId) { result ->
+                            result.onSuccess { finishAndRemoveTask() }
+                                .onFailure { show(it.message ?: "Unable to delete instance") }
+                        }
+                    } else runCatching { store.delete(instance.instanceId) }
                         .onSuccess { finishAndRemoveTask() }
                         .onFailure { show(it.message ?: "Unable to delete instance") }
                 }.show()

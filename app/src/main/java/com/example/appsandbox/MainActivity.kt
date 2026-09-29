@@ -17,6 +17,7 @@ import com.example.appsandbox.imports.GuestImportSession
 import com.example.appsandbox.storage.GuestStore
 import com.example.appsandbox.storage.GuestInstanceStore
 import com.example.appsandbox.workspace.GuestWorkspaceLauncher
+import com.example.appsandbox.runtime.client.Act008SessionClient
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
@@ -160,7 +161,12 @@ class MainActivity : AppCompatActivity() {
                         .setMessage(instance.instanceId)
                         .setNegativeButton("Cancel", null)
                         .setPositiveButton("Delete") { _, _ ->
-                            runCatching { GuestInstanceStore(this@MainActivity).delete(instance.instanceId) }
+                            if (BuildConfig.DEBUG) {
+                                Act008SessionClient(applicationContext).delete(instance.instanceId) { result ->
+                                    result.onSuccess { refreshInstances(); refreshLibrary() }
+                                        .onFailure { showWorkspaceError(it.message ?: "Unable to delete instance") }
+                                }
+                            } else runCatching { GuestInstanceStore(this@MainActivity).delete(instance.instanceId) }
                                 .onSuccess { refreshInstances(); refreshLibrary() }
                                 .onFailure { showWorkspaceError(it.message ?: "Unable to delete instance") }
                         }.show()
