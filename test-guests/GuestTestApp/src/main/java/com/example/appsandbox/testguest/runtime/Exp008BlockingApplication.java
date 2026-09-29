@@ -11,6 +11,18 @@ public final class Exp008BlockingApplication extends Application {
         } catch (Exception error) {
             throw new IllegalStateException("EXP008 blocking marker failed", error);
         }
+        if (getFileStreamPath("exp008-self-terminate").isFile()) {
+            Thread terminator = new Thread(() -> {
+                try {
+                    Thread.sleep(1_000L);
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+                android.os.Process.killProcess(android.os.Process.myPid());
+            }, "exp008-self-terminate");
+            terminator.setDaemon(true);
+            terminator.start();
+        }
         for (;;) {
             try {
                 Thread.sleep(60_000L);
