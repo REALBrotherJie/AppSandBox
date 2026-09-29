@@ -17,5 +17,7 @@ android {
     productFlavors {
         create("normal") { dimension = "behavior" }
         create("throwing") { dimension = "behavior" }
+        create("constructorCrash") { dimension = "behavior" }
+        create("blocking") { dimension = "behavior" }
     }
 }
