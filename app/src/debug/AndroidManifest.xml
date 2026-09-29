@@ -1,5 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <service
+            android:name=".experiments.act008.Act008GuestApplicationRuntimeService"
+            android:exported="false"
+            android:process=":guest_runtime" />
         <activity android:name=".automation.Task29AutomationActivity" android:exported="true" />
         <activity android:name=".automation.Task40ResolverAutomationActivity" android:exported="true" />
         <activity android:name=".automation.Task43ImplicitResolverAutomationActivity" android:exported="true" />
