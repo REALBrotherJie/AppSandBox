@@ -31,7 +31,9 @@ function Launch([string]$action,[hashtable]$extras=@{},[switch]$NoWait,[switch]$
 function Assert-Pass([string]$t){if((Value $t 'status')-ne'PASS'){throw "case failed $t"}}
 function Command([string]$action,[string]$instance,[string]$sessionRun,[string]$operation,[string]$request=([guid]::NewGuid().ToString('N'))){Launch $action @{requestId=$request;instanceId=$instance;sessionRunId=$sessionRun;operationId=$operation}}
 function Host-Pid(){(A @('shell','pidof','com.example.appsandbox')).Trim().Split(' ')[0]}
-function Runtime-Pid(){(A @('shell','pidof','com.example.appsandbox:guest_runtime')).Trim()}
+function Runtime-Pid(){
+  (A @('shell','sh','-c',"'pidof com.example.appsandbox:guest_runtime 2>/dev/null || true'")).Trim()
+}
 function Wait-RuntimeExit([string]$runtimeProcessId){
   if(!$runtimeProcessId -or $runtimeProcessId-eq(Host-Pid)){throw 'invalid runtime PID'}
   $deadline=(Get-Date).AddSeconds(5)
