@@ -18,7 +18,7 @@ Status: CONFIRMED
 - API36 device `emulator-5554`: PASS, run `f341769d8ca84310b5943233511bcfea`; Host PID `26646` stayed stable and runtime PID changed `26708 -> 26875`.
 - Both APIs passed exact restart/read, runtime death recovery, two STARTING death recoveries, constructor/onCreate failures, A/B persistence and delete isolation.
 - Both APIs confirmed the Guest package remained uninstalled, no Guest ActivityRecord existed, and Activity attach/lifecycle counts stayed zero.
-- API31 real UI smoke passed through MainActivity -> Workspace: controls were visible; start/stop/restart produced RUNNING/STOPPED/RUNNING and restart rotated the run ID without crashing the Host UI.
+- API31/API36 UI smoke passed through MainActivity -> Workspace: controls were visible; start/stop/restart produced RUNNING/STOPPED/RUNNING, restart rotated the run ID, and the Host UI remained stable on both devices. Rotation-triggered Activity recreation was not exercised in this smoke pass.
 
 ## Build And Scope
 
