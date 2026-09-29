@@ -12,9 +12,11 @@ import java.util.UUID
 class Act008MatrixActivity : Activity() {
     private lateinit var report: File
     private val timeout = Handler(Looper.getMainLooper())
+    private var completed = false
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        completed = false
         val commandId = intent.getStringExtra("commandId").orEmpty()
         report = File(filesDir, "task56-$commandId.result").also { it.delete() }
         if (commandId.isBlank()) return finish()
@@ -125,6 +127,8 @@ class Act008MatrixActivity : Activity() {
 
     private var activeConnection: ServiceConnection? = null
     private fun complete(commandId: String, snapshot: Act008SessionSnapshot) {
+        if (completed) return
+        completed = true
         timeout.removeCallbacksAndMessages(null)
         activeConnection?.let { runCatching { unbindService(it) } }
         final(commandId, "PASS", listOf(
@@ -136,6 +140,8 @@ class Act008MatrixActivity : Activity() {
     }
 
     private fun completeFailure(commandId: String, failure: String) {
+        if (completed) return
+        completed = true
         timeout.removeCallbacksAndMessages(null)
         activeConnection?.let { runCatching { unbindService(it) } }
         final(commandId, "FAIL", listOf("failure=$failure", "hostPid=${Process.myPid()}"))
