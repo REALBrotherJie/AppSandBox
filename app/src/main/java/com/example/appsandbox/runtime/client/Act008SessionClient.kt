@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap
 class Act008SessionClient(private val context: Context) {
     private val main = Handler(Looper.getMainLooper())
     private val pending = ConcurrentHashMap<String, (Result<Act008SessionSnapshot>) -> Unit>()
+    private val queued = ArrayDeque<() -> Unit>()
     private var service: Messenger? = null
     private var bound = false
     private val replies = Messenger(object : Handler(Looper.getMainLooper()) {
@@ -38,6 +39,7 @@ class Act008SessionClient(private val context: Context) {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
             service = Messenger(binder)
             bound = true
+            while (queued.isNotEmpty()) queued.removeFirst().invoke()
         }
         override fun onServiceDisconnected(name: ComponentName) = failPending("runtime disconnected")
         override fun onBindingDied(name: ComponentName) = failPending("runtime binding died")
@@ -62,6 +64,7 @@ class Act008SessionClient(private val context: Context) {
         if (bound) runCatching { context.unbindService(connection) }
         bound = false
         service = null
+        queued.clear()
     }
 
     private fun send(
@@ -102,11 +105,13 @@ class Act008SessionClient(private val context: Context) {
                 }
             }
             if (!bound) {
+                queued += sendNow
                 val intent = Intent().setComponent(ComponentName(context.packageName, "com.example.appsandbox.experiments.act008.Act008GuestApplicationRuntimeService"))
-                if (!context.bindService(intent, connection, Context.BIND_AUTO_CREATE)) {
+                if (service == null && !context.bindService(intent, connection, Context.BIND_AUTO_CREATE)) {
+                    queued.remove(sendNow)
                     pending.remove(requestId)
                     callback(Result.failure(IllegalStateException("runtime bind failed")))
-                } else main.postDelayed(sendNow, 50)
+                }
             } else sendNow.invoke()
         }
     }
@@ -114,6 +119,7 @@ class Act008SessionClient(private val context: Context) {
     private fun failPending(message: String) {
         service = null
         bound = false
+        queued.clear()
         pending.values.forEach { it(Result.failure(IllegalStateException(message))) }
         pending.clear()
     }
