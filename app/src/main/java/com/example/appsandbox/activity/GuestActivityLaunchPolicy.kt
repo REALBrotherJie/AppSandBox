@@ -76,7 +76,7 @@ object GuestActivityLaunchPolicy {
     }
 
     fun resultBelongsTo(expectedLaunchId: String, resultLaunchId: String?): Boolean =
-        expectedLaunchId.isNotBlank() && expectedLaunchId == resultLaunchId
+        runCatching { validateUuid(expectedLaunchId) }.isSuccess && expectedLaunchId == resultLaunchId
 
     private fun normalizeId(value: String, reason: GuestActivityLaunchReason): String {
         if (value.isBlank() || value.length > 255 || value.any { it.isWhitespace() || it.isISOControl() }) {
@@ -86,8 +86,10 @@ object GuestActivityLaunchPolicy {
     }
 
     private fun validateUuid(value: String) {
-        if (runCatching { UUID.fromString(value) }.isFailure) {
+        if (!UUID_PATTERN.matches(value)) {
             throw GuestActivityLaunchException(GuestActivityLaunchReason.INVALID_ID)
         }
     }
+
+    private val UUID_PATTERN = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 }

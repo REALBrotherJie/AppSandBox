@@ -15,7 +15,27 @@ data class LogicalActivityRecord(
     val resultCode: Int = 0,
     val resultMessage: String? = null
 ) {
+    fun validate() {
+        val spec = GuestActivityLaunchPolicy.create(
+            launchId, instanceId, revisionId, packageName, componentName
+        )
+        require(spec.componentName == componentName) { "non-canonical component" }
+        require(Regex("[0-9a-fA-F]{64}").matches(sha256)) { "invalid SHA256" }
+        require(resultMessage == null || resultMessage.length <= 1024) { "result message too large" }
+        require(state != LogicalActivityState.OPEN || (resultCode == 0 && resultMessage == null)) {
+            "open launch cannot contain a result"
+        }
+    }
+
+    fun sameIdentity(other: LogicalActivityRecord): Boolean =
+        instanceId == other.instanceId &&
+            revisionId == other.revisionId &&
+            packageName == other.packageName &&
+            sha256 == other.sha256 &&
+            componentName == other.componentName
+
     fun toJson() = JSONObject().apply {
+        validate()
         put("launchId", launchId)
         put("instanceId", instanceId)
         put("revisionId", revisionId)
@@ -28,16 +48,26 @@ data class LogicalActivityRecord(
     }
 
     companion object {
-        fun fromJson(value: JSONObject) = LogicalActivityRecord(
-            value.getString("launchId"),
-            value.getString("instanceId"),
-            value.getString("revisionId"),
-            value.getString("packageName"),
-            value.getString("sha256"),
-            value.getString("componentName"),
-            LogicalActivityState.valueOf(value.getString("state")),
-            value.optInt("resultCode", 0),
-            value.optString("resultMessage").takeIf { it.isNotBlank() }
-        )
+        fun fromJson(value: JSONObject): LogicalActivityRecord {
+            val required = setOf(
+                "launchId", "instanceId", "revisionId", "packageName",
+                "sha256", "componentName", "state", "resultCode"
+            )
+            require(value.keys().asSequence().toSet() - required <= setOf("resultMessage"))
+            require(required.all(value::has))
+            val record = LogicalActivityRecord(
+                value.getString("launchId"),
+                value.getString("instanceId"),
+                value.getString("revisionId"),
+                value.getString("packageName"),
+                value.getString("sha256"),
+                value.getString("componentName"),
+                LogicalActivityState.valueOf(value.getString("state")),
+                value.getInt("resultCode"),
+                if (value.has("resultMessage")) value.getString("resultMessage") else null
+            )
+            record.validate()
+            return record
+        }
     }
 }
