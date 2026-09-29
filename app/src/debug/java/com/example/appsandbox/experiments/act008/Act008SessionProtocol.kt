@@ -50,19 +50,28 @@ object Act008SessionProtocol {
     const val REQUEST_TIMEOUT_MS = 10_000L
 
     fun validateRequest(message: Int, data: Bundle): Act008Failure? {
-        if (data.getInt(KEY_VERSION, -1) != VERSION) return Act008Failure.INVALID_PROTOCOL
+        return validateFields(message, data.getInt(KEY_VERSION, -1), mapOf(
+            KEY_REQUEST_ID to data.getString(KEY_REQUEST_ID), KEY_OPERATION_ID to data.getString(KEY_OPERATION_ID),
+            KEY_RUN_ID to data.getString(KEY_RUN_ID), KEY_INSTANCE_ID to data.getString(KEY_INSTANCE_ID)
+        ))
+    }
+
+    internal fun validateFields(message: Int, version: Int, values: Map<String, String?>): Act008Failure? {
+        if (version != VERSION) return Act008Failure.INVALID_PROTOCOL
         if (message !in setOf(MSG_START, MSG_READ, MSG_STOP, MSG_RESTART, MSG_DELETE, MSG_TERMINATE_RUNTIME)) return Act008Failure.INVALID_REQUEST
         val required = mutableListOf(KEY_REQUEST_ID)
         if (message != MSG_TERMINATE_RUNTIME) required += KEY_INSTANCE_ID
         if (message in setOf(MSG_START, MSG_STOP, MSG_RESTART)) required += KEY_OPERATION_ID
         if (message in setOf(MSG_START, MSG_STOP, MSG_RESTART)) required += KEY_RUN_ID
         for (key in required) {
-            val value = data.getString(key).orEmpty()
+            val value = values[key].orEmpty()
             if (value.isBlank()) return Act008Failure.INVALID_REQUEST
             if (value.length > MAX_ID_LENGTH) return Act008Failure.OVERSIZED_PAYLOAD
         }
         return null
     }
+
+    internal fun boundedDetail(value: String) = value.take(MAX_DETAIL_LENGTH)
 
     fun encode(snapshot: Act008SessionSnapshot) = Bundle().apply {
         putInt(KEY_VERSION, VERSION)
@@ -73,7 +82,7 @@ object Act008SessionProtocol {
         putString(KEY_INSTANCE_ID, snapshot.instanceId.take(MAX_ID_LENGTH))
         putString(KEY_STATE, snapshot.state.name)
         putString(KEY_FAILURE, snapshot.failure.name)
-        putString(KEY_DETAIL, snapshot.detail.take(MAX_DETAIL_LENGTH))
+        putString(KEY_DETAIL, boundedDetail(snapshot.detail))
         putInt(KEY_OWNER_PID, snapshot.ownerPid)
         putLong(KEY_UPDATED_AT, snapshot.updatedAt)
     }
