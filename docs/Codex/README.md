@@ -1,5 +1,7 @@
 # AppSandbox Codex 文档
 
+> **2026-09-30：** 本目录的会话规则和 task 已作废，仅作历史参考。当前规则见 [AGENTS.md](../../AGENTS.md)，任务见 [docs/Claude/Task/](../Claude/Task/README.md)。UI-PLAN / UI-TOKENS 仍可作为 M6 产品化的设计参考。
+
 ## 必读会话规则
 
 所有后续审视会话、执行会话和 task 开始前，必须先读取：

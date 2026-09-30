@@ -1,7 +1,10 @@
 # AppSandbox 会话协作要求
 
+> **状态：已作废（2026-09-30）。** 仅作历史参考，不再约束任何会话。
+> 当前规则见仓库根目录 [AGENTS.md](../../AGENTS.md)，目标与任务见 [docs/Claude/Task/](../Claude/Task/README.md)。
+
 更新日期：2026-09-26
-状态：所有后续 Codex/ChatGPT 项目会话和 task 的必读规则。
+原状态：所有后续 Codex/ChatGPT 项目会话和 task 的必读规则。
 
 ## 1. 每次会话开始必须读取
 
