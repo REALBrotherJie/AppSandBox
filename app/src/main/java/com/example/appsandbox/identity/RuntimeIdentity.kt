@@ -11,6 +11,9 @@ data class RuntimeIdentity(
     val instanceId: String,
     val processSlot: Int
 ) {
+    val virtualUidNumber: Int
+        get() = Int.MIN_VALUE or (virtualUid.hashCode() and Int.MAX_VALUE)
+
     init {
         require(hostPackageName.isNotBlank())
         require(guestPackageName.isNotBlank())

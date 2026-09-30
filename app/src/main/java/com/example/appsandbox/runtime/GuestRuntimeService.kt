@@ -13,9 +13,15 @@ import com.example.appsandbox.stub.StubServices
 
 class GuestRuntimeService : Service() {
     private val pool = StubProcessPool(StubServices.SLOT_COUNT)
+    private val packageRegistry by lazy { com.example.appsandbox.vpm.VirtualPackageRegistry(this) }
     private val messenger by lazy { Messenger(IncomingHandler()) }
 
     override fun onBind(intent: Intent?): IBinder = messenger.binder
+
+    override fun onCreate() {
+        super.onCreate()
+        android.util.Log.i("AppSandbox.M3", "VPM_REGISTRY_OWNER process=:vs packages=${packageRegistry.readAll().map { it.packageName }}")
+    }
 
     private inner class IncomingHandler : Handler(Looper.getMainLooper()) {
         override fun handleMessage(message: Message) {

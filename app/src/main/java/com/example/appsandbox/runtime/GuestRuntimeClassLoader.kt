@@ -4,7 +4,6 @@ import android.app.Instrumentation
 import android.content.Context
 import android.content.res.AssetManager
 import android.content.res.Resources
-import dalvik.system.DexClassLoader
 import java.io.File
 import android.util.Log
 import android.os.Build
@@ -16,13 +15,15 @@ class GuestRuntimeClassLoader(private val host: Context) {
     @Volatile private var loader: ClassLoader? = null
     @Volatile private var packageName: String? = null
 
-    fun prepare(sourceDir: String, packageName: String, dataRoot: String): ClassLoader {
+    fun prepare(sourceDir: String, splitSourceDirs: List<String>, nativeLibraryDir: String?, packageName: String, dataRoot: String): ClassLoader {
         val current = loader
         if (current != null && this.packageName == packageName) return current
         val optimized = File(dataRoot, "dex").apply { mkdirs() }
-        return DexClassLoader(sourceDir, optimized.path, null, host.classLoader).also {
+        val dexPath = (listOf(sourceDir) + splitSourceDirs).joinToString(File.pathSeparator)
+        return GuestDomainClassLoader(dexPath, optimized.path, nativeLibraryDir, host.classLoader).also {
             loader = it
             this.packageName = packageName
+            Log.i("AppSandbox.M3", "CLASSLOAD_SETUP package=$packageName base=$sourceDir splits=$splitSourceDirs dexPath=$dexPath loader=$it")
         }
     }
 

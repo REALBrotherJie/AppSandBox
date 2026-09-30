@@ -10,6 +10,8 @@ import com.example.appsandbox.virtual.LaunchEnvelope
 import java.io.File
 import com.example.appsandbox.identity.RuntimeIdentity
 import com.example.appsandbox.identity.SystemIdentityBridge
+import com.example.appsandbox.vpm.GuestPackageManagerBridge
+import com.example.appsandbox.vpm.VirtualPackageManagerService
 
 class GuestProcessBootstrap(private val context: Context) {
     private val guestLoader = GuestRuntimeClassLoader(context)
@@ -41,10 +43,19 @@ class GuestProcessBootstrap(private val context: Context) {
         app.processName = context.packageName + ":p${envelope.processSlot}"
         info.applicationInfo = app
         info.processName = app.processName
-        val loader = guestLoader.prepare(app.sourceDir, envelope.packageName, root.path)
+        val loader = guestLoader.prepare(app.sourceDir, app.splitSourceDirs.orEmpty().toList(), app.nativeLibraryDir, envelope.packageName, root.path)
         val thread = Class.forName("android.app.ActivityThread").getDeclaredMethod("currentActivityThread")
             .apply { isAccessible = true }.invoke(null) ?: error("ActivityThread unavailable")
         guestLoader.installSystemCallerBridge(identityBridge)
+        val packageFlags = android.content.pm.PackageManager.GET_ACTIVITIES or android.content.pm.PackageManager.GET_SERVICES or
+            android.content.pm.PackageManager.GET_RECEIVERS or android.content.pm.PackageManager.GET_PROVIDERS or
+            android.content.pm.PackageManager.GET_PERMISSIONS or android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES
+        val packageInfo = if (android.os.Build.VERSION.SDK_INT >= 33) {
+            context.packageManager.getPackageInfo(envelope.packageName, android.content.pm.PackageManager.PackageInfoFlags.of(packageFlags.toLong()))
+        } else {
+            @Suppress("DEPRECATION") context.packageManager.getPackageInfo(envelope.packageName, packageFlags)
+        }
+        GuestPackageManagerBridge(identity, VirtualPackageManagerService(packageInfo, identity, root.path)).install(thread)
         val resources = guestLoader.installLoadedApk(thread, loader, app.sourceDir, app)
         guestLoader.installInstrumentation(thread, loader, identityBridge)
         info.applicationInfo.className = app.className
