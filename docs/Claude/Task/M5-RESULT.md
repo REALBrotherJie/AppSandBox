@@ -10,7 +10,7 @@ Lifecycle: existing GuestInstanceStore/Registry delete, atomic registry, canonic
 Regression: build and unit tests pass; M2/M3/M4 source/runtime regression not re-run on API36 due unavailable device. API31 M2/M3/M4 smoke evidence remains from M4 and paths did not alter Activity pipeline.
 Risks/limits: Host UID is shared; absolute hardcoded paths, native IO, WebView, external shared storage, Provider/Service, Keystore and Momo native blocker remain deferred. CP path is represented by instance `getDataDir`; full Direct Boot semantics deferred.
 New hidden/non-SDK: none beyond existing M2-M4 hooks; PlatformBridge unchanged.
-Commit: pending focused commit below. Workspace retains unrelated pre-existing authority/history files.
+Commit: `13dbb2f` (`M5: isolate instance Java data roots`). Workspace retains unrelated pre-existing authority/history files.
 INSTANCE_JAVA_DATA_ISOLATION_PROVEN = PARTIALLY
 INSTANCE_PERSISTENCE_PROVEN = PARTIALLY
 INSTANCE_STORAGE_LIFECYCLE_PROVEN = PARTIALLY
