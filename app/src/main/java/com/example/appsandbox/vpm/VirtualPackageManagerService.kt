@@ -48,6 +48,7 @@ class VirtualPackageManagerService(
         packageName = identity.guestPackageName
         uid = identity.virtualUidNumber
         dataDir = dataRoot
+        if (android.os.Build.VERSION.SDK_INT >= 24) deviceProtectedDataDir = java.io.File(dataRoot, "device").path
     }
     private fun sanitize(info: ActivityInfo) = ActivityInfo(info).apply { packageName = identity.guestPackageName; applicationInfo = sanitize(info.applicationInfo) }
     private fun sanitize(info: ServiceInfo) = ServiceInfo(info).apply { packageName = identity.guestPackageName; applicationInfo = sanitize(info.applicationInfo) }

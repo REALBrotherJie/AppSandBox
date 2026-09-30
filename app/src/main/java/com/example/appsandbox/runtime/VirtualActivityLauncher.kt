@@ -11,6 +11,7 @@ import java.io.File
 import java.util.UUID
 import com.example.appsandbox.vpm.VirtualInstanceRecord
 import com.example.appsandbox.vpm.VirtualPackageRegistry
+import com.example.appsandbox.storage.InstanceStorageManager
 
 class VirtualActivityLauncher(private val context: Context) {
     fun launch(packageName: String, instanceId: String, slot: Int): LaunchEnvelope {
@@ -26,7 +27,7 @@ class VirtualActivityLauncher(private val context: Context) {
         }
         val registry = VirtualPackageRegistry(context)
         registry.registerPackage(snapshot, packageInfo)
-        val dataRoot = File(context.filesDir, "virtual/instances/$instanceId").canonicalFile.apply { mkdirs() }
+        val dataRoot = InstanceStorageManager(context, instanceId).root
         val instance = VirtualInstance(packageName, instanceId, snapshot.versionCode, slot, dataRoot.path, VirtualInstance.State.LAUNCHING)
         val virtualUid = com.example.appsandbox.identity.RuntimeIdentity.create(context, packageName, instanceId, slot).virtualUidNumber
         registry.registerInstance(packageName, VirtualInstanceRecord(instanceId, virtualUid, slot, dataRoot.path))

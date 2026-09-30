@@ -15,6 +15,7 @@ import com.example.appsandbox.vpm.VirtualPackageManagerService
 import com.example.appsandbox.activity.GuestActivityStartBridge
 import com.example.appsandbox.activity.VirtualActivityManager
 import com.example.appsandbox.stub.StubActivities
+import com.example.appsandbox.storage.InstanceStorageManager
 
 class GuestProcessBootstrap(private val context: Context) {
     private val guestLoader = GuestRuntimeClassLoader(context)
@@ -24,13 +25,11 @@ class GuestProcessBootstrap(private val context: Context) {
     fun prepare(envelope: LaunchEnvelope): PreparedLaunch {
         require(envelope.processSlot in 0..8) { "invalid process slot ${envelope.processSlot}" }
         require(envelope.target.packageName == envelope.packageName) { "target package mismatch" }
-        val root = File(envelope.dataRoot).canonicalFile
+        val storage = InstanceStorageManager(context, envelope.instanceId)
+        val root = storage.root
         val allowed = File(context.filesDir, "virtual/instances").canonicalFile
-        require(root.path.startsWith(allowed.path + File.separator)) { "instance dataRoot escapes host storage" }
-        val files = File(root, "files").apply { mkdirs() }
-        File(root, "cache").mkdirs()
-        File(root, "databases").mkdirs()
-        File(root, "shared_prefs").mkdirs()
+        require(root.path.startsWith(allowed.path + File.separator) && root.path == File(envelope.dataRoot).canonicalPath) { "instance dataRoot mismatch" }
+        val files = storage.files
 
         val info = ActivityInfo(envelope.activityInfo)
         val identity = RuntimeIdentity.create(context, envelope.packageName, envelope.instanceId, envelope.processSlot)
@@ -44,7 +43,7 @@ class GuestProcessBootstrap(private val context: Context) {
         app.uid = context.applicationInfo.uid
         app.dataDir = root.path
         if (android.os.Build.VERSION.SDK_INT >= 24) {
-            app.deviceProtectedDataDir = File(root, "device").apply { mkdirs() }.path
+            app.deviceProtectedDataDir = storage.deviceProtected.path
         }
         app.processName = context.packageName + ":p${envelope.processSlot}"
         info.applicationInfo = app
