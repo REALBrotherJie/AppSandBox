@@ -1,0 +1,10 @@
+status = completed
+ADR / 文档更新 = ADR-0013 added; CLEAN_ROOM.md, 27_NON_GOALS.md, README.md updated for Direction A
+removed modules = contract v1/v2, ActionSpec, GuestActionViewBinder, GuestActivityCarrierActivity, logical Activity/Service, dispatch, debug experiments/automation
+applicationId / signing = com.example.appsandbox unchanged because applicationId input was empty; local keystore.properties signing added and ignored
+hidden API layer API31/API36 = release probe succeeded for ActivityThread.currentActivityThread(), mH, IActivityTaskManager singleton on 7b670025 and emulator-5554
+stub process pool API31/API36 = :vs allocated and started requested :p4; host/:vs/:p4 observed on both devices; pool unit tests cover conflict, death reclaim, exhaustion
+build/tests = :app:testDebugUnitTest, :app:assembleDebug, :app:assembleRelease passed; git diff --check passed
+commit = pending
+pushed = false
+ready for M2 = yes
