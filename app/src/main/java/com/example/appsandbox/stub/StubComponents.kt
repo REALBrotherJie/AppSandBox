@@ -9,11 +9,18 @@ import android.content.Intent
 import android.database.Cursor
 import android.net.Uri
 import android.os.IBinder
+import android.util.Log
+import com.example.appsandbox.runtime.ActivityLaunchInterceptor
 
 abstract class BaseStubActivity : Activity()
 abstract class BaseStubService : Service() { override fun onBind(intent: Intent?): IBinder? = null }
 abstract class BaseStubProvider : ContentProvider() {
-    override fun onCreate() = true
+    override fun onCreate(): Boolean {
+        val appContext = requireNotNull(context).applicationContext
+        val result = ActivityLaunchInterceptor(appContext).install()
+        Log.i("AppSandbox.M2", "stub-provider process=${android.app.Application.getProcessName()} probe=$result")
+        return result.supported
+    }
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? = null
     override fun getType(uri: Uri): String? = null
     override fun insert(uri: Uri, values: ContentValues?): Uri? = null
@@ -35,4 +42,11 @@ object StubServices {
     const val SLOT_COUNT = 9
     private val classes = arrayOf(P0Service::class.java, P1Service::class.java, P2Service::class.java, P3Service::class.java, P4Service::class.java, P5Service::class.java, P6Service::class.java, P7Service::class.java, P8Service::class.java)
     fun intent(context: Context, slot: Int) = Intent(context, classes.getOrElse(slot) { error("stub slot p$slot is out of range") })
+}
+
+object StubActivities {
+    private val standard = arrayOf(P0StandardActivity::class.java, P1StandardActivity::class.java, P2StandardActivity::class.java,
+        P3StandardActivity::class.java, P4StandardActivity::class.java, P5StandardActivity::class.java,
+        P6StandardActivity::class.java, P7StandardActivity::class.java, P8StandardActivity::class.java)
+    fun standardIntent(context: Context, slot: Int) = Intent(context, standard.getOrElse(slot) { error("stub slot p$slot is out of range") })
 }

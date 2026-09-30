@@ -15,6 +15,7 @@ import com.example.appsandbox.hidden.HiddenApiAccess
 import com.example.appsandbox.packageinfo.GuestPackageReader
 import com.example.appsandbox.runtime.GuestRuntimeProtocol
 import com.example.appsandbox.runtime.GuestRuntimeService
+import com.example.appsandbox.runtime.VirtualActivityLauncher
 
 class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
@@ -30,6 +31,18 @@ class MainActivity : AppCompatActivity() {
         }
         setContentView(LinearLayout(this).apply { addView(status) })
         runFoundationProbe(intent.getIntExtra(EXTRA_STUB_SLOT, 0))
+        intent.getStringExtra(EXTRA_GUEST_PACKAGE)?.let { packageName ->
+            runCatching {
+                VirtualActivityLauncher(this).launch(
+                    packageName,
+                    intent.getStringExtra(EXTRA_INSTANCE_ID) ?: "m2-default",
+                    intent.getIntExtra(EXTRA_STUB_SLOT, 0)
+                )
+            }.onFailure { error ->
+                Log.e(TAG, "M2 launch failed package=$packageName", error)
+                status.append("\nM2 launch failed: ${error.javaClass.simpleName}: ${error.message}")
+            }
+        }
     }
 
     private fun runFoundationProbe(slot: Int) {
@@ -60,6 +73,8 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_STUB_SLOT = "stubSlot"
+        const val EXTRA_GUEST_PACKAGE = "guestPackage"
+        const val EXTRA_INSTANCE_ID = "instanceId"
         private const val TAG = "AppSandbox.M1"
     }
 }

@@ -1,0 +1,59 @@
+package com.example.appsandbox.runtime
+
+import android.content.Context
+import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.content.pm.ApplicationInfo
+import android.os.Process
+import android.util.Log
+import com.example.appsandbox.virtual.LaunchEnvelope
+import java.io.File
+
+class GuestProcessBootstrap(private val context: Context) {
+    private val guestLoader = GuestRuntimeClassLoader(context)
+    data class PreparedLaunch(val intent: Intent, val activityInfo: ActivityInfo)
+
+    fun prepare(envelope: LaunchEnvelope): PreparedLaunch {
+        require(envelope.processSlot in 0..8) { "invalid process slot ${envelope.processSlot}" }
+        require(envelope.target.packageName == envelope.packageName) { "target package mismatch" }
+        val root = File(envelope.dataRoot).canonicalFile
+        val allowed = File(context.filesDir, "virtual/instances").canonicalFile
+        require(root.path.startsWith(allowed.path + File.separator)) { "instance dataRoot escapes host storage" }
+        val files = File(root, "files").apply { mkdirs() }
+        File(root, "cache").mkdirs()
+        File(root, "databases").mkdirs()
+        File(root, "shared_prefs").mkdirs()
+
+        val info = ActivityInfo(envelope.activityInfo)
+        val app = ApplicationInfo(requireNotNull(info.applicationInfo))
+        // System services still see the host UID in M2. Keep the ContextImpl caller package
+        // aligned with that UID while retaining the guest source/class metadata for loading.
+        app.packageName = envelope.packageName
+        app.uid = context.applicationInfo.uid
+        app.dataDir = root.path
+        if (android.os.Build.VERSION.SDK_INT >= 24) {
+            app.deviceProtectedDataDir = File(root, "device").apply { mkdirs() }.path
+        }
+        app.processName = context.packageName + ":p${envelope.processSlot}"
+        info.applicationInfo = app
+        info.processName = app.processName
+        val loader = guestLoader.prepare(app.sourceDir, envelope.packageName, root.path)
+        val thread = Class.forName("android.app.ActivityThread").getDeclaredMethod("currentActivityThread")
+            .apply { isAccessible = true }.invoke(null) ?: error("ActivityThread unavailable")
+        guestLoader.installSystemCallerBridge(envelope.packageName)
+        val resources = guestLoader.installLoadedApk(thread, loader, app.sourceDir, app)
+        guestLoader.installInstrumentation(thread, loader)
+        info.applicationInfo.className = app.className
+        val restored = Intent(envelope.originalIntent).apply {
+            component = envelope.target
+            setExtrasClassLoader(context.classLoader)
+        }
+        Log.i(TAG, "bootstrap api=${android.os.Build.VERSION.SDK_INT} pid=${Process.myPid()} process=${app.processName} " +
+            "package=${envelope.packageName} instance=${envelope.instanceId} slot=${envelope.processSlot} run=${envelope.runId} " +
+            "source=${app.sourceDir} splits=${app.splitSourceDirs?.contentToString()} native=${app.nativeLibraryDir} data=${app.dataDir} files=$files " +
+            "application=${app.className} activity=${info.name} guestLoader=$loader resources=$resources")
+        return PreparedLaunch(restored, info)
+    }
+
+    companion object { private const val TAG = "AppSandbox.M2" }
+}
