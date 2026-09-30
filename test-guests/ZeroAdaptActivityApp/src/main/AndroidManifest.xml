@@ -11,11 +11,23 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".ImplicitActivity" android:exported="false">
+        <activity
+            android:name=".SecondActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.ZeroAdapt.Second"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="com.example.zeroadapt.IMPLICIT" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+        <activity android:name=".ThirdActivity" android:exported="false" />
+        <activity android:name=".ResultActivity" android:exported="false" />
+        <activity
+            android:name=".SingleTaskActivity"
+            android:exported="false"
+            android:launchMode="singleTask" />
     </application>
 </manifest>

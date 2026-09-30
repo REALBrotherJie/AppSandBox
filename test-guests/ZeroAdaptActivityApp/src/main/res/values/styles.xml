@@ -3,4 +3,9 @@
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">#00695C</item>
     </style>
+    <style name="Theme.ZeroAdapt.Second" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#C62828</item>
+        <item name="android:windowBackground">#FFF4F2</item>
+    </style>
 </resources>

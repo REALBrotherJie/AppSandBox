@@ -15,6 +15,7 @@ import android.widget.Button;
 import android.widget.TextView;
 
 public final class LauncherActivity extends Activity {
+    private TextView status;
     private void event(String name) {
         Log.i("ZeroAdapt", name + " class=" + getClass().getName()
                 + " base=" + getBaseContext().getClass().getName()
@@ -29,8 +30,14 @@ public final class LauncherActivity extends Activity {
         verifyPackageManager();
         setContentView(R.layout.activity_launcher);
         TextView value = findViewById(R.id.value);
-        int count = getSharedPreferences("state", MODE_PRIVATE).getInt("count", 0);
+        int count = state == null ? getSharedPreferences("state", MODE_PRIVATE).getInt("count", 0)
+                : state.getInt("screenCount", 0);
         value.setText(Integer.toString(count));
+        status = findViewById(R.id.status);
+        if (state != null) {
+            status.setText(state.getString("status", "Restored"));
+            Log.i("ZeroAdapt", "STATE_RESTORED count=" + count + " status=" + status.getText());
+        }
         Button button = findViewById(R.id.increment);
         button.setOnClickListener(v -> {
             int next = Integer.parseInt(value.getText().toString()) + 1;
@@ -38,12 +45,49 @@ public final class LauncherActivity extends Activity {
             value.setText(Integer.toString(next));
             Log.i("ZeroAdapt", "Button.click value=" + next);
         });
+        findViewById(R.id.open_explicit).setOnClickListener(v -> startActivity(secondIntent("explicit")));
+        findViewById(R.id.open_implicit).setOnClickListener(v -> {
+            Intent intent = secondIntent("implicit");
+            intent.setComponent(null).setAction("com.example.zeroadapt.IMPLICIT").setPackage(getPackageName());
+            startActivity(intent);
+        });
+        findViewById(R.id.open_result).setOnClickListener(v ->
+                startActivityForResult(new Intent(this, ResultActivity.class).putExtra("input", "round-trip"), 42));
+        findViewById(R.id.open_single_task).setOnClickListener(v ->
+                startActivity(new Intent(this, SingleTaskActivity.class).putExtra("sequence", 1)));
+        findViewById(R.id.recreate).setOnClickListener(v -> {
+            status.setText("Before recreate");
+            recreate();
+        });
         getWindow().getDecorView().getViewTreeObserver().addOnPreDrawListener(() -> {
             Log.i("ZeroAdapt", "first-frame window=" + getWindow().getClass().getName()
                     + " decor=" + getWindow().getDecorView().getClass().getName()
                     + " root=" + getWindow().getDecorView().getRootView().getClass().getName());
             return true;
         });
+    }
+
+    private Intent secondIntent(String route) {
+        Bundle nested = new Bundle();
+        nested.putString("nested", "bundle-value");
+        return new Intent(this, SecondActivity.class)
+                .putExtra("route", route).putExtra("number", 73).putExtra("enabled", true)
+                .putExtra("nestedBundle", nested).putExtra("parcel", new TestPayload("parcel-value"))
+                .putExtra("serial", new TestSerializable("serial-value"));
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        String value = data == null ? "null" : data.getStringExtra("result");
+        status.setText("Result " + requestCode + ": " + value);
+        Log.i("ZeroAdapt", "RESULT request=" + requestCode + " code=" + resultCode + " value=" + value);
+    }
+
+    @Override protected void onSaveInstanceState(Bundle outState) {
+        outState.putInt("screenCount", Integer.parseInt(((TextView) findViewById(R.id.value)).getText().toString()));
+        outState.putString("status", status.getText().toString());
+        Log.i("ZeroAdapt", "STATE_SAVED status=" + status.getText());
+        super.onSaveInstanceState(outState);
     }
 
     private void verifyPackageManager() {

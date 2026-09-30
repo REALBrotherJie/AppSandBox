@@ -48,5 +48,16 @@ object StubActivities {
     private val standard = arrayOf(P0StandardActivity::class.java, P1StandardActivity::class.java, P2StandardActivity::class.java,
         P3StandardActivity::class.java, P4StandardActivity::class.java, P5StandardActivity::class.java,
         P6StandardActivity::class.java, P7StandardActivity::class.java, P8StandardActivity::class.java)
+    private val singleTop = arrayOf(P0SingleTopActivity::class.java, P1SingleTopActivity::class.java, P2SingleTopActivity::class.java,
+        P3SingleTopActivity::class.java, P4SingleTopActivity::class.java, P5SingleTopActivity::class.java,
+        P6SingleTopActivity::class.java, P7SingleTopActivity::class.java, P8SingleTopActivity::class.java)
+    private val singleTask = arrayOf(P0SingleTaskActivity::class.java, P1SingleTaskActivity::class.java, P2SingleTaskActivity::class.java,
+        P3SingleTaskActivity::class.java, P4SingleTaskActivity::class.java, P5SingleTaskActivity::class.java,
+        P6SingleTaskActivity::class.java, P7SingleTaskActivity::class.java, P8SingleTaskActivity::class.java)
     fun standardIntent(context: Context, slot: Int) = Intent(context, standard.getOrElse(slot) { error("stub slot p$slot is out of range") })
+    fun intent(context: Context, slot: Int, launchMode: Int) = Intent(context, when (launchMode) {
+        android.content.pm.ActivityInfo.LAUNCH_SINGLE_TOP -> singleTop
+        android.content.pm.ActivityInfo.LAUNCH_SINGLE_TASK -> singleTask
+        else -> standard
+    }.getOrElse(slot) { error("stub slot p$slot is out of range") })
 }

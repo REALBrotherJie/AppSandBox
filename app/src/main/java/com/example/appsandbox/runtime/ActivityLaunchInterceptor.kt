@@ -37,6 +37,10 @@ class ActivityLaunchInterceptor(private val context: android.content.Context) {
     private fun intercept(message: Message, handler: Handler, activityThread: Any) {
         if (message.what != EXECUTE_TRANSACTION || message.obj == null) return
         runCatching {
+            transactionBridge.findNewIntentRecords(message.obj).forEach { record ->
+                val count = record.restoreGuestIntents()
+                if (count > 0) Log.i("AppSandbox.M4", "VACTIVITY new-intent restored count=$count api=${android.os.Build.VERSION.SDK_INT}")
+            }
             transactionBridge.findLaunchRecords(message.obj).forEach { record ->
                 val envelope = LaunchEnvelope.from(record.intent) ?: return@forEach
                 val prepared = bootstrap.prepare(envelope)

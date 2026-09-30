@@ -10,6 +10,8 @@ import android.os.Build
 import java.lang.reflect.Proxy
 import java.lang.reflect.InvocationTargetException
 import com.example.appsandbox.identity.SystemIdentityBridge
+import com.example.appsandbox.activity.VirtualActivityLifecycle
+import com.example.appsandbox.activity.VirtualActivityManager
 
 class GuestRuntimeClassLoader(private val host: Context) {
     @Volatile private var loader: ClassLoader? = null
@@ -27,12 +29,12 @@ class GuestRuntimeClassLoader(private val host: Context) {
         }
     }
 
-    fun installInstrumentation(activityThread: Any, classLoader: ClassLoader, identityBridge: SystemIdentityBridge) {
+    fun installInstrumentation(activityThread: Any, classLoader: ClassLoader, identityBridge: SystemIdentityBridge, activityManager: VirtualActivityManager) {
         val field = generateSequence(activityThread.javaClass) { it.superclass }
             .mapNotNull { runCatching { it.getDeclaredField("mInstrumentation") }.getOrNull() }.first()
             .apply { isAccessible = true }
         val previous = field.get(activityThread) as? Instrumentation
-        if (previous !is GuestInstrumentation) field.set(activityThread, GuestInstrumentation(classLoader, previous, identityBridge))
+        if (previous !is GuestInstrumentation) field.set(activityThread, GuestInstrumentation(classLoader, previous, identityBridge, activityManager))
     }
 
     fun installLoadedApk(activityThread: Any, classLoader: ClassLoader, sourceDir: String, appInfo: android.content.pm.ApplicationInfo): Resources {
@@ -99,7 +101,8 @@ class GuestRuntimeClassLoader(private val host: Context) {
     private class GuestInstrumentation(
         private val guestLoader: ClassLoader,
         private val delegate: Instrumentation?,
-        private val identityBridge: SystemIdentityBridge
+        private val identityBridge: SystemIdentityBridge,
+        private val activityManager: VirtualActivityManager
     ) : Instrumentation() {
         override fun newApplication(cl: ClassLoader?, className: String?, context: android.content.Context?): android.app.Application {
             return delegate?.newApplication(guestLoader, className, context)
@@ -118,7 +121,40 @@ class GuestRuntimeClassLoader(private val host: Context) {
                 "opPackage=${base.opPackageName} attribution=${attribution?.packageName}/${attribution?.uid} " +
                 "applicationInfo=${base.applicationInfo.packageName}/${base.applicationInfo.uid} processUid=${android.os.Process.myUid()} " +
                 "logical=${identityBridge.logicalPackageName()}/${identityBridge.logicalUid()} physical=${identityBridge.physicalPackageName()}/${identityBridge.physicalUid()}")
+            activityManager.created(activity)
             delegate?.callActivityOnCreate(activity, state) ?: super.callActivityOnCreate(activity, state)
+        }
+
+        override fun callActivityOnStart(activity: android.app.Activity) {
+            delegate?.callActivityOnStart(activity) ?: super.callActivityOnStart(activity)
+            activityManager.event(activity, VirtualActivityLifecycle.START)
+        }
+
+        override fun callActivityOnResume(activity: android.app.Activity) {
+            delegate?.callActivityOnResume(activity) ?: super.callActivityOnResume(activity)
+            activityManager.event(activity, VirtualActivityLifecycle.RESUME)
+        }
+
+        override fun callActivityOnPause(activity: android.app.Activity) {
+            activityManager.event(activity, VirtualActivityLifecycle.PAUSE)
+            delegate?.callActivityOnPause(activity) ?: super.callActivityOnPause(activity)
+        }
+
+        override fun callActivityOnStop(activity: android.app.Activity) {
+            activityManager.event(activity, VirtualActivityLifecycle.STOP)
+            delegate?.callActivityOnStop(activity) ?: super.callActivityOnStop(activity)
+        }
+
+        override fun callActivityOnDestroy(activity: android.app.Activity) {
+            activityManager.event(activity, VirtualActivityLifecycle.DESTROY)
+            delegate?.callActivityOnDestroy(activity) ?: super.callActivityOnDestroy(activity)
+        }
+
+        override fun callActivityOnNewIntent(activity: android.app.Activity, intent: android.content.Intent) {
+            val restored = com.example.appsandbox.virtual.LaunchEnvelope.from(intent)?.originalIntent ?: intent
+            restored.setExtrasClassLoader(guestLoader)
+            activityManager.newIntent(activity, restored)
+            delegate?.callActivityOnNewIntent(activity, restored) ?: super.callActivityOnNewIntent(activity, restored)
         }
     }
 }

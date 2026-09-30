@@ -26,9 +26,6 @@ class VirtualActivityLauncher(private val context: Context) {
         }
         val registry = VirtualPackageRegistry(context)
         registry.registerPackage(snapshot, packageInfo)
-        require(snapshot.launcherActivity.launchMode == android.content.pm.ActivityInfo.LAUNCH_MULTIPLE) {
-            "M2 only supports standard launcher activities"
-        }
         val dataRoot = File(context.filesDir, "virtual/instances/$instanceId").canonicalFile.apply { mkdirs() }
         val instance = VirtualInstance(packageName, instanceId, snapshot.versionCode, slot, dataRoot.path, VirtualInstance.State.LAUNCHING)
         val virtualUid = com.example.appsandbox.identity.RuntimeIdentity.create(context, packageName, instanceId, slot).virtualUidNumber
@@ -39,9 +36,10 @@ class VirtualActivityLauncher(private val context: Context) {
         }
         val envelope = LaunchEnvelope(packageName, instanceId, requireNotNull(original.component), original,
             snapshot.launcherActivity, slot, UUID.randomUUID().toString(), dataRoot.path)
-        val stub = envelope.putInto(StubActivities.standardIntent(context, slot).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val stub = envelope.putInto(StubActivities.intent(context, slot, snapshot.launcherActivity.launchMode)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         Log.i(TAG, "substitute original=${original.component?.flattenToShortString()} stub=${stub.component?.flattenToShortString()} " +
-            "instance=${instance.instanceId} slot=$slot flags=0x${stub.flags.toString(16)} launchMode=standard " +
+            "instance=${instance.instanceId} slot=$slot flags=0x${stub.flags.toString(16)} launchMode=${snapshot.launcherActivity.launchMode} " +
             "source=${snapshot.sourceDir} splits=${snapshot.splitSourceDirs} native=${snapshot.nativeLibraryDir}")
         context.startActivity(stub)
         return envelope

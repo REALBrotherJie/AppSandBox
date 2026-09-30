@@ -12,9 +12,13 @@ import com.example.appsandbox.identity.RuntimeIdentity
 import com.example.appsandbox.identity.SystemIdentityBridge
 import com.example.appsandbox.vpm.GuestPackageManagerBridge
 import com.example.appsandbox.vpm.VirtualPackageManagerService
+import com.example.appsandbox.activity.GuestActivityStartBridge
+import com.example.appsandbox.activity.VirtualActivityManager
+import com.example.appsandbox.stub.StubActivities
 
 class GuestProcessBootstrap(private val context: Context) {
     private val guestLoader = GuestRuntimeClassLoader(context)
+    private val activityManager = VirtualActivityManager()
     data class PreparedLaunch(val intent: Intent, val activityInfo: ActivityInfo)
 
     fun prepare(envelope: LaunchEnvelope): PreparedLaunch {
@@ -31,6 +35,8 @@ class GuestProcessBootstrap(private val context: Context) {
         val info = ActivityInfo(envelope.activityInfo)
         val identity = RuntimeIdentity.create(context, envelope.packageName, envelope.instanceId, envelope.processSlot)
         val identityBridge = SystemIdentityBridge(identity)
+        val stub = StubActivities.intent(context, envelope.processSlot, envelope.activityInfo.launchMode)
+        activityManager.requested(envelope, requireNotNull(stub.component), null, -1)
         val app = ApplicationInfo(requireNotNull(info.applicationInfo))
         // System services still see the host UID in M2. Keep the ContextImpl caller package
         // aligned with that UID while retaining the guest source/class metadata for loading.
@@ -56,12 +62,13 @@ class GuestProcessBootstrap(private val context: Context) {
             @Suppress("DEPRECATION") context.packageManager.getPackageInfo(envelope.packageName, packageFlags)
         }
         GuestPackageManagerBridge(identity, VirtualPackageManagerService(packageInfo, identity, root.path)).install(thread)
+        GuestActivityStartBridge(context, identity, activityManager).install()
         val resources = guestLoader.installLoadedApk(thread, loader, app.sourceDir, app)
-        guestLoader.installInstrumentation(thread, loader, identityBridge)
+        guestLoader.installInstrumentation(thread, loader, identityBridge, activityManager)
         info.applicationInfo.className = app.className
         val restored = Intent(envelope.originalIntent).apply {
             component = envelope.target
-            setExtrasClassLoader(context.classLoader)
+            setExtrasClassLoader(loader)
         }
         Log.i(TAG, "bootstrap api=${android.os.Build.VERSION.SDK_INT} pid=${Process.myPid()} process=${app.processName} " +
             "package=${envelope.packageName} instance=${envelope.instanceId} slot=${envelope.processSlot} run=${envelope.runId} " +
