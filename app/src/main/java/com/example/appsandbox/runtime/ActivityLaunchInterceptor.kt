@@ -5,6 +5,8 @@ import android.os.Handler
 import android.os.Message
 import android.os.Process
 import android.util.Log
+import android.view.View
+import android.view.ViewTreeObserver
 import com.example.appsandbox.platform.ActivityThreadBridge
 import com.example.appsandbox.platform.ClientTransactionBridge
 import com.example.appsandbox.platform.PlatformProbe
@@ -59,7 +61,30 @@ class ActivityLaunchInterceptor(private val context: android.content.Context) {
             Log.i(TAG, "launched actual=${activity.javaClass.name} base=${activity.baseContext.javaClass.name} " +
                 "application=${activity.application.javaClass.name} loader=${activity.classLoader} resources=${activity.resources.javaClass.name} " +
                 "window=${activity.window.javaClass.name} decor=${activity.window.decorView.javaClass.name} instance=${envelope.instanceId}")
+            observeFirstFrame(activity, envelope)
         }.onFailure { Log.e(TAG, "post-launch observation failed", it) }
+    }
+
+    private fun observeFirstFrame(activity: Activity, envelope: LaunchEnvelope) {
+        val decor = activity.window.decorView
+        val observer = decor.viewTreeObserver
+        observer.addOnDrawListener(object : ViewTreeObserver.OnDrawListener {
+            private var recorded = false
+
+            override fun onDraw() {
+                if (recorded) return
+                recorded = true
+                decor.post {
+                    if (decor.viewTreeObserver.isAlive) decor.viewTreeObserver.removeOnDrawListener(this)
+                    val viewRoot = runCatching {
+                        View::class.java.getDeclaredMethod("getViewRootImpl").apply { isAccessible = true }.invoke(decor)
+                    }.getOrNull()
+                    Log.i(TAG, "first-frame timestamp=${android.os.SystemClock.elapsedRealtime()} actual=${activity.javaClass.name} " +
+                        "window=${activity.window.javaClass.name} decor=${decor.javaClass.name} viewRoot=${viewRoot?.javaClass?.name} " +
+                        "instance=${envelope.instanceId} slot=${envelope.processSlot}")
+                }
+            }
+        })
     }
 
     private fun findField(type: Class<*>, name: String): Field =

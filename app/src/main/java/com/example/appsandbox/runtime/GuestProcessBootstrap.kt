@@ -8,6 +8,8 @@ import android.os.Process
 import android.util.Log
 import com.example.appsandbox.virtual.LaunchEnvelope
 import java.io.File
+import com.example.appsandbox.identity.RuntimeIdentity
+import com.example.appsandbox.identity.SystemIdentityBridge
 
 class GuestProcessBootstrap(private val context: Context) {
     private val guestLoader = GuestRuntimeClassLoader(context)
@@ -25,6 +27,8 @@ class GuestProcessBootstrap(private val context: Context) {
         File(root, "shared_prefs").mkdirs()
 
         val info = ActivityInfo(envelope.activityInfo)
+        val identity = RuntimeIdentity.create(context, envelope.packageName, envelope.instanceId, envelope.processSlot)
+        val identityBridge = SystemIdentityBridge(identity)
         val app = ApplicationInfo(requireNotNull(info.applicationInfo))
         // System services still see the host UID in M2. Keep the ContextImpl caller package
         // aligned with that UID while retaining the guest source/class metadata for loading.
@@ -40,9 +44,9 @@ class GuestProcessBootstrap(private val context: Context) {
         val loader = guestLoader.prepare(app.sourceDir, envelope.packageName, root.path)
         val thread = Class.forName("android.app.ActivityThread").getDeclaredMethod("currentActivityThread")
             .apply { isAccessible = true }.invoke(null) ?: error("ActivityThread unavailable")
-        guestLoader.installSystemCallerBridge(envelope.packageName)
+        guestLoader.installSystemCallerBridge(identityBridge)
         val resources = guestLoader.installLoadedApk(thread, loader, app.sourceDir, app)
-        guestLoader.installInstrumentation(thread, loader)
+        guestLoader.installInstrumentation(thread, loader, identityBridge)
         info.applicationInfo.className = app.className
         val restored = Intent(envelope.originalIntent).apply {
             component = envelope.target
