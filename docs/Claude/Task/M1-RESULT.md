@@ -6,6 +6,6 @@ hidden API layer API31/API36 = release probe succeeded for ActivityThread.curren
 stub process pool API31/API36 = :vs allocated and started requested :p4; host/:vs/:p4 observed on both devices; pool unit tests cover conflict, death reclaim, exhaustion
 build/tests = :app:testDebugUnitTest, :app:assembleDebug, :app:assembleRelease passed; git diff --check passed
 M1-FIX = restored 15 GuestInstanceStore risk tests; removed five logical-Activity-only tests; no production fix required
-commit = 8f70100
+commit = ce39b2b (M1), 06c4a79 (M1-FIX)
 pushed = false
 ready for M2 = yes
