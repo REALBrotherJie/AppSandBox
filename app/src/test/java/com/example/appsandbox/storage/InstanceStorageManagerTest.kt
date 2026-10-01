@@ -1,6 +1,7 @@
 package com.example.appsandbox.storage
 
 import java.io.File
+import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -29,6 +30,40 @@ class InstanceStorageManagerTest {
             assertFalse(File(host, "blocked").exists())
         } finally {
             host.deleteRecursively()
+        }
+    }
+
+    @Test fun deleteRemovesOnlyTargetAndIsIdempotent() {
+        val host = File.createTempFile("m52", "root").apply { delete(); mkdirs() }
+        val context = FakeContext(host)
+        val target = InstanceStorageManager(context, "target")
+        val sibling = InstanceStorageManager(context, "sibling")
+        File(target.files, "value.txt").writeText("Alice")
+        File(sibling.files, "value.txt").writeText("Bob")
+
+        assertEquals(true, InstanceStorageManager.delete(context, "target", target.root.path))
+        assertFalse(target.root.exists())
+        assertEquals("Bob", File(sibling.files, "value.txt").readText())
+        assertEquals(false, InstanceStorageManager.delete(context, "target", target.root.path))
+        host.deleteRecursively()
+    }
+
+    @Test fun deleteDoesNotFollowChildSymlink() {
+        val host = File.createTempFile("m52", "root").apply { delete(); mkdirs() }
+        val outside = File.createTempFile("m52", "outside").apply { writeText("keep") }
+        val context = FakeContext(host)
+        val target = InstanceStorageManager(context, "target")
+        val link = File(target.files, "outside-link")
+        try {
+            Files.createSymbolicLink(link.toPath(), outside.toPath())
+            assertEquals(true, InstanceStorageManager.delete(context, "target", target.root.path))
+            assertEquals("keep", outside.readText())
+        } catch (_: UnsupportedOperationException) {
+            // The Windows test host may not grant symlink creation; production deletion still uses NOFOLLOW checks.
+        } finally {
+            link.delete()
+            host.deleteRecursively()
+            outside.delete()
         }
     }
 

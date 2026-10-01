@@ -51,6 +51,23 @@ class VirtualPackageRegistry(context: Context) {
         write(current.values.sortedBy { it.packageName })
     }
 
+    @Synchronized fun deleteInstance(packageName: String, instanceId: String, cleanup: (VirtualInstanceRecord) -> Unit): VirtualInstanceRecord? {
+        val current = readAll().associateBy { it.packageName }.toMutableMap()
+        val pkg = current[packageName] ?: return null
+        val instance = pkg.instances[instanceId] ?: return null
+        current[packageName] = pkg.copy(instances = pkg.instances - instanceId)
+        write(current.values.sortedBy { it.packageName })
+        try {
+            cleanup(instance)
+        } catch (error: Throwable) {
+            runCatching { write(readAll().associateBy { it.packageName }.toMutableMap().apply {
+                this[packageName] = pkg
+            }.values.sortedBy { it.packageName }) }.onFailure(error::addSuppressed)
+            throw error
+        }
+        return instance
+    }
+
     @Synchronized fun find(packageName: String): VirtualPackageRecord? = readAll().firstOrNull { it.packageName == packageName }
     @Synchronized fun packagesForUid(uid: Int): List<String> = readAll().filter { p -> p.instances.values.any { it.virtualUid == uid } }.map { it.packageName }
 

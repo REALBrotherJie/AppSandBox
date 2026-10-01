@@ -3,6 +3,7 @@ package com.example.appsandbox.storage
 import android.content.Context
 import android.util.Log
 import java.io.File
+import java.nio.file.Files
 
 /** Single owner for Guest-facing Java/framework storage roots. */
 class InstanceStorageManager(context: Context, val instanceId: String) {
@@ -38,5 +39,34 @@ class InstanceStorageManager(context: Context, val instanceId: String) {
         private const val TAG = "AppSandbox.M5"
         private val ID_PATTERN = Regex("[A-Za-z0-9._-]{1,80}")
         private val NAME_PATTERN = Regex("[A-Za-z0-9._-]{1,80}")
+
+        fun delete(context: Context, instanceId: String, expectedDataRoot: String): Boolean {
+            require(ID_PATTERN.matches(instanceId)) { "invalid instanceId" }
+            val filesRoot = context.filesDir.canonicalFile
+            val virtual = File(filesRoot, "virtual")
+            val owner = File(virtual, "instances")
+            require(!virtual.isSymbolicLink() && !owner.isSymbolicLink()) { "virtual storage owner is symbolic link" }
+            val rawRoot = File(owner, instanceId)
+            require(!rawRoot.isSymbolicLink()) { "instance root is symbolic link" }
+            val canonicalOwner = owner.canonicalFile
+            val root = rawRoot.canonicalFile
+            require(root.parentFile == canonicalOwner && root.name == instanceId) { "instance root escapes host storage" }
+            require(File(expectedDataRoot).absoluteFile.normalize() == root) { "registered dataRoot mismatch" }
+            if (!rawRoot.exists()) return false
+            deleteNoFollow(rawRoot)
+            check(!rawRoot.exists() && !rawRoot.isSymbolicLink()) { "instance delete failed" }
+            return true
+        }
+
+        private fun deleteNoFollow(file: File) {
+            if (file.isSymbolicLink()) {
+                check(file.delete()) { "cannot delete instance symlink: $file" }
+                return
+            }
+            if (file.isDirectory) file.listFiles()?.forEach(::deleteNoFollow)
+            check(file.delete()) { "cannot delete instance path: $file" }
+        }
+
+        private fun File.isSymbolicLink() = runCatching { Files.isSymbolicLink(toPath()) }.getOrDefault(false)
     }
 }

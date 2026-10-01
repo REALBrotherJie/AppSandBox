@@ -30,19 +30,59 @@ class MainActivity : AppCompatActivity() {
             apps.take(12).forEach { appendLine("${it.appLabel} (${it.packageName})") }
         }
         setContentView(LinearLayout(this).apply { addView(status) })
+        if (intent.action == ACTION_DELETE_VIRTUAL_INSTANCE) {
+            deleteVirtualInstance(
+                requireNotNull(intent.getStringExtra(EXTRA_GUEST_PACKAGE)),
+                requireNotNull(intent.getStringExtra(EXTRA_INSTANCE_ID))
+            )
+            return
+        }
         runFoundationProbe(intent.getIntExtra(EXTRA_STUB_SLOT, 0))
         intent.getStringExtra(EXTRA_GUEST_PACKAGE)?.let { packageName ->
             runCatching {
                 VirtualActivityLauncher(this).launch(
                     packageName,
                     intent.getStringExtra(EXTRA_INSTANCE_ID) ?: "m2-default",
-                    intent.getIntExtra(EXTRA_STUB_SLOT, 0)
+                    intent.getIntExtra(EXTRA_STUB_SLOT, 0),
+                    Bundle(intent.extras ?: Bundle()).apply {
+                        remove(EXTRA_GUEST_PACKAGE)
+                        remove(EXTRA_INSTANCE_ID)
+                        remove(EXTRA_STUB_SLOT)
+                    }
                 )
             }.onFailure { error ->
                 Log.e(TAG, "M2 launch failed package=$packageName", error)
                 status.append("\nM2 launch failed: ${error.javaClass.simpleName}: ${error.message}")
             }
         }
+    }
+
+    private fun deleteVirtualInstance(packageName: String, instanceId: String) {
+        lateinit var connection: ServiceConnection
+        connection = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                val replyTo = Messenger(android.os.Handler(mainLooper) { reply ->
+                    val ok = reply.data.getBoolean(GuestRuntimeProtocol.KEY_OK)
+                    status.text = if (ok) "Deleted $packageName / $instanceId" else
+                        "Delete failed: ${reply.data.getString(GuestRuntimeProtocol.KEY_MESSAGE)}"
+                    Log.i(TAG, "delete-instance reply package=$packageName instance=$instanceId ok=$ok " +
+                        "slot=${reply.data.getInt(GuestRuntimeProtocol.KEY_SLOT, -1)} " +
+                        "running=${reply.data.getBoolean(GuestRuntimeProtocol.KEY_RUNNING)} " +
+                        "storageRemoved=${reply.data.getBoolean(GuestRuntimeProtocol.KEY_STORAGE_REMOVED)}")
+                    unbindService(connection)
+                    true
+                })
+                Messenger(binder).send(Message.obtain(null, GuestRuntimeProtocol.MSG_DELETE_INSTANCE).apply {
+                    data = Bundle().apply {
+                        putString(GuestRuntimeProtocol.KEY_PACKAGE_NAME, packageName)
+                        putString(GuestRuntimeProtocol.KEY_INSTANCE_ID, instanceId)
+                    }
+                    this.replyTo = replyTo
+                })
+            }
+            override fun onServiceDisconnected(name: ComponentName?) = Unit
+        }
+        bindService(Intent(this, GuestRuntimeService::class.java), connection, BIND_AUTO_CREATE)
     }
 
     private fun runFoundationProbe(slot: Int) {
@@ -75,6 +115,7 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_STUB_SLOT = "stubSlot"
         const val EXTRA_GUEST_PACKAGE = "guestPackage"
         const val EXTRA_INSTANCE_ID = "instanceId"
+        const val ACTION_DELETE_VIRTUAL_INSTANCE = "com.example.appsandbox.action.DELETE_VIRTUAL_INSTANCE"
         private const val TAG = "AppSandbox.M1"
     }
 }

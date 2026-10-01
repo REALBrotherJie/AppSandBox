@@ -2,6 +2,7 @@ package com.example.appsandbox.runtime
 
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.util.Log
 import com.example.appsandbox.stub.StubActivities
 import com.example.appsandbox.virtual.LaunchEnvelope
@@ -14,7 +15,7 @@ import com.example.appsandbox.vpm.VirtualPackageRegistry
 import com.example.appsandbox.storage.InstanceStorageManager
 
 class VirtualActivityLauncher(private val context: Context) {
-    fun launch(packageName: String, instanceId: String, slot: Int): LaunchEnvelope {
+    fun launch(packageName: String, instanceId: String, slot: Int, launchExtras: Bundle? = null): LaunchEnvelope {
         require(instanceId.matches(Regex("[A-Za-z0-9._-]{1,80}"))) { "invalid instance id" }
         val snapshot = VirtualPackageSnapshotReader(context).readInstalled(packageName)
         val registryFlags = android.content.pm.PackageManager.GET_ACTIVITIES or android.content.pm.PackageManager.GET_SERVICES or
@@ -34,6 +35,7 @@ class VirtualActivityLauncher(private val context: Context) {
         val original = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).apply {
             component = android.content.ComponentName(packageName, snapshot.launcherActivity.name)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            launchExtras?.let(::putExtras)
         }
         val envelope = LaunchEnvelope(packageName, instanceId, requireNotNull(original.component), original,
             snapshot.launcherActivity, slot, UUID.randomUUID().toString(), dataRoot.path)

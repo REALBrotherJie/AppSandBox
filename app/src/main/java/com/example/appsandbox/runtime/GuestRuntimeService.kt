@@ -43,6 +43,16 @@ class GuestRuntimeService : Service() {
                         if (slot != null) stopService(StubServices.intent(this@GuestRuntimeService, slot))
                         reply.putInt(GuestRuntimeProtocol.KEY_SLOT, slot ?: -1)
                     }
+                    GuestRuntimeProtocol.MSG_DELETE_INSTANCE -> {
+                        val result = VirtualInstanceDeletionManager(this@GuestRuntimeService, packageRegistry, pool)
+                            .deleteVirtualInstance(
+                                requireNotNull(data.getString(GuestRuntimeProtocol.KEY_PACKAGE_NAME)),
+                                requireNotNull(data.getString(GuestRuntimeProtocol.KEY_INSTANCE_ID))
+                            )
+                        reply.putInt(GuestRuntimeProtocol.KEY_SLOT, result.slot)
+                        reply.putBoolean(GuestRuntimeProtocol.KEY_RUNNING, result.running)
+                        reply.putBoolean(GuestRuntimeProtocol.KEY_STORAGE_REMOVED, result.storageRemoved)
+                    }
                     else -> error("unknown runtime request ${message.what}")
                 }
                 reply.putBoolean(GuestRuntimeProtocol.KEY_OK, true)
