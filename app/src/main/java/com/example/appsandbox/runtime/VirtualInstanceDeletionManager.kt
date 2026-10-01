@@ -27,6 +27,7 @@ class VirtualInstanceDeletionManager(
                     "processCleanup=none registryCleanup=already-absent storageCleanup=none result=idempotent")
             }
         val slot = registered.processSlot
+        val webViewSuffixes = VirtualProcessCoordinatorClient.terminateInstance(context, instanceId)
         val conflicts = registry.readAll().flatMap { it.instances.values }
             .filter { it.instanceId != instanceId && pool.query(it.instanceId) == slot }
         check(conflicts.isEmpty()) { "stub slot p$slot belongs to another instance" }
@@ -47,6 +48,7 @@ class VirtualInstanceDeletionManager(
         registry.deleteInstance(packageName, instanceId) {
             storageRemoved = InstanceStorageManager.delete(context, instanceId, it.dataRoot)
         }
+        val webViewStorageRemoved = VirtualWebViewProcessPolicy.deleteDataDirectories(context, webViewSuffixes)
         val after = registry.find(packageName)
         val recordGone = after?.instances?.containsKey(instanceId) != true
         Log.i(TAG, "VINSTANCE_DELETE package=$packageName instance=$instanceId virtualUid=${registered.virtualUid} " +
@@ -54,7 +56,8 @@ class VirtualInstanceDeletionManager(
             "dpRoot=${registered.dataRoot}/device activityCleanup=${if (running) "process-terminated" else "no-record"} " +
             "taskCleanup=${if (running) "process-terminated" else "no-record"} " +
             "processCleanup=${if (running) "killed" else "not-running"} " +
-            "registryCleanup=${if (recordGone) "removed" else "present"} storageCleanup=$storageRemoved result=success")
+            "registryCleanup=${if (recordGone) "removed" else "present"} storageCleanup=$storageRemoved " +
+            "webViewSuffixes=$webViewSuffixes webViewStorageCleanup=$webViewStorageRemoved result=success")
         return VirtualInstanceDeleteResult(slot, running, storageRemoved)
     }
 

@@ -28,58 +28,58 @@
         <provider android:name=".receiver.BroadcastSessionProvider" android:authorities="${applicationId}.receiver.sessions" android:exported="false" android:process=":vs" />
         <provider android:name=".runtime.VirtualProcessCoordinatorProvider" android:authorities="${applicationId}.process.coordinator" android:exported="false" android:process=":vs" />
         <receiver android:name=".stub.P0ReceiverN2R0" android:exported="false" android:process=":p0">
-            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P0_N2" /></intent-filter>
+            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P0_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P0ReceiverN2R1" android:exported="false" android:process=":p0">
-            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P0_N2" /></intent-filter>
+            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P0_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P1ReceiverN2R0" android:exported="false" android:process=":p1">
-            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P1_N2" /></intent-filter>
+            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P1_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P1ReceiverN2R1" android:exported="false" android:process=":p1">
-            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P1_N2" /></intent-filter>
+            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P1_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P2ReceiverN2R0" android:exported="false" android:process=":p2">
-            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P2_N2" /></intent-filter>
+            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P2_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P2ReceiverN2R1" android:exported="false" android:process=":p2">
-            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P2_N2" /></intent-filter>
+            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P2_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P3ReceiverN2R0" android:exported="false" android:process=":p3">
-            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P3_N2" /></intent-filter>
+            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P3_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P3ReceiverN2R1" android:exported="false" android:process=":p3">
-            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P3_N2" /></intent-filter>
+            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P3_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P4ReceiverN2R0" android:exported="false" android:process=":p4">
-            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P4_N2" /></intent-filter>
+            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P4_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P4ReceiverN2R1" android:exported="false" android:process=":p4">
-            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P4_N2" /></intent-filter>
+            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P4_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P5ReceiverN2R0" android:exported="false" android:process=":p5">
-            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P5_N2" /></intent-filter>
+            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P5_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P5ReceiverN2R1" android:exported="false" android:process=":p5">
-            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P5_N2" /></intent-filter>
+            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P5_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P6ReceiverN2R0" android:exported="false" android:process=":p6">
-            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P6_N2" /></intent-filter>
+            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P6_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P6ReceiverN2R1" android:exported="false" android:process=":p6">
-            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P6_N2" /></intent-filter>
+            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P6_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P7ReceiverN2R0" android:exported="false" android:process=":p7">
-            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P7_N2" /></intent-filter>
+            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P7_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P7ReceiverN2R1" android:exported="false" android:process=":p7">
-            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P7_N2" /></intent-filter>
+            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P7_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P8ReceiverN2R0" android:exported="false" android:process=":p8">
-            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P8_N2" /></intent-filter>
+            <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P8_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P8ReceiverN2R1" android:exported="false" android:process=":p8">
-            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P8_N2" /></intent-filter>
+            <intent-filter android:priority="50"><action android:name="com.example.appsandbox.receiver.ORDERED_P8_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
         <receiver android:name=".stub.P0Receiver" android:exported="false" android:process=":p0" />
         <receiver android:name=".stub.P1Receiver" android:exported="false" android:process=":p1" />

@@ -57,4 +57,5 @@ object StubReceivers {
         }.name
     )
     fun action(slot: Int, count: Int) = "com.example.appsandbox.receiver.ORDERED_P${slot}_N$count"
+    fun multiProcessAction(count: Int) = "com.example.appsandbox.receiver.ORDERED_MULTI_N$count"
 }

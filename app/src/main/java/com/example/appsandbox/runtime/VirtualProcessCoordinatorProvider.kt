@@ -46,6 +46,12 @@ class VirtualProcessCoordinatorProvider : ContentProvider() {
             val info = requireNotNull(data.parcelable<ProviderInfo>(KEY_PROVIDER_INFO))
             coordinator.ensureProvider(requireNotNull(data.getString(KEY_INSTANCE)), info).toBundle()
         }
+        METHOD_TERMINATE_INSTANCE -> {
+            val instanceId = requireNotNull(extras?.getString(KEY_INSTANCE))
+            Bundle().apply {
+                putStringArrayList(KEY_WEBVIEW_SUFFIXES, ArrayList(coordinator.terminateInstance(instanceId)))
+            }
+        }
         else -> error("unknown process coordinator method $method")
     }
 
@@ -60,6 +66,7 @@ class VirtualProcessCoordinatorProvider : ContentProvider() {
         const val METHOD_ENSURE_SERVICE = "ensureService"
         const val METHOD_ENSURE_RECEIVER = "ensureReceiver"
         const val METHOD_ENSURE_PROVIDER = "ensureProvider"
+        const val METHOD_TERMINATE_INSTANCE = "terminateInstance"
         const val KEY_INSTANCE = "instance"
         const val KEY_SERVICE_INFO = "serviceInfo"
         const val KEY_RECEIVER_INFO = "receiverInfo"
@@ -69,6 +76,7 @@ class VirtualProcessCoordinatorProvider : ContentProvider() {
         const val KEY_PID = "pid"
         const val KEY_GENERATION = "generation"
         const val KEY_TRANSACTION = "transaction"
+        const val KEY_WEBVIEW_SUFFIXES = "webViewSuffixes"
         private lateinit var coordinator: ProductionVirtualProcessCoordinator
     }
 }
@@ -84,6 +92,15 @@ data class ProcessRoute(val slot: Int, val pid: Int, val generation: Long, val t
 }
 
 object VirtualProcessCoordinatorClient {
+    fun terminateInstance(context: Context, instanceId: String): List<String> {
+        val authority = context.packageName + VirtualProcessCoordinatorProvider.AUTHORITY_SUFFIX
+        val result = requireNotNull(context.contentResolver.call(Uri.parse("content://$authority"),
+            VirtualProcessCoordinatorProvider.METHOD_TERMINATE_INSTANCE, null, Bundle().apply {
+                putString(VirtualProcessCoordinatorProvider.KEY_INSTANCE, instanceId)
+            }))
+        return result.getStringArrayList(VirtualProcessCoordinatorProvider.KEY_WEBVIEW_SUFFIXES).orEmpty()
+    }
+
     fun ensureService(context: Context, instanceId: String, info: ServiceInfo): ProcessRoute {
         val authority = context.packageName + VirtualProcessCoordinatorProvider.AUTHORITY_SUFFIX
         val result = requireNotNull(context.contentResolver.call(Uri.parse("content://$authority"),
@@ -138,6 +155,7 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
         var state: State = State.ALLOCATING,
         var pid: Int = -1,
         var agent: IBinder? = null,
+        var connection: ServiceConnection? = null,
         var providerBinder: IBinder? = null,
         var error: Throwable? = null
     )
@@ -180,6 +198,24 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
         val key = VirtualProcessKey(File(info.applicationInfo.sourceDir).lastModified(), info.packageName, instanceId,
             VirtualProcessKey.canonicalProcessName(info.packageName, info.processName))
         return ensure(key) { record -> startAgent(record, M10ArchProtocol.COMPONENT_PROVIDER, null, null, info) }
+    }
+
+    fun terminateInstance(instanceId: String): List<String> {
+        val owned = synchronized(this) {
+            records.values.filter { it.key.instanceId == instanceId && it.state != State.DEAD }
+        }
+        val suffixes = owned.map { VirtualWebViewProcessPolicy.stableSuffix(it.key) }.distinct()
+        owned.forEach { record ->
+            record.agent?.let { binder ->
+                runCatching { Messenger(binder).send(Message.obtain(null, M10ArchProtocol.MSG_DIE)) }
+                    .onFailure { markDead(record) }
+            } ?: markDead(record)
+        }
+        val deadline = SystemClock.elapsedRealtime() + 5_000L
+        while (owned.any { it.state != State.DEAD } && SystemClock.elapsedRealtime() < deadline) Thread.sleep(25)
+        check(owned.all { it.state == State.DEAD }) { "remote process termination timeout instance=$instanceId" }
+        Log.i(TAG, "VPROCESS_INSTANCE_TERMINATED instance=$instanceId records=${owned.size} suffixes=$suffixes")
+        return suffixes
     }
 
     private fun ensure(key: VirtualProcessKey, starter: (Record) -> Unit): ProcessRoute {
@@ -243,6 +279,7 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
             }
             override fun onServiceDisconnected(name: ComponentName) = markDead(record)
         }
+        record.connection = connection
         val bound = context.bindService(Intent(context, agentClass(record.slot)), connection, Context.BIND_AUTO_CREATE)
         if (!bound) {
             record.error = IllegalStateException("agent bind returned false slot=${record.slot}")
@@ -255,6 +292,8 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
         if (record.state == State.DEAD) return
         record.state = State.DEAD
         record.agent = null
+        record.connection?.let { runCatching { context.unbindService(it) } }
+        record.connection = null
         slots.remove(record.slot, record.key)
         records.remove(record.key, record)
         record.ready.countDown()

@@ -1,6 +1,5 @@
 package com.example.appsandbox.runtime
 
-import android.app.Application
 import android.app.Service
 import android.content.ComponentName
 import android.content.Intent
@@ -20,6 +19,7 @@ import com.example.appsandbox.service.VirtualServiceKey
 import com.example.appsandbox.service.VirtualServiceRecord
 import com.example.appsandbox.service.VirtualServiceRuntime
 import com.example.appsandbox.stub.P2Service
+import java.io.File
 
 /** Minimal architecture-review endpoint. Global lifecycle ownership remains in the coordinator. */
 abstract class BaseProcessAgentService(private val declaredSlot: Int) : Service() {
@@ -46,7 +46,8 @@ abstract class BaseProcessAgentService(private val declaredSlot: Int) : Service(
     private fun bindProcess(message: Message) {
         val data = message.data
         val slot = data.getInt(M10ArchProtocol.KEY_SLOT)
-        val actualSlot = Regex(":p(\\d+)$").find(Application.getProcessName())?.groupValues?.get(1)?.toInt() ?: -1
+        val physicalProcessName = File("/proc/self/cmdline").readText().substringBefore('\u0000')
+        val actualSlot = Regex(":p(\\d+)$").find(physicalProcessName)?.groupValues?.get(1)?.toInt() ?: -1
         require(slot == actualSlot && slot == declaredSlot) { "agent slot mismatch expected=$slot actual=$actualSlot declared=$declaredSlot" }
         val componentKind = requireNotNull(data.getString(M10ArchProtocol.KEY_COMPONENT_KIND))
         val packageName = requireNotNull(data.getString(M10ArchProtocol.KEY_PACKAGE))

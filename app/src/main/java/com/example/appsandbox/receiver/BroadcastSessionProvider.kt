@@ -30,7 +30,7 @@ class BroadcastSessionProvider : ContentProvider() {
         prune()
         val count = data.getInt(KEY_COUNT)
         require(count in 1..StubReceivers.MAX_RANKS) { "unsupported receiver count $count" }
-        val slot = data.getInt(KEY_SLOT)
+        val slots = (0 until count).map { data.getInt("$KEY_SLOT$it", data.getInt(KEY_SLOT)) }
         val infos = (0 until count).map { requireNotNull(data.parcelable<ActivityInfo>("$KEY_INFO$it")) }
         val id = ByteArray(24).also(random::nextBytes).joinToString("") { "%02x".format(it) }
         val session = Session(
@@ -38,14 +38,14 @@ class BroadcastSessionProvider : ContentProvider() {
             packageName = requireNotNull(data.getString(KEY_PACKAGE)),
             instanceId = requireNotNull(data.getString(KEY_INSTANCE)),
             virtualUid = requireNotNull(data.getString(KEY_VIRTUAL_UID)),
-            slot = slot,
+            slots = slots,
             originalIntent = requireNotNull(data.parcelable<Intent>(KEY_INTENT)),
             ordered = data.getBoolean(KEY_ORDERED),
             infos = infos,
             createdAt = SystemClock.elapsedRealtime()
         )
         sessions[id] = session
-        Log.i(TAG, "VRECEIVER_SESSION event=CREATE id=$id package=${session.packageName} instance=${session.instanceId} slot=$slot ordered=${session.ordered} receivers=${infos.map { it.name }}")
+        Log.i(TAG, "VRECEIVER_SESSION event=CREATE id=$id package=${session.packageName} instance=${session.instanceId} slots=$slots ordered=${session.ordered} receivers=${infos.map { it.name }}")
         return Bundle().apply { putString(KEY_SESSION, id) }
     }
 
@@ -55,7 +55,7 @@ class BroadcastSessionProvider : ContentProvider() {
         val stub = requireNotNull(data.getString(KEY_STUB))
         val session = sessions[id] ?: return Bundle().apply { putBoolean(KEY_OK, false) }
         val index = session.infos.indices.firstOrNull {
-            StubReceivers.component(session.slot, session.infos.size, it).className == stub
+            StubReceivers.component(session.slots[it], session.infos.size, it).className == stub
         } ?: return Bundle().apply { putBoolean(KEY_OK, false) }
         synchronized(session) {
             if (!session.consumed.add(index)) return Bundle().apply { putBoolean(KEY_OK, false) }
@@ -67,7 +67,7 @@ class BroadcastSessionProvider : ContentProvider() {
             putString(KEY_PACKAGE, session.packageName)
             putString(KEY_INSTANCE, session.instanceId)
             putString(KEY_VIRTUAL_UID, session.virtualUid)
-            putInt(KEY_SLOT, session.slot)
+            putInt(KEY_SLOT, session.slots[index])
             putBoolean(KEY_ORDERED, session.ordered)
             putInt(KEY_INDEX, index)
             putParcelable(KEY_INTENT, Intent(session.originalIntent))
@@ -98,7 +98,7 @@ class BroadcastSessionProvider : ContentProvider() {
         val packageName: String,
         val instanceId: String,
         val virtualUid: String,
-        val slot: Int,
+        val slots: List<Int>,
         val originalIntent: Intent,
         val ordered: Boolean,
         val infos: List<ActivityInfo>,
@@ -150,16 +150,21 @@ data class ReceiverSessionDelivery(
 object BroadcastSessionClient {
     private fun uri(context: Context) = Uri.parse("content://${context.packageName}${BroadcastSessionProvider.AUTHORITY_SUFFIX}")
 
-    fun create(context: Context, identity: RuntimeIdentity, intent: Intent, infos: List<ActivityInfo>, ordered: Boolean, slot: Int = identity.processSlot): String {
+    fun create(context: Context, identity: RuntimeIdentity, intent: Intent, infos: List<ActivityInfo>, ordered: Boolean,
+               slots: List<Int> = List(infos.size) { identity.processSlot }): String {
+        require(slots.size == infos.size) { "receiver slot count mismatch" }
         val request = Bundle().apply {
             putString(BroadcastSessionProvider.KEY_PACKAGE, identity.guestPackageName)
             putString(BroadcastSessionProvider.KEY_INSTANCE, identity.instanceId)
             putString(BroadcastSessionProvider.KEY_VIRTUAL_UID, identity.virtualUid)
-            putInt(BroadcastSessionProvider.KEY_SLOT, slot)
+            putInt(BroadcastSessionProvider.KEY_SLOT, slots.first())
             putBoolean(BroadcastSessionProvider.KEY_ORDERED, ordered)
             putInt(BroadcastSessionProvider.KEY_COUNT, infos.size)
             putParcelable(BroadcastSessionProvider.KEY_INTENT, Intent(intent))
-            infos.forEachIndexed { index, info -> putParcelable("${BroadcastSessionProvider.KEY_INFO}$index", ActivityInfo(info)) }
+            infos.forEachIndexed { index, info ->
+                putParcelable("${BroadcastSessionProvider.KEY_INFO}$index", ActivityInfo(info))
+                putInt("${BroadcastSessionProvider.KEY_SLOT}$index", slots[index])
+            }
         }
         return requireNotNull(context.contentResolver.call(uri(context), BroadcastSessionProvider.METHOD_CREATE, null, request))
             .getString(BroadcastSessionProvider.KEY_SESSION) ?: error("receiver session owner returned no id")

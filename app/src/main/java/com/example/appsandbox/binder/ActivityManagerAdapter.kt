@@ -128,14 +128,17 @@ class ActivityManagerAdapter(
                     .firstOrNull { call.method.parameterTypes[it] == Boolean::class.javaPrimitiveType }
                     ?.let { call.args[it] as? Boolean } == true
                 val logicalProcesses = infos.map { VirtualProcessKey.canonicalProcessName(identity.guestPackageName, it.processName) }.distinct()
-                val targetSlot = if (logicalProcesses.size == 1 && logicalProcesses.single() != identity.guestPackageName) {
-                    VirtualProcessCoordinatorClient.ensureReceiver(context, identity.instanceId, infos.first()).slot
-                } else identity.processSlot
-                val sessionId = BroadcastSessionClient.create(context, identity, original, infos, ordered, targetSlot)
+                val targetSlots = infos.map { info ->
+                    if (VirtualProcessKey.canonicalProcessName(identity.guestPackageName, info.processName) != identity.guestPackageName)
+                        VirtualProcessCoordinatorClient.ensureReceiver(context, identity.instanceId, info).slot
+                    else identity.processSlot
+                }
+                val sessionId = BroadcastSessionClient.create(context, identity, original, infos, ordered, targetSlots)
                 val routed = android.content.Intent().apply {
-                    if (infos.size == 1) this.component = StubReceivers.component(targetSlot, 1, 0)
+                    if (infos.size == 1) this.component = StubReceivers.component(targetSlots.single(), 1, 0)
                     else {
-                        action = StubReceivers.action(targetSlot, infos.size)
+                        action = if (targetSlots.distinct().size == 1) StubReceivers.action(targetSlots.first(), infos.size)
+                            else StubReceivers.multiProcessAction(infos.size)
                         setPackage(identity.hostPackageName)
                     }
                     putExtra(BroadcastSessionProvider.EXTRA_SESSION_ID, sessionId)
@@ -145,7 +148,7 @@ class ActivityManagerAdapter(
                     indices.filter { call.method.parameterTypes[it] == String::class.java && this[it] == identity.guestPackageName }
                         .forEach { this[it] = identity.hostPackageName }
                 }
-                Log.i("AppSandbox.M8", "VRECEIVER event=SESSION_ROUTE method=$name instance=${identity.instanceId} session=$sessionId ordered=$ordered slot=$targetSlot logicalProcesses=$logicalProcesses guests=${infos.map { it.name }} action=${routed.action} component=${routed.component}")
+                Log.i("AppSandbox.M8", "VRECEIVER event=SESSION_ROUTE method=$name instance=${identity.instanceId} session=$sessionId ordered=$ordered slots=$targetSlots logicalProcesses=$logicalProcesses guests=${infos.map { it.name }} action=${routed.action} component=${routed.component}")
                 BinderCallResult(physical(args), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
             }
         }
