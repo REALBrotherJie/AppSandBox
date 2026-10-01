@@ -7,6 +7,8 @@ import com.example.appsandbox.identity.RuntimeIdentity
 import com.example.appsandbox.identity.SystemIdentityBridge
 import com.example.appsandbox.vpm.VirtualPackageManagerService
 import java.lang.reflect.Proxy
+import com.example.appsandbox.receiver.VirtualReceiverManager
+import com.example.appsandbox.stub.StubReceivers
 
 class ActivityManagerAdapter(
     private val context: Context,
@@ -30,6 +32,7 @@ class ActivityManagerAdapter(
         }
         val iface = Class.forName(interfaceName)
         val registry = MethodPolicyRegistry()
+        val receivers = VirtualReceiverManager()
         registry.register("getContentProvider") { context, physical ->
             val rewritten = IdentityPolicy(identity).rewritePackageUidAt(context.args, setOf(1), emptySet())
             val result = physical(rewritten)
@@ -46,6 +49,33 @@ class ActivityManagerAdapter(
                 val rewritten = IdentityPolicy(identity).rewritePackageUidAt(context.args, emptySet(), setOf(2))
                 identityBridge.logIdentityRewrite(serviceName, context.methodName, "PHYSICAL_UID_FOR_SYSTEM")
                 BinderCallResult(physical(rewritten), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
+            }
+        }
+        setOf("broadcastIntent", "broadcastIntentWithFeature", "broadcastIntentWithFeatureAsUser").forEach { name ->
+            registry.register(name) { call, physical ->
+                val index = call.args.indexOfFirst { it is android.content.Intent }
+                val original = call.args.getOrNull(index) as? android.content.Intent
+                val component = original?.component
+                val guest = component != null && component.packageName == identity.guestPackageName
+                if (!guest || original == null || index < 0) {
+                    BinderCallStats.record(serviceName, name)
+                    return@register BinderCallResult(physical(call.args), BinderRoute.PHYSICAL, IdentityDecision.PASSTHROUGH)
+                }
+                val guestComponent = requireNotNull(component)
+                val info = packageService.getReceiverInfo(guestComponent) ?: return@register BinderCallResult(physical(call.args), BinderRoute.PHYSICAL, IdentityDecision.PASSTHROUGH)
+                val stub = StubReceivers.intent(context, identity.processSlot).component ?: return@register BinderCallResult(physical(call.args), BinderRoute.PHYSICAL, IdentityDecision.PASSTHROUGH)
+                val delivery = receivers.createDelivery(identity.instanceId, original, info, stub)
+                val routed = android.content.Intent(original).apply {
+                    this.component = stub
+                    putExtra("com.example.appsandbox.receiver.DELIVERY_ID", delivery.id)
+                }
+                val args = call.args.copyOf().apply {
+                    this[index] = routed
+                    indices.filter { call.method.parameterTypes[it] == String::class.java && this[it] == identity.guestPackageName }
+                        .forEach { this[it] = identity.hostPackageName }
+                }
+                Log.i("AppSandbox.M8", "VRECEIVER event=ROUTE method=$name instance=${identity.instanceId} guest=${guestComponent.flattenToShortString()} stub=${stub.flattenToShortString()} delivery=${delivery.id}")
+                BinderCallResult(physical(args), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
             }
         }
         setOf("startService", "startForegroundService", "stopService", "bindService", "bindServiceInstance", "bindIsolatedService").forEach { name ->

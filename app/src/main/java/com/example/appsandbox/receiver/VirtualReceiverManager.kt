@@ -2,6 +2,10 @@ package com.example.appsandbox.receiver
 
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
+import android.content.Intent
+import android.content.ComponentName
+import android.content.pm.ActivityInfo
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /** Instance-scoped receiver ownership. Delivery is intentionally delegated to Android. */
@@ -16,8 +20,10 @@ class VirtualReceiverManager {
         val flags: Int,
         val permission: String?
     )
+    data class Delivery(val id: String, val instanceId: String, val guestIntent: Intent, val guestInfo: ActivityInfo, val stub: ComponentName)
 
     private val registrations = ConcurrentHashMap<Key, Registration>()
+    private val deliveries = ConcurrentHashMap<String, Delivery>()
 
     fun register(registration: Registration): Registration {
         registrations[registration.key] = registration
@@ -39,4 +45,17 @@ class VirtualReceiverManager {
     }
 
     fun size(instanceId: String? = null): Int = if (instanceId == null) registrations.size else registrations.keys.count { it.instanceId == instanceId }
+
+    fun createDelivery(instanceId: String, intent: Intent, info: ActivityInfo, stub: ComponentName): Delivery {
+        val delivery = Delivery(UUID.randomUUID().toString(), instanceId, Intent(intent), ActivityInfo(info), stub)
+        deliveries[delivery.id] = delivery
+        return delivery
+    }
+    fun delivery(id: String, instanceId: String): Delivery? = deliveries[id]?.takeIf { it.instanceId == instanceId }
+    fun finishDelivery(id: String) { deliveries.remove(id) }
+    fun pending(instanceId: String? = null): Int = if (instanceId == null) deliveries.size else deliveries.values.count { it.instanceId == instanceId }
+    fun removeInstanceDeliveries(instanceId: String): Int {
+        val ids = deliveries.values.filter { it.instanceId == instanceId }.map { it.id }
+        ids.forEach(deliveries::remove); return ids.size
+    }
 }

@@ -23,4 +23,5 @@ object StubReceivers {
         P3Receiver::class.java, P4Receiver::class.java, P5Receiver::class.java,
         P6Receiver::class.java, P7Receiver::class.java, P8Receiver::class.java)
     fun component(slot: Int) = classes.getOrElse(slot) { error("stub receiver p$slot is out of range") }
+    fun intent(context: Context, slot: Int) = Intent(context, component(slot))
 }
