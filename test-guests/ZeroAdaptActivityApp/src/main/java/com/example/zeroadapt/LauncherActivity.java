@@ -115,6 +115,9 @@ public final class LauncherActivity extends Activity {
                     + " queryImplicit=" + implicitCount + " uidPackages=" + java.util.Arrays.toString(uidPackages)
                     + " visiblePackages=" + visiblePackages.size() + "/" + visiblePackages.get(0).packageName
                     + " missingNotFound=" + missingNotFound + " signing=" + (pkg.signingInfo != null));
+            Log.i("ZeroAdapt", "CONTEXT_DATA activity=" + getDataDir()
+                    + " application=" + getApplication().getDataDir()
+                    + " pm=" + app.dataDir + " pmDp=" + app.deviceProtectedDataDir);
         } catch (Exception error) {
             Log.e("ZeroAdapt", "PM_SELF failed", error);
             throw new IllegalStateException(error);

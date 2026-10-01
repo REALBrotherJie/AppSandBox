@@ -1,6 +1,7 @@
 package com.example.zeroadapt;
 
 import android.app.Application;
+import android.content.Context;
 import android.util.Log;
 import android.content.SharedPreferences;
 import android.database.sqlite.SQLiteDatabase;
@@ -27,6 +28,15 @@ public final class ZeroAdaptApplication extends Application {
             }.getWritableDatabase();
             db.execSQL("INSERT INTO records(value) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM records)", new Object[]{value});
             db.close();
+            Context dp = createDeviceProtectedStorageContext();
+            dp.getSharedPreferences("device_account", MODE_PRIVATE).edit().putString("value", value).commit();
+            try (FileOutputStream out = new FileOutputStream(new File(dp.getFilesDir(), "probe.txt"))) {
+                out.write(value.getBytes(StandardCharsets.UTF_8));
+            }
+            Log.i("ZeroAdapt", "DP_PROBE deviceProtected=" + dp.isDeviceProtectedStorage()
+                    + " dataDir=" + dp.getDataDir() + " filesDir=" + dp.getFilesDir()
+                    + " appInfoData=" + dp.getApplicationInfo().dataDir
+                    + " appInfoDp=" + dp.getApplicationInfo().deviceProtectedDataDir);
         } catch (Exception error) { Log.e("ZeroAdapt", "DATA_PROBE write failed", error); }
         Log.i("ZeroAdapt", "DATA_PROBE package=" + getPackageName() + " value=" + value
                 + " filesDir=" + getFilesDir() + " cacheDir=" + getCacheDir()
