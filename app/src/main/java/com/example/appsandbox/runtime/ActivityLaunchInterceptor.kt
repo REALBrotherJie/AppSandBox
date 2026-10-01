@@ -51,6 +51,8 @@ class ActivityLaunchInterceptor(private val context: android.content.Context) {
                 runCatching {
                     val intentField = findField(data.javaClass, "intent")
                     val infoField = findField(data.javaClass, "info")
+                    intentField.isAccessible = true
+                    infoField.isAccessible = true
                     intentField.set(data, android.content.Intent(delivery.guestIntent).apply {
                         component = android.content.ComponentName(delivery.guestInfo.packageName, delivery.guestInfo.name)
                         setExtrasClassLoader(Thread.currentThread().contextClassLoader)

@@ -79,6 +79,8 @@ class GuestProcessBootstrap(private val context: Context) {
         }
         Log.i(TAG, "guest-provider-metadata package=${envelope.packageName} providers=${providers.map { it.name + ":" + it.authority }}")
         val runtime = preparation.prepare(providers.toTypedArray())
+        val contentRefresh = binderManager.refreshContentService()
+        require(contentRefresh.installed) { "ContentService refresh failed: ${contentRefresh.failureReason}" }
         Log.i(TAG, "bootstrap guest-runtime application=${runtime.application.javaClass.name} context=${runtime.context.javaClass.name} providers=${runtime.installedProviders}")
         info.applicationInfo.className = app.className
         val restored = Intent(envelope.originalIntent).apply {

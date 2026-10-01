@@ -5,6 +5,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** Registry for framework-installed Guest providers. It never invokes provider callbacks itself. */
 class VirtualProviderManager {
+    companion object { val GLOBAL = VirtualProviderManager() }
     data class Key(val instanceId: String, val authority: String)
     data class Record(
         val key: Key,
@@ -27,4 +28,5 @@ class VirtualProviderManager {
     }
     fun size(instanceId: String? = null): Int = if (instanceId == null) records.size else records.keys.count { it.instanceId == instanceId }
     fun snapshot(instanceId: String): List<Record> = records.values.filter { it.key.instanceId == instanceId }
+    fun ownsAuthority(instanceId: String, authority: String?): Boolean = authority != null && find(instanceId, authority) != null
 }

@@ -10,6 +10,7 @@ import android.content.res.Resources
 import java.io.File
 import com.example.appsandbox.identity.RuntimeIdentity
 import com.example.appsandbox.platform.ProviderPlatformBridge
+import com.example.appsandbox.provider.VirtualProviderManager
 
 class GuestRuntimePreparation(
     private val host: Context,
@@ -36,7 +37,13 @@ class GuestRuntimePreparation(
                 this.applicationInfo.sourceDir = applicationInfo.sourceDir
                 this.name = info.name
             }
-            ProviderPlatformBridge.installLocalProvider(activityThread, guestContext, overlay)
+            val holder = ProviderPlatformBridge.installLocalProvider(activityThread, guestContext, overlay)
+            overlay.authority.split(';').forEach { authority ->
+                VirtualProviderManager.GLOBAL.install(VirtualProviderManager.Record(
+                    VirtualProviderManager.Key(identity.instanceId, authority), identity.guestPackageName,
+                    identity.virtualUid, ProviderInfo(overlay), holder
+                ))
+            }
             info.name
         }
         instrumentation.callApplicationOnCreate(application)

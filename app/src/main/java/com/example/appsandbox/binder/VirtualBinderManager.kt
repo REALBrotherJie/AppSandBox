@@ -18,11 +18,13 @@ class VirtualBinderManager(
 ) {
     private val identityBridge = SystemIdentityBridge(identity)
     private val content = ContentProviderIdentityAdapter(identity, identityBridge)
+    private val contentService = ContentServiceAdapter(context, identity, identityBridge, vpm)
     private val adapters = BinderAdapterRegistry(listOf(
         GuestPackageManagerBridge(identity, vpm, activityThread),
         ActivityManagerAdapter(context, identity, identityBridge, content, vpm),
         GuestActivityStartBridge(context, identity, activityManager),
         AppOpsAdapter(context, identity, identityBridge)
+        , contentService
         , NotificationIdentityAdapter(identity)
     ))
 
@@ -34,4 +36,5 @@ class VirtualBinderManager(
     }
 
     fun identityBridge(): SystemIdentityBridge = identityBridge
+    fun refreshContentService(): AdapterInstallResult = contentService.install()
 }
