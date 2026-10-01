@@ -27,13 +27,15 @@ class GuestRuntimePreparation(
 ) {
     data class Result(val application: Application, val context: Context, val installedProviders: List<String>)
 
-    fun prepare(providers: Array<ProviderInfo>): Result {
+    fun prepare(providers: Array<ProviderInfo>, logicalProcessName: String = identity.guestPackageName): Result {
         val guestContext = GuestContext(host, loader, resources, applicationInfo, dataRoot)
         val appClass = applicationInfo.className?.takeIf { it.isNotBlank() } ?: Application::class.java.name
         val application = instrumentation.newApplication(loader, appClass, guestContext)
         guestContext.bindApplication(application)
         bindApplication(application)
-        val installed = providers.filter { it.processName.isNullOrBlank() || it.processName == applicationInfo.processName || it.processName == identity.guestPackageName }.map { info ->
+        val installed = providers.filter {
+            VirtualProcessKey.canonicalProcessName(identity.guestPackageName, it.processName) == logicalProcessName
+        }.map { info ->
             val overlay = ProviderInfo(info).apply {
                 packageName = identity.guestPackageName
                 applicationInfo = ApplicationInfo(applicationInfo)

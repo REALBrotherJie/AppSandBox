@@ -10,6 +10,8 @@ import java.lang.reflect.Proxy
 import com.example.appsandbox.stub.StubReceivers
 import com.example.appsandbox.receiver.BroadcastSessionClient
 import com.example.appsandbox.receiver.BroadcastSessionProvider
+import com.example.appsandbox.runtime.VirtualProcessCoordinatorClient
+import com.example.appsandbox.runtime.VirtualProcessKey
 
 class ActivityManagerAdapter(
     private val context: Context,
@@ -52,6 +54,26 @@ class ActivityManagerAdapter(
             }
         }
         registry.register("getContentProvider") { context, physical ->
+            val authority = context.args.firstOrNull { it is String && packageService.ownsProviderAuthority(it) } as? String
+            val remoteInfo = authority?.let(packageService::getProviderInfo)?.takeIf {
+                VirtualProcessKey.canonicalProcessName(identity.guestPackageName, it.processName) != identity.guestPackageName
+            }
+            if (remoteInfo != null) {
+                val route = VirtualProcessCoordinatorClient.ensureProvider(this.context, identity.instanceId, remoteInfo)
+                val binder = requireNotNull(route.providerBinder) { "remote provider returned no Transport Binder" }
+                val holderType = Class.forName("android.app.ContentProviderHolder")
+                val holder = holderType.getDeclaredConstructor(android.content.pm.ProviderInfo::class.java)
+                    .apply { isAccessible = true }.newInstance(remoteInfo)
+                val providerFactory = sequenceOf("android.content.ContentProviderNative", "android.content.IContentProvider\$Stub")
+                    .mapNotNull { runCatching { Class.forName(it) }.getOrNull() }
+                    .mapNotNull { type -> runCatching { type.getDeclaredMethod("asInterface", android.os.IBinder::class.java).apply { isAccessible = true } }.getOrNull() }
+                    .firstOrNull() ?: error("IContentProvider Binder factory unavailable")
+                val provider = providerFactory.invoke(null, binder)
+                holderType.getDeclaredField("provider").apply { isAccessible = true }.set(holder, provider)
+                runCatching { holderType.getDeclaredField("noReleaseNeeded").apply { isAccessible = true }.setBoolean(holder, true) }
+                Log.i("AppSandbox.M10", "REMOTE_PROVIDER_ROUTE authority=$authority slot=${route.slot} pid=${route.pid} generation=${route.generation}")
+                return@register BinderCallResult(providerAdapter.wrapHolder(holder), BinderRoute.VIRTUAL, IdentityDecision.VIRTUALIZE)
+            }
             val rewritten = IdentityPolicy(identity).rewritePackageUidAt(context.args, setOf(1), emptySet())
             val result = physical(rewritten)
             if (result != null) providerAdapter.wrapHolder(result)
@@ -105,11 +127,15 @@ class ActivityManagerAdapter(
                 val ordered = call.method.parameterTypes.indices
                     .firstOrNull { call.method.parameterTypes[it] == Boolean::class.javaPrimitiveType }
                     ?.let { call.args[it] as? Boolean } == true
-                val sessionId = BroadcastSessionClient.create(context, identity, original, infos, ordered)
+                val logicalProcesses = infos.map { VirtualProcessKey.canonicalProcessName(identity.guestPackageName, it.processName) }.distinct()
+                val targetSlot = if (logicalProcesses.size == 1 && logicalProcesses.single() != identity.guestPackageName) {
+                    VirtualProcessCoordinatorClient.ensureReceiver(context, identity.instanceId, infos.first()).slot
+                } else identity.processSlot
+                val sessionId = BroadcastSessionClient.create(context, identity, original, infos, ordered, targetSlot)
                 val routed = android.content.Intent().apply {
-                    if (infos.size == 1) this.component = StubReceivers.component(identity.processSlot, 1, 0)
+                    if (infos.size == 1) this.component = StubReceivers.component(targetSlot, 1, 0)
                     else {
-                        action = StubReceivers.action(identity.processSlot, infos.size)
+                        action = StubReceivers.action(targetSlot, infos.size)
                         setPackage(identity.hostPackageName)
                     }
                     putExtra(BroadcastSessionProvider.EXTRA_SESSION_ID, sessionId)
@@ -119,7 +145,7 @@ class ActivityManagerAdapter(
                     indices.filter { call.method.parameterTypes[it] == String::class.java && this[it] == identity.guestPackageName }
                         .forEach { this[it] = identity.hostPackageName }
                 }
-                Log.i("AppSandbox.M8", "VRECEIVER event=SESSION_ROUTE method=$name instance=${identity.instanceId} session=$sessionId ordered=$ordered guests=${infos.map { it.name }} action=${routed.action} component=${routed.component}")
+                Log.i("AppSandbox.M8", "VRECEIVER event=SESSION_ROUTE method=$name instance=${identity.instanceId} session=$sessionId ordered=$ordered slot=$targetSlot logicalProcesses=$logicalProcesses guests=${infos.map { it.name }} action=${routed.action} component=${routed.component}")
                 BinderCallResult(physical(args), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
             }
         }

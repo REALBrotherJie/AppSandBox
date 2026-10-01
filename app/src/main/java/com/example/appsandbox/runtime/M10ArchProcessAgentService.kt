@@ -5,6 +5,8 @@ import android.app.Service
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.content.pm.ActivityInfo
+import android.content.pm.ProviderInfo
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
@@ -20,7 +22,7 @@ import com.example.appsandbox.service.VirtualServiceRuntime
 import com.example.appsandbox.stub.P2Service
 
 /** Minimal architecture-review endpoint. Global lifecycle ownership remains in the coordinator. */
-class M10ArchProcessAgentService : Service() {
+abstract class BaseProcessAgentService(private val declaredSlot: Int) : Service() {
     private var generation = -1L
     private var key: VirtualProcessKey? = null
     private val messenger = Messenger(Handler(Looper.getMainLooper(), ::handle))
@@ -45,8 +47,8 @@ class M10ArchProcessAgentService : Service() {
         val data = message.data
         val slot = data.getInt(M10ArchProtocol.KEY_SLOT)
         val actualSlot = Regex(":p(\\d+)$").find(Application.getProcessName())?.groupValues?.get(1)?.toInt() ?: -1
-        require(slot == actualSlot) { "agent slot mismatch expected=$slot actual=$actualSlot" }
-        val serviceInfo = requireNotNull(data.parcelable<ServiceInfo>(M10ArchProtocol.KEY_SERVICE_INFO))
+        require(slot == actualSlot && slot == declaredSlot) { "agent slot mismatch expected=$slot actual=$actualSlot declared=$declaredSlot" }
+        val componentKind = requireNotNull(data.getString(M10ArchProtocol.KEY_COMPONENT_KIND))
         val packageName = requireNotNull(data.getString(M10ArchProtocol.KEY_PACKAGE))
         val instanceId = requireNotNull(data.getString(M10ArchProtocol.KEY_INSTANCE))
         generation = data.getLong(M10ArchProtocol.KEY_GENERATION)
@@ -54,19 +56,40 @@ class M10ArchProcessAgentService : Service() {
             data.getLong(M10ArchProtocol.KEY_REVISION), packageName, instanceId,
             requireNotNull(data.getString(M10ArchProtocol.KEY_LOGICAL_PROCESS))
         )
-        val prepared = GuestProcessBootstrap(applicationContext).prepareService(packageName, instanceId, slot, serviceInfo)
-        val stub = ComponentName(this, P2Service::class.java)
-        VirtualServiceRuntime.registerAgentRoute(VirtualServiceRecord(
-            VirtualServiceKey(packageName, instanceId, ComponentName(packageName, serviceInfo.name)),
-            RuntimeIdentity.create(this, packageName, instanceId, slot).virtualUidNumber,
-            prepared, stub, lastStartId = generation.toInt()
-        ))
+        val bootstrap = GuestProcessBootstrap(applicationContext)
+        var providerBinder: IBinder? = null
+        when (componentKind) {
+            M10ArchProtocol.COMPONENT_SERVICE -> {
+                val serviceInfo = requireNotNull(data.parcelable<ServiceInfo>(M10ArchProtocol.KEY_SERVICE_INFO))
+                val prepared = bootstrap.prepareService(packageName, instanceId, slot, serviceInfo)
+                val stub = requireNotNull(com.example.appsandbox.stub.StubServices.intent(this, slot).component)
+                VirtualServiceRuntime.registerAgentRoute(VirtualServiceRecord(
+                    VirtualServiceKey(packageName, instanceId, ComponentName(packageName, serviceInfo.name)),
+                    RuntimeIdentity.create(this, packageName, instanceId, slot).virtualUidNumber,
+                    prepared, stub, lastStartId = generation.toInt()
+                ))
+            }
+            M10ArchProtocol.COMPONENT_RECEIVER -> bootstrap.prepareReceiverRuntime(
+                packageName,
+                instanceId,
+                slot,
+                requireNotNull(data.parcelable<ActivityInfo>(M10ArchProtocol.KEY_RECEIVER_INFO))
+            )
+            M10ArchProtocol.COMPONENT_PROVIDER -> providerBinder = bootstrap.prepareProvider(
+                packageName,
+                instanceId,
+                slot,
+                requireNotNull(data.parcelable<ProviderInfo>(M10ArchProtocol.KEY_PROVIDER_INFO))
+            )
+            else -> error("unsupported process component kind=$componentKind")
+        }
         Log.i(TAG, "AGENT_READY slot=$slot pid=${Process.myPid()} generation=$generation key=$key native=BOUND webView=CONFIGURED")
         reply(message, Bundle().apply {
             putBoolean(M10ArchProtocol.KEY_READY, true)
             putInt(M10ArchProtocol.KEY_PID, Process.myPid())
             putInt(M10ArchProtocol.KEY_SLOT, slot)
             putLong(M10ArchProtocol.KEY_GENERATION, generation)
+            providerBinder?.let { putBinder(M10ArchProtocol.KEY_PROVIDER_BINDER, it) }
         })
     }
 
@@ -76,6 +99,16 @@ class M10ArchProcessAgentService : Service() {
 
     companion object { private const val TAG = "AppSandbox.M10.Arch" }
 }
+
+class P0ProcessAgent : BaseProcessAgentService(0)
+class P1ProcessAgent : BaseProcessAgentService(1)
+class P2ProcessAgent : BaseProcessAgentService(2)
+class P3ProcessAgent : BaseProcessAgentService(3)
+class P4ProcessAgent : BaseProcessAgentService(4)
+class P5ProcessAgent : BaseProcessAgentService(5)
+class P6ProcessAgent : BaseProcessAgentService(6)
+class P7ProcessAgent : BaseProcessAgentService(7)
+class P8ProcessAgent : BaseProcessAgentService(8)
 
 object M10ArchProtocol {
     const val MSG_BIND_PROCESS = 1
@@ -92,6 +125,13 @@ object M10ArchProtocol {
     const val KEY_READY = "ready"
     const val KEY_REJECTED = "rejected"
     const val KEY_SERVICE_INFO = "serviceInfo"
+    const val KEY_RECEIVER_INFO = "receiverInfo"
+    const val KEY_PROVIDER_INFO = "providerInfo"
+    const val KEY_PROVIDER_BINDER = "providerBinder"
+    const val KEY_COMPONENT_KIND = "componentKind"
+    const val COMPONENT_SERVICE = "service"
+    const val COMPONENT_RECEIVER = "receiver"
+    const val COMPONENT_PROVIDER = "provider"
 
 }
 

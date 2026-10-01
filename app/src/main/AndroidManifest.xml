@@ -16,8 +16,17 @@
             </intent-filter>
         </activity>
         <service android:name=".runtime.GuestRuntimeService" android:exported="false" android:process=":vs" />
-        <service android:name=".runtime.M10ArchProcessAgentService" android:exported="false" android:process=":p2" />
+        <service android:name=".runtime.P0ProcessAgent" android:exported="false" android:process=":p0" />
+        <service android:name=".runtime.P1ProcessAgent" android:exported="false" android:process=":p1" />
+        <service android:name=".runtime.P2ProcessAgent" android:exported="false" android:process=":p2" />
+        <service android:name=".runtime.P3ProcessAgent" android:exported="false" android:process=":p3" />
+        <service android:name=".runtime.P4ProcessAgent" android:exported="false" android:process=":p4" />
+        <service android:name=".runtime.P5ProcessAgent" android:exported="false" android:process=":p5" />
+        <service android:name=".runtime.P6ProcessAgent" android:exported="false" android:process=":p6" />
+        <service android:name=".runtime.P7ProcessAgent" android:exported="false" android:process=":p7" />
+        <service android:name=".runtime.P8ProcessAgent" android:exported="false" android:process=":p8" />
         <provider android:name=".receiver.BroadcastSessionProvider" android:authorities="${applicationId}.receiver.sessions" android:exported="false" android:process=":vs" />
+        <provider android:name=".runtime.VirtualProcessCoordinatorProvider" android:authorities="${applicationId}.process.coordinator" android:exported="false" android:process=":vs" />
         <receiver android:name=".stub.P0ReceiverN2R0" android:exported="false" android:process=":p0">
             <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P0_N2" /></intent-filter>
         </receiver>

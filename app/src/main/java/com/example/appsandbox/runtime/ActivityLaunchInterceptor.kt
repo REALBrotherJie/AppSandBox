@@ -151,7 +151,9 @@ class ActivityLaunchInterceptor(private val context: android.content.Context) {
     private fun findField(type: Class<*>, name: String): Field =
         generateSequence(type) { it.superclass }.mapNotNull { runCatching { it.getDeclaredField(name) }.getOrNull() }.first()
 
-    private fun processSlot(): Int = Regex(":p(\\d+)$").find(android.app.Application.getProcessName())
+    private fun processSlot(): Int = Regex(":p(\\d+)$").find(runCatching {
+        java.io.File("/proc/self/cmdline").readText().trim { it <= ' ' || it == '\u0000' }
+    }.getOrDefault(android.app.Application.getProcessName()))
         ?.groupValues?.get(1)?.toInt() ?: -1
 
     private fun failure(error: Throwable) = PlatformProbe(

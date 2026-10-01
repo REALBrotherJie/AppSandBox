@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.pm.ServiceInfo
+import android.content.pm.ProviderInfo
+import android.os.IBinder
 import android.os.Process
 import android.util.Log
 import com.example.appsandbox.virtual.LaunchEnvelope
@@ -65,6 +67,49 @@ class GuestProcessBootstrap(private val context: Context) {
             // ActivityThread needs the physical process package binding; logical identity remains in the agent record.
             processName = prepared.activityInfo.processName
         }
+    }
+
+    fun prepareReceiverRuntime(packageName: String, instanceId: String, processSlot: Int, receiverInfo: ActivityInfo) {
+        val root = InstanceStorageManager(context, instanceId).root.path
+        prepare(
+            LaunchEnvelope(
+                packageName,
+                instanceId,
+                android.content.ComponentName(packageName, receiverInfo.name),
+                Intent().setComponent(android.content.ComponentName(packageName, receiverInfo.name)),
+                receiverInfo,
+                processSlot,
+                "receiver-agent",
+                root
+            ),
+            activityLaunch = false,
+            bindGuestApplication = false
+        )
+    }
+
+    fun prepareProvider(packageName: String, instanceId: String, processSlot: Int, providerInfo: ProviderInfo): IBinder {
+        val anchor = ActivityInfo().apply {
+            name = providerInfo.name
+            this.packageName = packageName
+            processName = providerInfo.processName
+            applicationInfo = ApplicationInfo(requireNotNull(providerInfo.applicationInfo))
+        }
+        val root = InstanceStorageManager(context, instanceId).root.path
+        prepare(
+            LaunchEnvelope(packageName, instanceId, android.content.ComponentName(packageName, providerInfo.name),
+                Intent(), anchor, processSlot, "provider-agent", root),
+            activityLaunch = false,
+            bindGuestApplication = true
+        )
+        val authority = providerInfo.authority.substringBefore(';')
+        val holder = requireNotNull(com.example.appsandbox.provider.VirtualProviderManager.GLOBAL.find(instanceId, authority)?.provider) {
+            "remote provider was not installed authority=$authority"
+        }
+        val field = generateSequence(holder.javaClass) { it.superclass }
+            .mapNotNull { runCatching { it.getDeclaredField("provider").apply { isAccessible = true } }.getOrNull() }
+            .first()
+        val transport = requireNotNull(field.get(holder))
+        return transport.javaClass.methods.first { it.name == "asBinder" && it.parameterCount == 0 }.invoke(transport) as IBinder
     }
 
     @Synchronized
@@ -156,11 +201,12 @@ class GuestProcessBootstrap(private val context: Context) {
             }.onFailure { Log.w(TAG, "provider metadata fallback failed package=${envelope.packageName}", it) }
         }
         Log.i(TAG, "guest-provider-metadata package=${envelope.packageName} providers=${providers.map { it.name + ":" + it.authority }}")
-        val runtime = preparation.prepare(providers.toTypedArray())
+        val runtime = preparation.prepare(providers.toTypedArray(), logicalProcessName)
         runtimeStates[envelope.instanceId] = RuntimeState(loader, ApplicationInfo(app), runtime.application)
         val contentRefresh = binderManager.refreshContentService()
         require(contentRefresh.installed) { "ContentService refresh failed: ${contentRefresh.failureReason}" }
         Log.i(TAG, "bootstrap guest-runtime application=${runtime.application.javaClass.name} context=${runtime.context.javaClass.name} providers=${runtime.installedProviders}")
+        publishLogicalProcessName(thread, logicalProcessName)
         info.applicationInfo.className = app.className
         val restored = Intent(envelope.originalIntent).apply {
             component = envelope.target
@@ -172,6 +218,22 @@ class GuestProcessBootstrap(private val context: Context) {
             "application=${app.className} activity=${info.name} guestLoader=$loader resources=$resources")
         return PreparedLaunch(restored, info)
     }
+
+    private fun publishLogicalProcessName(activityThread: Any, logicalProcessName: String) {
+        val boundField = generateSequence(activityThread.javaClass) { it.superclass }
+            .mapNotNull { runCatching { it.getDeclaredField("mBoundApplication").apply { isAccessible = true } }.getOrNull() }
+            .firstOrNull() ?: return
+        val bound = boundField.get(activityThread) ?: return
+        val processField = generateSequence(bound.javaClass) { it.superclass }
+            .mapNotNull { runCatching { it.getDeclaredField("processName").apply { isAccessible = true } }.getOrNull() }
+            .firstOrNull() ?: return
+        processField.set(bound, logicalProcessName)
+        Log.i("AppSandbox.M10", "LOGICAL_PROCESS_NAME published=$logicalProcessName physical=${physicalProcessName()}")
+    }
+
+    private fun physicalProcessName(): String = runCatching {
+        File("/proc/self/cmdline").readText().trim { it <= ' ' || it == '\u0000' }
+    }.getOrDefault(context.packageName)
 
     private data class RuntimeState(val loader: ClassLoader, val applicationInfo: ApplicationInfo, val application: android.app.Application)
 

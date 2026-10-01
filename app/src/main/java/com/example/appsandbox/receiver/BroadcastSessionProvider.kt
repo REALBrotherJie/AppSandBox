@@ -150,12 +150,12 @@ data class ReceiverSessionDelivery(
 object BroadcastSessionClient {
     private fun uri(context: Context) = Uri.parse("content://${context.packageName}${BroadcastSessionProvider.AUTHORITY_SUFFIX}")
 
-    fun create(context: Context, identity: RuntimeIdentity, intent: Intent, infos: List<ActivityInfo>, ordered: Boolean): String {
+    fun create(context: Context, identity: RuntimeIdentity, intent: Intent, infos: List<ActivityInfo>, ordered: Boolean, slot: Int = identity.processSlot): String {
         val request = Bundle().apply {
             putString(BroadcastSessionProvider.KEY_PACKAGE, identity.guestPackageName)
             putString(BroadcastSessionProvider.KEY_INSTANCE, identity.instanceId)
             putString(BroadcastSessionProvider.KEY_VIRTUAL_UID, identity.virtualUid)
-            putInt(BroadcastSessionProvider.KEY_SLOT, identity.processSlot)
+            putInt(BroadcastSessionProvider.KEY_SLOT, slot)
             putBoolean(BroadcastSessionProvider.KEY_ORDERED, ordered)
             putInt(BroadcastSessionProvider.KEY_COUNT, infos.size)
             putParcelable(BroadcastSessionProvider.KEY_INTENT, Intent(intent))

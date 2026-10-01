@@ -49,7 +49,7 @@ class M10ArchitectureProbeCoordinator(private val context: Context) {
             override fun onServiceDisconnected(name: ComponentName) = agentDied()
         }
         agentConnection = connection
-        check(context.bindService(Intent(context, M10ArchProcessAgentService::class.java), connection, Context.BIND_AUTO_CREATE))
+        check(context.bindService(Intent(context, P2ProcessAgent::class.java), connection, Context.BIND_AUTO_CREATE))
     }
 
     private fun sendBind() {
@@ -63,6 +63,7 @@ class M10ArchitectureProbeCoordinator(private val context: Context) {
                 putLong(M10ArchProtocol.KEY_REVISION, File(info.applicationInfo.sourceDir).lastModified())
                 putLong(M10ArchProtocol.KEY_GENERATION, generation)
                 putInt(M10ArchProtocol.KEY_SLOT, 2)
+                putString(M10ArchProtocol.KEY_COMPONENT_KIND, M10ArchProtocol.COMPONENT_SERVICE)
                 putParcelable(M10ArchProtocol.KEY_SERVICE_INFO, info)
             }
             replyTo = Messenger(Handler(Looper.getMainLooper()) { reply ->

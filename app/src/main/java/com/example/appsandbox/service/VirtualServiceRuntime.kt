@@ -15,6 +15,8 @@ import android.util.Log
 import com.example.appsandbox.identity.RuntimeIdentity
 import com.example.appsandbox.stub.StubServices
 import com.example.appsandbox.vpm.VirtualPackageManagerService
+import com.example.appsandbox.runtime.VirtualProcessCoordinatorClient
+import com.example.appsandbox.runtime.VirtualProcessKey
 import java.lang.reflect.Field
 import java.util.concurrent.ConcurrentHashMap
 
@@ -54,7 +56,14 @@ object VirtualServiceRuntime {
         val component = original.component ?: return null
         if (component.packageName != identity.guestPackageName) return null
         val info = vpm.getServiceInfo(component) ?: return null
-        if (info.processName?.endsWith(":remote") == true) return null
+        val logicalProcess = VirtualProcessKey.canonicalProcessName(identity.guestPackageName, info.processName)
+        if (logicalProcess != identity.guestPackageName) {
+            val route = VirtualProcessCoordinatorClient.ensureService(context, identity.instanceId, info)
+            val stub = requireNotNull(StubServices.intent(context, route.slot).component)
+            Log.i("AppSandbox.M10", "REMOTE_SERVICE_ROUTE package=${identity.guestPackageName} instance=${identity.instanceId} " +
+                "logicalProcess=$logicalProcess slot=${route.slot} pid=${route.pid} generation=${route.generation} transaction=${route.transactionId}")
+            return routedProbeIntent(stub, original)
+        }
         val key = VirtualServiceKey(identity.guestPackageName, identity.instanceId, component)
         val index = allocations.computeIfAbsent(key) {
             val used = allocations.filterKeys { existing -> existing.packageName == key.packageName && existing.instanceId == key.instanceId }.values.toSet()

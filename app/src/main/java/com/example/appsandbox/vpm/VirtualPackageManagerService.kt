@@ -17,6 +17,8 @@ class VirtualPackageManagerService(
     fun getServiceInfo(component: ComponentName): ServiceInfo? = getPackageInfo(component.packageName)?.services?.firstOrNull { it.name == component.className }
     fun getReceiverInfo(component: ComponentName): ActivityInfo? = getPackageInfo(component.packageName)?.receivers?.firstOrNull { it.name == component.className }
     fun getProviderInfo(component: ComponentName): ProviderInfo? = getPackageInfo(component.packageName)?.providers?.firstOrNull { it.name == component.className }
+    fun getProviderInfo(authority: String): ProviderInfo? = getPackageInfo(identity.guestPackageName)?.providers
+        ?.firstOrNull { authority in it.authority.orEmpty().split(';') }
     fun ownsProviderAuthority(authority: String?): Boolean = authority != null &&
         source.providers.orEmpty().any { provider -> provider.authority?.split(';')?.contains(authority) == true }
     fun getPackagesForUid(uid: Int): Array<String>? = if (uid == identity.virtualUidNumber) arrayOf(identity.guestPackageName) else null
