@@ -28,7 +28,7 @@ class VirtualInstanceDeletionManager(
             }
         val slot = registered.processSlot
         val conflicts = registry.readAll().flatMap { it.instances.values }
-            .filter { it.processSlot == slot && it.instanceId != instanceId }
+            .filter { it.instanceId != instanceId && pool.query(it.instanceId) == slot }
         check(conflicts.isEmpty()) { "stub slot p$slot belongs to another instance" }
         val processName = "${context.packageName}:p$slot"
         val process = (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager)
