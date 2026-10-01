@@ -27,9 +27,7 @@ class GuestRuntimePreparation(
         val guestContext = GuestContext(host, loader, resources, applicationInfo, dataRoot)
         val appClass = applicationInfo.className?.takeIf { it.isNotBlank() } ?: Application::class.java.name
         val application = instrumentation.newApplication(loader, appClass, guestContext)
-        val attach = Application::class.java.getDeclaredMethod("attach", Context::class.java).apply { isAccessible = true }
-        attach.invoke(application, guestContext)
-        val installed = providers.filter { it.processName.isNullOrBlank() || it.processName == applicationInfo.processName }.map { info ->
+        val installed = providers.filter { it.processName.isNullOrBlank() || it.processName == applicationInfo.processName || it.processName == identity.guestPackageName }.map { info ->
             val overlay = ProviderInfo(info).apply {
                 packageName = identity.guestPackageName
                 applicationInfo = ApplicationInfo(applicationInfo)

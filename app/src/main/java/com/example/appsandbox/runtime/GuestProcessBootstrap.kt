@@ -69,7 +69,16 @@ class GuestProcessBootstrap(private val context: Context) {
             field.get(thread) as android.app.Instrumentation
         }
         val preparation = GuestRuntimePreparation(context, identity, loader, resources, app, root, thread, guestInstrumentation)
-        val runtime = preparation.prepare(packageInfo.providers?.map { android.content.pm.ProviderInfo(it) }?.toTypedArray() ?: emptyArray())
+        val providers = packageInfo.providers?.map { android.content.pm.ProviderInfo(it) }?.toMutableList() ?: mutableListOf()
+        if (providers.isEmpty()) {
+            runCatching {
+                @Suppress("DEPRECATION")
+                context.packageManager.queryContentProviders(null, 0, android.content.pm.PackageManager.GET_META_DATA)
+                    .orEmpty().filter { it.packageName == envelope.packageName }.forEach { providers += android.content.pm.ProviderInfo(it) }
+            }.onFailure { Log.w(TAG, "provider metadata fallback failed package=${envelope.packageName}", it) }
+        }
+        Log.i(TAG, "guest-provider-metadata package=${envelope.packageName} providers=${providers.map { it.name + ":" + it.authority }}")
+        val runtime = preparation.prepare(providers.toTypedArray())
         Log.i(TAG, "bootstrap guest-runtime application=${runtime.application.javaClass.name} context=${runtime.context.javaClass.name} providers=${runtime.installedProviders}")
         info.applicationInfo.className = app.className
         val restored = Intent(envelope.originalIntent).apply {
