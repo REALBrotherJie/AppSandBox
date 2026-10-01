@@ -64,6 +64,13 @@ class GuestProcessBootstrap(private val context: Context) {
         }
         val resources = guestLoader.installLoadedApk(thread, loader, app.sourceDir, app)
         guestLoader.installInstrumentation(thread, loader, binderManager.identityBridge(), activityManager)
+        val guestInstrumentation = thread.javaClass.let { _ ->
+            val field = generateSequence(thread.javaClass) { it.superclass }.mapNotNull { runCatching { it.getDeclaredField("mInstrumentation") }.getOrNull() }.first().apply { isAccessible = true }
+            field.get(thread) as android.app.Instrumentation
+        }
+        val preparation = GuestRuntimePreparation(context, identity, loader, resources, app, root, thread, guestInstrumentation)
+        val runtime = preparation.prepare(packageInfo.providers?.map { android.content.pm.ProviderInfo(it) }?.toTypedArray() ?: emptyArray())
+        Log.i(TAG, "bootstrap guest-runtime application=${runtime.application.javaClass.name} context=${runtime.context.javaClass.name} providers=${runtime.installedProviders}")
         info.applicationInfo.className = app.className
         val restored = Intent(envelope.originalIntent).apply {
             component = envelope.target
