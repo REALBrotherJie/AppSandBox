@@ -16,6 +16,8 @@ import com.example.appsandbox.virtual.LaunchEnvelope
 import com.example.appsandbox.service.VirtualServiceRuntime
 import java.lang.reflect.Field
 import com.example.appsandbox.receiver.VirtualReceiverManager
+import com.example.appsandbox.receiver.BroadcastSessionClient
+import com.example.appsandbox.receiver.BroadcastSessionProvider
 
 class ActivityLaunchInterceptor(private val context: android.content.Context) {
     private val activityThreadBridge = ActivityThreadBridge()
@@ -44,7 +46,32 @@ class ActivityLaunchInterceptor(private val context: android.content.Context) {
         if (message.what == RECEIVER && message.obj != null) {
             val data = message.obj
             val before = ReceiverPlatformBridge.inspectReceiverData(data)
-            val intent = before["intent"]?.let { _ -> findField(data.javaClass, "intent").apply { isAccessible = true }.get(data) as? android.content.Intent }
+            val intentField = findField(data.javaClass, "intent").apply { isAccessible = true }
+            val infoField = findField(data.javaClass, "info").apply { isAccessible = true }
+            val intent = intentField.get(data) as? android.content.Intent
+            val physicalInfo = infoField.get(data) as? android.content.pm.ActivityInfo
+            val physicalReceiverName = physicalInfo?.name
+            val sessionId = intent?.getStringExtra(BroadcastSessionProvider.EXTRA_SESSION_ID)
+            val sessionDelivery = if (sessionId != null && physicalReceiverName != null) {
+                BroadcastSessionClient.consume(context, sessionId, physicalReceiverName)
+            } else null
+            if (sessionDelivery != null) {
+                runCatching {
+                    require(sessionDelivery.slot == processSlot()) { "receiver session slot mismatch expected=${sessionDelivery.slot} actual=${processSlot()}" }
+                    val prepared = bootstrap.prepareReceiver(
+                        sessionDelivery.packageName,
+                        sessionDelivery.instanceId,
+                        sessionDelivery.slot,
+                        sessionDelivery.intent,
+                        sessionDelivery.info,
+                        sessionDelivery.sessionId
+                    )
+                    intentField.set(data, prepared.intent)
+                    infoField.set(data, prepared.activityInfo)
+                    Log.i("AppSandbox.M8", "VRECEIVER_TX event=SESSION_RESTORE session=${sessionDelivery.sessionId} index=${sessionDelivery.index} ordered=${sessionDelivery.ordered} stub=$physicalReceiverName guest=${prepared.activityInfo.name} before=$before after=${ReceiverPlatformBridge.inspectReceiverData(data)}")
+                }.onFailure { Log.e("AppSandbox.M8", "VRECEIVER_TX event=SESSION_RESTORE_FAILED session=${sessionDelivery.sessionId}", it) }
+                return
+            }
             val deliveryId = intent?.getStringExtra("com.example.appsandbox.receiver.DELIVERY_ID")
             val delivery = deliveryId?.let(VirtualReceiverManager.GLOBAL::consume)
             if (delivery != null) {
@@ -123,6 +150,9 @@ class ActivityLaunchInterceptor(private val context: android.content.Context) {
 
     private fun findField(type: Class<*>, name: String): Field =
         generateSequence(type) { it.superclass }.mapNotNull { runCatching { it.getDeclaredField(name) }.getOrNull() }.first()
+
+    private fun processSlot(): Int = Regex(":p(\\d+)$").find(android.app.Application.getProcessName())
+        ?.groupValues?.get(1)?.toInt() ?: -1
 
     private fun failure(error: Throwable) = PlatformProbe(
         supported = false,

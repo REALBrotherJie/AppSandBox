@@ -7,8 +7,9 @@ import com.example.appsandbox.identity.RuntimeIdentity
 import com.example.appsandbox.identity.SystemIdentityBridge
 import com.example.appsandbox.vpm.VirtualPackageManagerService
 import java.lang.reflect.Proxy
-import com.example.appsandbox.receiver.VirtualReceiverManager
 import com.example.appsandbox.stub.StubReceivers
+import com.example.appsandbox.receiver.BroadcastSessionClient
+import com.example.appsandbox.receiver.BroadcastSessionProvider
 
 class ActivityManagerAdapter(
     private val context: Context,
@@ -32,7 +33,6 @@ class ActivityManagerAdapter(
         }
         val iface = Class.forName(interfaceName)
         val registry = MethodPolicyRegistry()
-        val receivers = VirtualReceiverManager.GLOBAL
         setOf("registerReceiver", "registerReceiverWithFeature").forEach { name ->
             registry.register(name) { call, physical ->
                 val args = IdentityPolicy(identity).rewriteAttributionArgs(call.args.copyOf()).also { rewritten ->
@@ -97,20 +97,29 @@ class ActivityManagerAdapter(
                     Log.i("AppSandbox.M8", "VRECEIVER event=DYNAMIC_ROUTE method=$name instance=${identity.instanceId} action=${original.action} physicalPackage=${identity.hostPackageName}")
                     return@register BinderCallResult(physical(args), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
                 }
-                val guestComponent = resolved.first()
-                val info = packageService.getReceiverInfo(guestComponent) ?: return@register BinderCallResult(physical(call.args), BinderRoute.PHYSICAL, IdentityDecision.PASSTHROUGH)
-                val stub = StubReceivers.intent(context, identity.processSlot).component ?: return@register BinderCallResult(physical(call.args), BinderRoute.PHYSICAL, IdentityDecision.PASSTHROUGH)
-                val delivery = receivers.createDelivery(identity.instanceId, original, info, stub)
-                val routed = android.content.Intent(original).apply {
-                    this.component = stub
-                    putExtra("com.example.appsandbox.receiver.DELIVERY_ID", delivery.id)
+                val infos = resolved.mapNotNull(packageService::getReceiverInfo)
+                if (infos.isEmpty() || infos.size > StubReceivers.MAX_RANKS) {
+                    Log.e("AppSandbox.M8", "VRECEIVER event=UNSUPPORTED_RECEIVER_COUNT count=${infos.size} action=${original.action}")
+                    return@register BinderCallResult(physical(call.args), BinderRoute.PHYSICAL, IdentityDecision.PASSTHROUGH)
                 }
-                val args = call.args.copyOf().apply {
+                val ordered = call.method.parameterTypes.indices
+                    .firstOrNull { call.method.parameterTypes[it] == Boolean::class.javaPrimitiveType }
+                    ?.let { call.args[it] as? Boolean } == true
+                val sessionId = BroadcastSessionClient.create(context, identity, original, infos, ordered)
+                val routed = android.content.Intent().apply {
+                    if (infos.size == 1) this.component = StubReceivers.component(identity.processSlot, 1, 0)
+                    else {
+                        action = StubReceivers.action(identity.processSlot, infos.size)
+                        setPackage(identity.hostPackageName)
+                    }
+                    putExtra(BroadcastSessionProvider.EXTRA_SESSION_ID, sessionId)
+                }
+                val args = IdentityPolicy(identity).rewriteAttributionArgs(call.args.copyOf()).apply {
                     this[index] = routed
                     indices.filter { call.method.parameterTypes[it] == String::class.java && this[it] == identity.guestPackageName }
                         .forEach { this[it] = identity.hostPackageName }
                 }
-                Log.i("AppSandbox.M8", "VRECEIVER event=ROUTE method=$name instance=${identity.instanceId} guest=${guestComponent.flattenToShortString()} stub=${stub.flattenToShortString()} delivery=${delivery.id} resolved=${resolved.size}")
+                Log.i("AppSandbox.M8", "VRECEIVER event=SESSION_ROUTE method=$name instance=${identity.instanceId} session=$sessionId ordered=$ordered guests=${infos.map { it.name }} action=${routed.action} component=${routed.component}")
                 BinderCallResult(physical(args), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
             }
         }

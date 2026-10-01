@@ -1,0 +1,20 @@
+# M8 Closure Result
+STATUS = PARTIAL
+START_HEAD = 7acf149931dc31fe4373776f86f3d15d5a42f991
+FINAL_HEAD = pending focused commit
+FOUNDATION_GATE = PASS (M2/M3/M4/M5/M6/M7 runtime evidence on API31/API36; M10 remote-process limitation remains deferred)
+RECEIVER_MANIFEST = PARTIAL: real ActivityThread.handleReceiver/onReceive executes on API31/API36; Demo2 observer times out despite persisted receiver log/count.
+RECEIVER_DYNAMIC = PASS
+RECEIVER_ORDERED_RESULT = PASS (framework resultCode/resultData propagation)
+RECEIVER_ABORT = PASS
+RECEIVER_GO_ASYNC = PASS
+RECEIVER_CONCURRENT_ISOLATION = PASS
+PROVIDER_INSTALL_CONTEXT = PASS (real ActivityThread.installProvider, Guest applicationContext)
+PROVIDER_CRUD_CLIENT = PASS
+PROVIDER_TWO_INSTANCE_RESTART_ISOLATION = PASS
+M2_M3_M4_M5_M6_M7_REGRESSION = PASS (API31/API36; Demo3 native remains deferred M9)
+API31 = PARTIAL (only Manifest observer contract blocked)
+API36 = PARTIAL (only Manifest observer contract blocked)
+M8_READY_TO_CLOSE = NO (automation visibility blocker must be resolved)
+M9_STARTED = NO
+STOPPED_AFTER_M8_CLOSURE = YES

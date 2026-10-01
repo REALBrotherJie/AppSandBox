@@ -14,13 +14,38 @@ import com.example.appsandbox.activity.VirtualActivityManager
 import com.example.appsandbox.binder.VirtualBinderManager
 import com.example.appsandbox.stub.StubActivities
 import com.example.appsandbox.storage.InstanceStorageManager
+import java.util.concurrent.ConcurrentHashMap
 
 class GuestProcessBootstrap(private val context: Context) {
     private val guestLoader = GuestRuntimeClassLoader(context)
     private val activityManager = VirtualActivityManager()
     data class PreparedLaunch(val intent: Intent, val activityInfo: ActivityInfo)
 
-    fun prepare(envelope: LaunchEnvelope): PreparedLaunch {
+    fun prepareReceiver(
+        packageName: String,
+        instanceId: String,
+        processSlot: Int,
+        originalIntent: Intent,
+        receiverInfo: ActivityInfo,
+        sessionId: String
+    ): PreparedLaunch {
+        val root = InstanceStorageManager(context, instanceId).root.path
+        return prepare(LaunchEnvelope(
+            packageName,
+            instanceId,
+            android.content.ComponentName(packageName, receiverInfo.name),
+            originalIntent,
+            receiverInfo,
+            processSlot,
+            "receiver:$sessionId",
+            root
+        ), activityLaunch = false)
+    }
+
+    fun prepare(envelope: LaunchEnvelope): PreparedLaunch = prepare(envelope, activityLaunch = true)
+
+    @Synchronized
+    private fun prepare(envelope: LaunchEnvelope, activityLaunch: Boolean): PreparedLaunch {
         require(envelope.processSlot in 0..8) { "invalid process slot ${envelope.processSlot}" }
         require(envelope.target.packageName == envelope.packageName) { "target package mismatch" }
         val storage = InstanceStorageManager(context, envelope.instanceId)
@@ -31,8 +56,19 @@ class GuestProcessBootstrap(private val context: Context) {
 
         val info = ActivityInfo(envelope.activityInfo)
         val identity = RuntimeIdentity.create(context, envelope.packageName, envelope.instanceId, envelope.processSlot)
-        val stub = StubActivities.intent(context, envelope.processSlot, envelope.activityInfo.launchMode)
-        activityManager.requested(envelope, requireNotNull(stub.component), null, -1)
+        val thread = Class.forName("android.app.ActivityThread").getDeclaredMethod("currentActivityThread")
+            .apply { isAccessible = true }.invoke(null) ?: error("ActivityThread unavailable")
+        if (!activityLaunch) {
+            // A process may have previously hosted a Guest Activity.  The receiver
+            // transaction must see a framework LoadedApk application whose base is
+            // ContextImpl, so clear the canonical Guest Application before AMS
+            // enters ActivityThread.handleReceiver().
+            guestLoader.unbindApplication(thread)
+        }
+        if (activityLaunch) {
+            val stub = StubActivities.intent(context, envelope.processSlot, envelope.activityInfo.launchMode)
+            activityManager.requested(envelope, requireNotNull(stub.component), null, -1)
+        }
         val app = ApplicationInfo(requireNotNull(info.applicationInfo))
         // System services still see the host UID in M2. Keep the ContextImpl caller package
         // aligned with that UID while retaining the guest source/class metadata for loading.
@@ -45,9 +81,16 @@ class GuestProcessBootstrap(private val context: Context) {
         app.processName = context.packageName + ":p${envelope.processSlot}"
         info.applicationInfo = app
         info.processName = app.processName
+        runtimeStates[envelope.instanceId]?.let { state ->
+            info.applicationInfo = ApplicationInfo(state.applicationInfo)
+            val restored = Intent(envelope.originalIntent).apply {
+                component = envelope.target
+                setExtrasClassLoader(state.loader)
+            }
+            Log.i(TAG, "bootstrap guest-runtime reuse application=${state.application.javaClass.name} instance=${envelope.instanceId}")
+            return PreparedLaunch(restored, info)
+        }
         val loader = guestLoader.prepare(app.sourceDir, app.splitSourceDirs.orEmpty().toList(), app.nativeLibraryDir, envelope.packageName, root.path)
-        val thread = Class.forName("android.app.ActivityThread").getDeclaredMethod("currentActivityThread")
-            .apply { isAccessible = true }.invoke(null) ?: error("ActivityThread unavailable")
         val packageFlags = android.content.pm.PackageManager.GET_ACTIVITIES or android.content.pm.PackageManager.GET_SERVICES or
             android.content.pm.PackageManager.GET_RECEIVERS or android.content.pm.PackageManager.GET_PROVIDERS or
             android.content.pm.PackageManager.GET_PERMISSIONS or android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES
@@ -68,7 +111,12 @@ class GuestProcessBootstrap(private val context: Context) {
             val field = generateSequence(thread.javaClass) { it.superclass }.mapNotNull { runCatching { it.getDeclaredField("mInstrumentation") }.getOrNull() }.first().apply { isAccessible = true }
             field.get(thread) as android.app.Instrumentation
         }
-        val preparation = GuestRuntimePreparation(context, identity, loader, resources, app, root, thread, guestInstrumentation)
+        val preparation = GuestRuntimePreparation(context, identity, loader, resources, app, root, thread, guestInstrumentation) {
+            // Activity/provider paths need the canonical Guest Application on LoadedApk.
+            // Receiver dispatch is entered by ActivityThread.handleReceiver(), which
+            // requires its LoadedApk application base to remain a framework ContextImpl.
+            if (activityLaunch) guestLoader.bindApplication(thread, it)
+        }
         val providers = packageInfo.providers?.map { android.content.pm.ProviderInfo(it) }?.toMutableList() ?: mutableListOf()
         if (providers.isEmpty()) {
             runCatching {
@@ -79,6 +127,7 @@ class GuestProcessBootstrap(private val context: Context) {
         }
         Log.i(TAG, "guest-provider-metadata package=${envelope.packageName} providers=${providers.map { it.name + ":" + it.authority }}")
         val runtime = preparation.prepare(providers.toTypedArray())
+        runtimeStates[envelope.instanceId] = RuntimeState(loader, ApplicationInfo(app), runtime.application)
         val contentRefresh = binderManager.refreshContentService()
         require(contentRefresh.installed) { "ContentService refresh failed: ${contentRefresh.failureReason}" }
         Log.i(TAG, "bootstrap guest-runtime application=${runtime.application.javaClass.name} context=${runtime.context.javaClass.name} providers=${runtime.installedProviders}")
@@ -94,5 +143,10 @@ class GuestProcessBootstrap(private val context: Context) {
         return PreparedLaunch(restored, info)
     }
 
-    companion object { private const val TAG = "AppSandbox.M2" }
+    private data class RuntimeState(val loader: ClassLoader, val applicationInfo: ApplicationInfo, val application: android.app.Application)
+
+    companion object {
+        private const val TAG = "AppSandbox.M2"
+        private val runtimeStates = ConcurrentHashMap<String, RuntimeState>()
+    }
 }

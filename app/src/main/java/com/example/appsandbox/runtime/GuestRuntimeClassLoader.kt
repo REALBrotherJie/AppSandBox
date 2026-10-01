@@ -14,6 +14,7 @@ import com.example.appsandbox.activity.VirtualActivityManager
 class GuestRuntimeClassLoader(private val host: Context) {
     @Volatile private var loader: ClassLoader? = null
     @Volatile private var packageName: String? = null
+    @Volatile private var loadedApk: Any? = null
 
     fun prepare(sourceDir: String, splitSourceDirs: List<String>, nativeLibraryDir: String?, packageName: String, dataRoot: String): ClassLoader {
         val current = loader
@@ -52,6 +53,7 @@ class GuestRuntimeClassLoader(private val host: Context) {
             method.apply { isAccessible = true }.invoke(activityThread, appInfo, compatibility)
         }.onFailure { Log.e("AppSandbox.M2", "guest LoadedApk creation failed", it) }.getOrNull()
             ?: return resources
+        this.loadedApk = loadedApk
         val type = loadedApk.javaClass
         var changed = 0
         runCatching { type.getDeclaredField("mClassLoader").apply { isAccessible = true }.set(loadedApk, classLoader) }
@@ -62,6 +64,35 @@ class GuestRuntimeClassLoader(private val host: Context) {
                 .onFailure { Log.e("AppSandbox.M2", "LoadedApk mApplicationInfo replacement failed", it) }
         Log.i("AppSandbox.M2", "LoadedApk resources-installed changed=$changed guestPackage=${appInfo.packageName} resPackage=${runCatching { resources.getResourcePackageName(com.example.appsandbox.R.string.app_name) }.getOrDefault("unknown")}")
         return resources
+    }
+
+    fun bindApplication(activityThread: Any, application: android.app.Application) {
+        val apk = requireNotNull(loadedApk) { "Guest LoadedApk unavailable" }
+        val applicationField = generateSequence(apk.javaClass) { it.superclass }
+            .mapNotNull { runCatching { it.getDeclaredField("mApplication") }.getOrNull() }
+            .first().apply { isAccessible = true }
+        val existing = applicationField.get(apk) as? android.app.Application
+        require(existing == null || existing === application) { "Guest LoadedApk already owns a different Application" }
+        applicationField.set(apk, application)
+        val allApplications = generateSequence(activityThread.javaClass) { it.superclass }
+            .mapNotNull { runCatching { it.getDeclaredField("mAllApplications") }.getOrNull() }
+            .first().apply { isAccessible = true }.get(activityThread) as? MutableCollection<android.app.Application>
+        if (allApplications != null && application !in allApplications) allApplications.add(application)
+        Log.i("AppSandbox.M2", "LoadedApk application-bound package=${application.packageName} application=${System.identityHashCode(application)}")
+    }
+
+    fun unbindApplication(activityThread: Any) {
+        val apk = loadedApk ?: return
+        val field = generateSequence(apk.javaClass) { it.superclass }
+            .mapNotNull { runCatching { it.getDeclaredField("mApplication") }.getOrNull() }
+            .first().apply { isAccessible = true }
+        val existing = field.get(apk) as? android.app.Application ?: return
+        field.set(apk, null)
+        val allApplications = generateSequence(activityThread.javaClass) { it.superclass }
+            .mapNotNull { runCatching { it.getDeclaredField("mAllApplications") }.getOrNull() }
+            .first().apply { isAccessible = true }.get(activityThread) as? MutableCollection<android.app.Application>
+        allApplications?.remove(existing)
+        Log.i("AppSandbox.M2", "LoadedApk application-unbound receiverBoundary application=${System.identityHashCode(existing)}")
     }
 
     private class GuestInstrumentation(
