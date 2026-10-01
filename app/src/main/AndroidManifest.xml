@@ -16,6 +16,7 @@
             </intent-filter>
         </activity>
         <service android:name=".runtime.GuestRuntimeService" android:exported="false" android:process=":vs" />
+        <service android:name=".runtime.M10ArchProcessAgentService" android:exported="false" android:process=":p2" />
         <provider android:name=".receiver.BroadcastSessionProvider" android:authorities="${applicationId}.receiver.sessions" android:exported="false" android:process=":vs" />
         <receiver android:name=".stub.P0ReceiverN2R0" android:exported="false" android:process=":p0">
             <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P0_N2" /></intent-filter>

@@ -16,6 +16,7 @@ import com.example.appsandbox.packageinfo.GuestPackageReader
 import com.example.appsandbox.runtime.GuestRuntimeProtocol
 import com.example.appsandbox.runtime.GuestRuntimeService
 import com.example.appsandbox.runtime.VirtualActivityLauncher
+import com.example.appsandbox.runtime.M10ArchitectureProbeCoordinator
 
 class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
@@ -30,6 +31,10 @@ class MainActivity : AppCompatActivity() {
             apps.take(12).forEach { appendLine("${it.appLabel} (${it.packageName})") }
         }
         setContentView(LinearLayout(this).apply { addView(status) })
+        if (intent.getBooleanExtra("m10ArchProbe", false)) {
+            M10ArchitectureProbeCoordinator(this).run()
+            return
+        }
         if (intent.action == ACTION_DELETE_VIRTUAL_INSTANCE) {
             deleteVirtualInstance(
                 requireNotNull(intent.getStringExtra(EXTRA_GUEST_PACKAGE)),

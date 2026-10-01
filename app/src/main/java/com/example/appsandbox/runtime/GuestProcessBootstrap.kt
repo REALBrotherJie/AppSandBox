@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
+import android.content.pm.ServiceInfo
 import android.os.Process
 import android.util.Log
 import com.example.appsandbox.virtual.LaunchEnvelope
@@ -44,8 +45,30 @@ class GuestProcessBootstrap(private val context: Context) {
 
     fun prepare(envelope: LaunchEnvelope): PreparedLaunch = prepare(envelope, activityLaunch = true)
 
+    fun prepareService(packageName: String, instanceId: String, processSlot: Int, serviceInfo: ServiceInfo): ServiceInfo {
+        val activityInfo = ActivityInfo().apply {
+            name = serviceInfo.name
+            this.packageName = packageName
+            processName = serviceInfo.processName
+            applicationInfo = ApplicationInfo(requireNotNull(serviceInfo.applicationInfo))
+        }
+        val root = InstanceStorageManager(context, instanceId).root.path
+        val prepared = prepare(
+            LaunchEnvelope(packageName, instanceId, android.content.ComponentName(packageName, serviceInfo.name),
+                Intent().setComponent(android.content.ComponentName(packageName, serviceInfo.name)), activityInfo,
+                processSlot, "service-agent", root),
+            activityLaunch = false,
+            bindGuestApplication = true
+        )
+        return ServiceInfo(serviceInfo).apply {
+            applicationInfo = ApplicationInfo(prepared.activityInfo.applicationInfo)
+            // ActivityThread needs the physical process package binding; logical identity remains in the agent record.
+            processName = prepared.activityInfo.processName
+        }
+    }
+
     @Synchronized
-    private fun prepare(envelope: LaunchEnvelope, activityLaunch: Boolean): PreparedLaunch {
+    private fun prepare(envelope: LaunchEnvelope, activityLaunch: Boolean, bindGuestApplication: Boolean = activityLaunch): PreparedLaunch {
         require(envelope.processSlot in 0..8) { "invalid process slot ${envelope.processSlot}" }
         require(envelope.target.packageName == envelope.packageName) { "target package mismatch" }
         val storage = InstanceStorageManager(context, envelope.instanceId)
@@ -64,7 +87,7 @@ class GuestProcessBootstrap(private val context: Context) {
         VirtualWebViewProcessPolicy.configure(VirtualProcessKey(packageRevision, envelope.packageName, envelope.instanceId, logicalProcessName))
         val thread = Class.forName("android.app.ActivityThread").getDeclaredMethod("currentActivityThread")
             .apply { isAccessible = true }.invoke(null) ?: error("ActivityThread unavailable")
-        if (!activityLaunch) {
+        if (!activityLaunch && !bindGuestApplication) {
             // A process may have previously hosted a Guest Activity.  The receiver
             // transaction must see a framework LoadedApk application whose base is
             // ContextImpl, so clear the canonical Guest Application before AMS
@@ -122,7 +145,7 @@ class GuestProcessBootstrap(private val context: Context) {
             // Activity/provider paths need the canonical Guest Application on LoadedApk.
             // Receiver dispatch is entered by ActivityThread.handleReceiver(), which
             // requires its LoadedApk application base to remain a framework ContextImpl.
-            if (activityLaunch) guestLoader.bindApplication(thread, it)
+            if (bindGuestApplication) guestLoader.bindApplication(thread, it)
         }
         val providers = packageInfo.providers?.map { android.content.pm.ProviderInfo(it) }?.toMutableList() ?: mutableListOf()
         if (providers.isEmpty()) {

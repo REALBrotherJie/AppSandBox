@@ -39,6 +39,17 @@ object VirtualServiceRuntime {
     private val allocations = ConcurrentHashMap<VirtualServiceKey, Int>()
     private val connectionFacades = java.util.Collections.synchronizedMap(java.util.IdentityHashMap<Any, Any>())
 
+    fun registerAgentRoute(record: VirtualServiceRecord) {
+        byStub[record.stubComponent] = record
+        Log.i("AppSandbox.M10.Arch", "AGENT_SERVICE_ROUTE generation=${record.lastStartId} stub=${record.stubComponent.flattenToShortString()} guest=${record.key.component.flattenToShortString()}")
+    }
+
+    fun routedProbeIntent(stub: ComponentName, original: Intent): Intent = Intent(original).apply {
+        component = stub
+        putExtra(EXTRA_MARKER, true)
+        putExtra(EXTRA_ORIGINAL, Intent(original))
+    }
+
     fun route(context: Context, identity: RuntimeIdentity, vpm: VirtualPackageManagerService, original: Intent): Intent? {
         val component = original.component ?: return null
         if (component.packageName != identity.guestPackageName) return null
