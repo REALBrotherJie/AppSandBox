@@ -59,6 +59,9 @@ class GuestProcessBootstrap(private val context: Context) {
         // This is the last Host-controlled point before the Guest ClassLoader can
         // execute a static initializer containing System.loadLibrary().
         NativeRuntimeBridge.bind(identity, storage)
+        val packageRevision = runCatching { File(info.applicationInfo?.sourceDir.orEmpty()).lastModified() }.getOrDefault(0L)
+        val logicalProcessName = VirtualProcessKey.canonicalProcessName(envelope.packageName, info.processName)
+        VirtualWebViewProcessPolicy.configure(VirtualProcessKey(packageRevision, envelope.packageName, envelope.instanceId, logicalProcessName))
         val thread = Class.forName("android.app.ActivityThread").getDeclaredMethod("currentActivityThread")
             .apply { isAccessible = true }.invoke(null) ?: error("ActivityThread unavailable")
         if (!activityLaunch) {

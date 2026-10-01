@@ -54,6 +54,7 @@ class GuestPackageManagerBridge(
             val virtualRoute = packageName == identity.guestPackageName
             val queryRoute = visibility.route(packageName)
             val result: Any? = when {
+                    isWebViewRuntimePackage(packageName) || (packageName == identity.hostPackageName && isWebViewCall()) -> physical(values)
                     call.methodName == "getPackageInfo" && virtualRoute -> service.getPackageInfo(identity.guestPackageName)
                     call.methodName == "getApplicationInfo" && virtualRoute -> service.getApplicationInfo(identity.guestPackageName)
                     call.methodName == "getActivityInfo" && component != null && virtualRoute -> service.getActivityInfo(component)
@@ -109,6 +110,14 @@ class GuestPackageManagerBridge(
     private fun logFailure(method: String, target: String?, error: Throwable) {
         Log.e(TAG, "VPM_QUERY api=${Build.VERSION.SDK_INT} instance=${identity.instanceId} virtualUid=${identity.virtualUidNumber} " +
             "method=$method targetPackage=$target route=ERROR result=${error.javaClass.name}:${error.message}", error)
+    }
+
+    private fun isWebViewRuntimePackage(packageName: String?): Boolean = packageName == "com.google.android.webview" ||
+        packageName == "com.android.webview" || packageName == "com.google.android.trichromelibrary"
+
+    private fun isWebViewCall(): Boolean = Thread.currentThread().stackTrace.any {
+        it.className.startsWith("android.webkit.") || it.className.startsWith("org.chromium.") ||
+            it.className.startsWith("com.android.webview.")
     }
 
     companion object { private const val TAG = "AppSandbox.M3" }
