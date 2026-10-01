@@ -1,5 +1,8 @@
 # M9 Native IO Interception Architecture Decision
 
+> Superseded for primary M9 early IO by `PROCESS_SLOT_SCOPED_EARLY_BIONIC_PATH_INTERCEPTION`.
+> The relocation design remains historical/secondary and cannot provide constructor/JNI_OnLoad timing.
+
 ## Evidence
 
 Demo3 was audited on API31 arm64-v8a and API36 x86_64. Both ELF files are dynamically linked and contain

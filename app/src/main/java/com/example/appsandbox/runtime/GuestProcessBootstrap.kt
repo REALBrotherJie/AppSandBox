@@ -56,6 +56,9 @@ class GuestProcessBootstrap(private val context: Context) {
 
         val info = ActivityInfo(envelope.activityInfo)
         val identity = RuntimeIdentity.create(context, envelope.packageName, envelope.instanceId, envelope.processSlot)
+        // This is the last Host-controlled point before the Guest ClassLoader can
+        // execute a static initializer containing System.loadLibrary().
+        NativeRuntimeBridge.bind(identity, storage)
         val thread = Class.forName("android.app.ActivityThread").getDeclaredMethod("currentActivityThread")
             .apply { isAccessible = true }.invoke(null) ?: error("ActivityThread unavailable")
         if (!activityLaunch) {

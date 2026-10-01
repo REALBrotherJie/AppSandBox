@@ -16,6 +16,7 @@ abstract class BaseStubActivity : Activity()
 abstract class BaseStubService : Service() { override fun onBind(intent: Intent?): IBinder? = null }
 abstract class BaseStubProvider : ContentProvider() {
     override fun onCreate(): Boolean {
+        com.example.appsandbox.runtime.NativeRuntimeBridge.preload()
         val appContext = requireNotNull(context).applicationContext
         val result = ActivityLaunchInterceptor(appContext).install()
         Log.i("AppSandbox.M2", "stub-provider process=${android.app.Application.getProcessName()} probe=$result")
