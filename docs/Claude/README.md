@@ -1,3 +1,15 @@
+# AppSandBox Claude 文档索引
+
+## 当前执行状态（2026-10-01）
+
+`M2 Activity bootstrap`、`M3 ClassLoader/VPM`、`M4 Activity semantics`、`M5 Java storage`、`M6 Binder core`、`M7 Services` 已 CLOSED。`M8 Receiver/Provider` 经 M8-FIX 后仍为 PARTIAL，必须 STOP 并由 Planner/Reviewer 复审 ordered/goAsync/cold-start 跨进程 delivery 架构；不得创建 M8.5/M8.6。M9 尚未开始。
+
+执行流程固定为：Planner/Reviewer → authoritative task → Execution session → RESULT + focused commits → Planner/Reviewer review → next milestone。执行会话不得自行创建下一 milestone，也不得降低 PASS 标准。
+
+每个新 milestone 最多只有 `M<N>` 与一次 `M<N>-FIX` closure；若 FIX 仍不能关闭，必须 `STOP / REVIEW ARCHITECTURE`。历史 M8.1-M8.4 仅保留为记录。
+
+## 历史机制知识库
+
 # VirtualApp 现代化经验知识库（HuangJiang 个人修改）
 
 > 来源：`D:\WorkSpace\Android\MySelf\VirtualApp` 中由 HuangJiang 完成的现代化改造
