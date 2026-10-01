@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.res.AssetManager
 import android.content.res.Resources
 import java.io.File
+import java.util.zip.ZipFile
 import android.util.Log
 import android.os.Build
 import com.example.appsandbox.identity.SystemIdentityBridge
@@ -15,17 +16,41 @@ class GuestRuntimeClassLoader(private val host: Context) {
     @Volatile private var loader: ClassLoader? = null
     @Volatile private var packageName: String? = null
     @Volatile private var loadedApk: Any? = null
+    @Volatile var guestNativeLibraryDir: String? = null
+        private set
 
     fun prepare(sourceDir: String, splitSourceDirs: List<String>, nativeLibraryDir: String?, packageName: String, dataRoot: String): ClassLoader {
         val current = loader
         if (current != null && this.packageName == packageName) return current
         val optimized = File(dataRoot, "dex").apply { mkdirs() }
         val dexPath = (listOf(sourceDir) + splitSourceDirs).joinToString(File.pathSeparator)
-        return GuestDomainClassLoader(dexPath, optimized.path, nativeLibraryDir, host.classLoader).also {
+        val materializedNative = materializeNativeLibraries(sourceDir, packageName, dataRoot)
+        guestNativeLibraryDir = materializedNative ?: nativeLibraryDir
+        return GuestDomainClassLoader(dexPath, optimized.path, guestNativeLibraryDir, host.classLoader).also {
             loader = it
             this.packageName = packageName
             Log.i("AppSandbox.M3", "CLASSLOAD_SETUP package=$packageName base=$sourceDir splits=$splitSourceDirs dexPath=$dexPath loader=$it")
         }
+    }
+
+    private fun materializeNativeLibraries(sourceDir: String, packageName: String, dataRoot: String): String? {
+        val abi = Build.SUPPORTED_ABIS.firstOrNull { candidate ->
+            runCatching { ZipFile(sourceDir).use { zip -> zip.getEntry("lib/$candidate/") != null || zip.entries().asSequence().any { it.name.startsWith("lib/$candidate/") && it.name.endsWith(".so") } } }.getOrDefault(false)
+        } ?: return null
+        val apkStamp = File(sourceDir).length().toString() + "-" + File(sourceDir).lastModified()
+        val out = File(host.filesDir, "virtual/native/$packageName/$apkStamp/$abi").apply { mkdirs() }
+        ZipFile(sourceDir).use { zip ->
+            zip.entries().asSequence().filter { it.name.startsWith("lib/$abi/") && it.name.endsWith(".so") }.forEach { entry ->
+                val target = File(out, entry.name.substringAfterLast('/'))
+                if (!target.exists() || target.length() != entry.size) {
+                    zip.getInputStream(entry).use { input -> target.outputStream().use { input.copyTo(it) } }
+                    target.setReadable(true, false)
+                    target.setExecutable(true, false)
+                }
+            }
+        }
+        Log.i("AppSandbox.M9", "GUEST_NATIVE_LIBS package=$packageName abi=$abi source=$sourceDir root=${out.path}")
+        return out.path
     }
 
     fun installInstrumentation(activityThread: Any, classLoader: ClassLoader, identityBridge: SystemIdentityBridge, activityManager: VirtualActivityManager) {
