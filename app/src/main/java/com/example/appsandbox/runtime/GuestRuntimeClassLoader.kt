@@ -7,8 +7,6 @@ import android.content.res.Resources
 import java.io.File
 import android.util.Log
 import android.os.Build
-import java.lang.reflect.Proxy
-import java.lang.reflect.InvocationTargetException
 import com.example.appsandbox.identity.SystemIdentityBridge
 import com.example.appsandbox.activity.VirtualActivityLifecycle
 import com.example.appsandbox.activity.VirtualActivityManager
@@ -64,38 +62,6 @@ class GuestRuntimeClassLoader(private val host: Context) {
                 .onFailure { Log.e("AppSandbox.M2", "LoadedApk mApplicationInfo replacement failed", it) }
         Log.i("AppSandbox.M2", "LoadedApk resources-installed changed=$changed guestPackage=${appInfo.packageName} resPackage=${runCatching { resources.getResourcePackageName(com.example.appsandbox.R.string.app_name) }.getOrDefault("unknown")}")
         return resources
-    }
-
-    fun installSystemCallerBridge(identityBridge: SystemIdentityBridge) {
-        val amClass = Class.forName("android.app.ActivityManager")
-        val singleton = amClass.getDeclaredField("IActivityManagerSingleton").apply { isAccessible = true }.get(null)
-        val singletonClass = Class.forName("android.util.Singleton")
-        val instanceField = singletonClass.getDeclaredField("mInstance").apply { isAccessible = true }
-        val original = instanceField.get(singleton) ?: singletonClass.getDeclaredMethod("get").apply { isAccessible = true }.invoke(singleton)
-        if (original == null || Proxy.isProxyClass(original.javaClass)) return
-        val iface = Class.forName("android.app.IActivityManager")
-        val hostPackage = identityBridge.physicalPackageName()
-        val guestPackage = identityBridge.logicalPackageName()
-        val proxy = Proxy.newProxyInstance(iface.classLoader, arrayOf(iface)) { _, method, args ->
-            val rewritten = args?.map { value -> if (value is String && value == guestPackage) hostPackage else value }?.toTypedArray()
-            try {
-                val result = method.invoke(original, *(rewritten ?: emptyArray()))
-                if (method.name == "getContentProvider" && result != null) wrapProviderHolder(result, identityBridge)
-                result
-            } catch (error: InvocationTargetException) {
-                throw error.targetException
-            }
-        }
-        instanceField.set(singleton, proxy)
-        Log.i("AppSandbox.M2", "binder-bridge installed interface=${iface.name} guest=$guestPackage host=$hostPackage")
-    }
-
-    private fun wrapProviderHolder(holder: Any, identityBridge: SystemIdentityBridge) {
-        val providerField = generateSequence(holder.javaClass) { it.superclass }
-            .mapNotNull { runCatching { it.getDeclaredField("provider") }.getOrNull() }.firstOrNull() ?: return
-        providerField.isAccessible = true
-        val provider = providerField.get(holder) ?: return
-        providerField.set(holder, identityBridge.wrapContentProvider(provider))
     }
 
     private class GuestInstrumentation(

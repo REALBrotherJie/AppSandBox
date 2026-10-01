@@ -5,11 +5,17 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.util.Log
+import com.example.appsandbox.binder.AdapterInstallResult
+import com.example.appsandbox.binder.BinderCallResult
+import com.example.appsandbox.binder.BinderRoute
+import com.example.appsandbox.binder.BinderServiceAdapter
+import com.example.appsandbox.binder.IdentityDecision
+import com.example.appsandbox.binder.MethodPolicyRegistry
+import com.example.appsandbox.binder.ProxySupport
 import com.example.appsandbox.identity.RuntimeIdentity
 import com.example.appsandbox.stub.StubActivities
 import com.example.appsandbox.virtual.LaunchEnvelope
 import java.io.File
-import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.util.UUID
@@ -18,33 +24,46 @@ class GuestActivityStartBridge(
     private val context: Context,
     private val identity: RuntimeIdentity,
     private val manager: VirtualActivityManager
-) {
-    fun install() {
+) : BinderServiceAdapter {
+    override val serviceName = "activity_task"
+    override val interfaceName = "android.app.IActivityTaskManager"
+
+    override fun install(): AdapterInstallResult = runCatching {
         val type = Class.forName("android.app.ActivityTaskManager")
         val singleton = type.getDeclaredField("IActivityTaskManagerSingleton").apply { isAccessible = true }.get(null)
         val singletonType = Class.forName("android.util.Singleton")
         val field = singletonType.getDeclaredField("mInstance").apply { isAccessible = true }
         val original = field.get(singleton) ?: singletonType.getDeclaredMethod("get").apply { isAccessible = true }.invoke(singleton)
-        if (original == null || Proxy.isProxyClass(original.javaClass)) return
-        val iface = Class.forName("android.app.IActivityTaskManager")
-        val proxy = Proxy.newProxyInstance(iface.classLoader, arrayOf(iface)) { _, method, rawArgs ->
-            val args = rawArgs ?: emptyArray()
-            try {
-                if (method.name.startsWith("startActivit") && rewrite(method, args)) return@newProxyInstance 3
-                method.invoke(original, *args)
-            } catch (error: InvocationTargetException) {
-                throw error.targetException
+        requireNotNull(original) { "IActivityTaskManager unavailable" }
+        if (Proxy.isProxyClass(original.javaClass) && original.toString().startsWith("VirtualBinderProxy(")) {
+            return AdapterInstallResult(serviceName, true, true)
+        }
+        val iface = Class.forName(interfaceName)
+        val registry = MethodPolicyRegistry()
+        val startMethods = (iface.methods.asSequence() + original.javaClass.methods.asSequence())
+            .map { it.name }.filter { it.startsWith("startActivit") }.toSet() +
+            setOf("startActivity", "startActivities", "startActivityAsUser", "startActivityAndWait", "startActivityWithConfig")
+        startMethods.forEach { name ->
+            registry.register(name) { call, physical ->
+                val args = call.args.copyOf()
+                val reused = rewrite(call.method, args)
+                BinderCallResult(if (reused) 3 else physical(args), BinderRoute.VIRTUAL, IdentityDecision.CUSTOM)
             }
         }
+        val proxy = ProxySupport.create(original, iface, serviceName, identity, registry)
         field.set(singleton, proxy)
         Log.i(TAG, "activity-start-bridge installed api=${android.os.Build.VERSION.SDK_INT} instance=${identity.instanceId}")
-    }
+        AdapterInstallResult(serviceName, true)
+    }.getOrElse { AdapterInstallResult(serviceName, false, failureReason = it.toString()) }
 
     private fun rewrite(method: Method, args: Array<Any?>): Boolean {
         var deliveredLocally = false
-        args.indices.forEach { index ->
-            if (args[index] == identity.guestPackageName) args[index] = identity.hostPackageName
-        }
+        val intentIndex = method.parameterTypes.indices.firstOrNull { type ->
+            Intent::class.java.isAssignableFrom(method.parameterTypes[type]) || method.parameterTypes[type].componentType == Intent::class.java
+        } ?: args.size
+        method.parameterTypes.indices.firstOrNull { index ->
+            index < intentIndex && method.parameterTypes[index] == String::class.java && args[index] == identity.guestPackageName
+        }?.let { args[it] = identity.hostPackageName }
         args.forEachIndexed { index, value ->
             when (value) {
                 is Intent -> virtualize(value, method, args, index)?.let { result ->

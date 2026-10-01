@@ -5,67 +5,86 @@ import android.content.Intent
 import android.content.pm.ResolveInfo
 import android.os.Build
 import android.util.Log
+import com.example.appsandbox.binder.AdapterInstallResult
+import com.example.appsandbox.binder.BinderCallResult
+import com.example.appsandbox.binder.BinderRoute
+import com.example.appsandbox.binder.BinderServiceAdapter
+import com.example.appsandbox.binder.IdentityDecision
+import com.example.appsandbox.binder.MethodPolicyRegistry
+import com.example.appsandbox.binder.ProxySupport
 import com.example.appsandbox.identity.RuntimeIdentity
-import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 
 class GuestPackageManagerBridge(
     private val identity: RuntimeIdentity,
-    private val service: VirtualPackageManagerService
-) {
+    private val service: VirtualPackageManagerService,
+    private val activityThread: Any
+) : BinderServiceAdapter {
+    override val serviceName = "package"
+    override val interfaceName = "android.content.pm.IPackageManager"
     private val visibility = VirtualPackageVisibilityPolicy(identity)
 
-    fun install(activityThread: Any) {
+    override fun install(): AdapterInstallResult = runCatching {
         val threadClass = activityThread.javaClass
         val field = generateSequence(threadClass) { it.superclass }
             .mapNotNull { runCatching { it.getDeclaredField("sPackageManager") }.getOrNull() }.first()
             .apply { isAccessible = true }
         val getter = threadClass.getDeclaredMethod("getPackageManager").apply { isAccessible = true }
         val original = field.get(null) ?: getter.invoke(null)
-        if (Proxy.isProxyClass(original.javaClass)) return
-        val iface = Class.forName("android.content.pm.IPackageManager")
-        val proxy = Proxy.newProxyInstance(iface.classLoader, arrayOf(iface)) { _, method, args ->
-            val values = args ?: emptyArray()
+        if (Proxy.isProxyClass(original.javaClass) && original.toString().startsWith("VirtualBinderProxy(")) {
+            return AdapterInstallResult(serviceName, true, true)
+        }
+        val iface = Class.forName(interfaceName)
+        val registry = MethodPolicyRegistry()
+        val handled = setOf("getPackageInfo", "getApplicationInfo", "getActivityInfo", "getServiceInfo", "getReceiverInfo",
+            "getProviderInfo", "getPackagesForUid", "checkPermission", "getInstalledPackages", "getInstalledApplications",
+            "resolveIntent", "queryIntentActivities")
+        handled.forEach { registry.register(it) { call, physical ->
+            val values = call.args
             val component = values.filterIsInstance<ComponentName>().firstOrNull()
             val intent = values.filterIsInstance<Intent>().firstOrNull()
             val strings = values.filterIsInstance<String>()
-            val packageName = component?.packageName ?: intent?.component?.packageName ?: intent?.`package` ?: when (method.name) {
+            val versionedPackage = values.firstOrNull { it?.javaClass?.name == "android.content.pm.VersionedPackage" }
+                ?.let { runCatching { it.javaClass.getMethod("getPackageName").invoke(it) as? String }.getOrNull() }
+            val packageName = component?.packageName ?: intent?.component?.packageName ?: intent?.`package` ?: versionedPackage ?: when (call.methodName) {
                 "checkPermission" -> strings.getOrNull(1)
                 "getPackageInfo", "getApplicationInfo" -> strings.firstOrNull()
                 else -> strings.firstOrNull { it == identity.guestPackageName }
             }
             val virtualRoute = packageName == identity.guestPackageName
             val queryRoute = visibility.route(packageName)
-            try {
-                val result: Any? = when {
-                    method.name == "getPackageInfo" && virtualRoute -> service.getPackageInfo(identity.guestPackageName)
-                    method.name == "getApplicationInfo" && virtualRoute -> service.getApplicationInfo(identity.guestPackageName)
-                    method.name == "getActivityInfo" && component != null && virtualRoute -> service.getActivityInfo(component)
-                    method.name == "getServiceInfo" && component != null && virtualRoute -> service.getServiceInfo(component)
-                    method.name == "getReceiverInfo" && component != null && virtualRoute -> service.getReceiverInfo(component)
-                    method.name == "getProviderInfo" && component != null && virtualRoute -> service.getProviderInfo(component)
-                    method.name == "getPackagesForUid" && values.firstOrNull() == identity.virtualUidNumber -> service.getPackagesForUid(identity.virtualUidNumber)
-                    method.name == "checkPermission" && virtualRoute -> service.checkPermission(values.filterIsInstance<String>().first(), identity.guestPackageName)
-                    method.name == "getInstalledPackages" -> createSlice(method.returnType, listOfNotNull(service.getPackageInfo(identity.guestPackageName)))
-                    method.name == "getInstalledApplications" -> createSlice(method.returnType, listOfNotNull(service.getApplicationInfo(identity.guestPackageName)))
-                    (method.name == "resolveIntent" || method.name == "queryIntentActivities") && virtualRoute -> {
-                        sanitizeResolution(method.invoke(original, *values), method.returnType)
+            val result: Any? = when {
+                    call.methodName == "getPackageInfo" && virtualRoute -> service.getPackageInfo(identity.guestPackageName)
+                    call.methodName == "getApplicationInfo" && virtualRoute -> service.getApplicationInfo(identity.guestPackageName)
+                    call.methodName == "getActivityInfo" && component != null && virtualRoute -> service.getActivityInfo(component)
+                    call.methodName == "getServiceInfo" && component != null && virtualRoute -> service.getServiceInfo(component)
+                    call.methodName == "getReceiverInfo" && component != null && virtualRoute -> service.getReceiverInfo(component)
+                    call.methodName == "getProviderInfo" && component != null && virtualRoute -> service.getProviderInfo(component)
+                    call.methodName == "getPackagesForUid" && (values.firstOrNull() == identity.virtualUidNumber || values.firstOrNull() == identity.hostUid) -> service.getPackagesForUid(identity.virtualUidNumber)
+                    call.methodName == "checkPermission" && virtualRoute -> service.checkPermission(values.filterIsInstance<String>().first(), identity.guestPackageName)
+                    call.methodName == "getInstalledPackages" -> createSlice(call.method.returnType, listOfNotNull(service.getPackageInfo(identity.guestPackageName)))
+                    call.methodName == "getInstalledApplications" -> createSlice(call.method.returnType, listOfNotNull(service.getApplicationInfo(identity.guestPackageName)))
+                    (call.methodName == "resolveIntent" || call.methodName == "queryIntentActivities") && virtualRoute -> {
+                        sanitizeResolution(physical(values), call.method.returnType)
                     }
                     queryRoute == PackageQueryRoute.HOST || queryRoute == PackageQueryRoute.DENY -> null
-                    else -> method.invoke(original, *values)
+                    else -> physical(values)
                 }
-                val loggedRoute = if (method.name == "getPackagesForUid" && values.firstOrNull() == identity.virtualUidNumber) {
+                val loggedRoute = if (call.methodName == "getPackagesForUid" &&
+                    (values.firstOrNull() == identity.virtualUidNumber || values.firstOrNull() == identity.hostUid)) {
                     PackageQueryRoute.VIRTUAL
                 } else queryRoute
-                log(method.name, packageName, loggedRoute.name, result)
-                result
-            } catch (error: InvocationTargetException) {
-                logFailure(method.name, packageName, error.targetException)
-                throw error.targetException
-            }
-        }
+                log(call.methodName, packageName, loggedRoute.name, result)
+                BinderCallResult(result, if (loggedRoute == PackageQueryRoute.VIRTUAL) BinderRoute.VIRTUAL else BinderRoute.PHYSICAL,
+                    if (loggedRoute == PackageQueryRoute.VIRTUAL) IdentityDecision.VIRTUALIZE else IdentityDecision.PASSTHROUGH)
+        } }
+        val proxy = ProxySupport.create(original, iface, serviceName, identity, registry)
         field.set(null, proxy)
         Log.i(TAG, "VPM_INSTALL api=${Build.VERSION.SDK_INT} instance=${identity.instanceId} virtualUid=${identity.virtualUidNumber} interface=${iface.name}")
+        AdapterInstallResult(serviceName, true)
+    }.getOrElse { error ->
+        logFailure("install", identity.guestPackageName, error)
+        AdapterInstallResult(serviceName, false, failureReason = error.toString())
     }
 
     private fun sanitizeResolution(result: Any?, returnType: Class<*>): Any? {

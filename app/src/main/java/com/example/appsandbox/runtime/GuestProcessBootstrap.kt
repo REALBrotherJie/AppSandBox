@@ -9,11 +9,9 @@ import android.util.Log
 import com.example.appsandbox.virtual.LaunchEnvelope
 import java.io.File
 import com.example.appsandbox.identity.RuntimeIdentity
-import com.example.appsandbox.identity.SystemIdentityBridge
-import com.example.appsandbox.vpm.GuestPackageManagerBridge
 import com.example.appsandbox.vpm.VirtualPackageManagerService
-import com.example.appsandbox.activity.GuestActivityStartBridge
 import com.example.appsandbox.activity.VirtualActivityManager
+import com.example.appsandbox.binder.VirtualBinderManager
 import com.example.appsandbox.stub.StubActivities
 import com.example.appsandbox.storage.InstanceStorageManager
 
@@ -33,7 +31,6 @@ class GuestProcessBootstrap(private val context: Context) {
 
         val info = ActivityInfo(envelope.activityInfo)
         val identity = RuntimeIdentity.create(context, envelope.packageName, envelope.instanceId, envelope.processSlot)
-        val identityBridge = SystemIdentityBridge(identity)
         val stub = StubActivities.intent(context, envelope.processSlot, envelope.activityInfo.launchMode)
         activityManager.requested(envelope, requireNotNull(stub.component), null, -1)
         val app = ApplicationInfo(requireNotNull(info.applicationInfo))
@@ -51,7 +48,6 @@ class GuestProcessBootstrap(private val context: Context) {
         val loader = guestLoader.prepare(app.sourceDir, app.splitSourceDirs.orEmpty().toList(), app.nativeLibraryDir, envelope.packageName, root.path)
         val thread = Class.forName("android.app.ActivityThread").getDeclaredMethod("currentActivityThread")
             .apply { isAccessible = true }.invoke(null) ?: error("ActivityThread unavailable")
-        guestLoader.installSystemCallerBridge(identityBridge)
         val packageFlags = android.content.pm.PackageManager.GET_ACTIVITIES or android.content.pm.PackageManager.GET_SERVICES or
             android.content.pm.PackageManager.GET_RECEIVERS or android.content.pm.PackageManager.GET_PROVIDERS or
             android.content.pm.PackageManager.GET_PERMISSIONS or android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES
@@ -60,10 +56,14 @@ class GuestProcessBootstrap(private val context: Context) {
         } else {
             @Suppress("DEPRECATION") context.packageManager.getPackageInfo(envelope.packageName, packageFlags)
         }
-        GuestPackageManagerBridge(identity, VirtualPackageManagerService(packageInfo, identity, root.path)).install(thread)
-        GuestActivityStartBridge(context, identity, activityManager).install()
+        val binderManager = VirtualBinderManager(context, identity, thread,
+            VirtualPackageManagerService(packageInfo, identity, root.path), activityManager)
+        val binderResults = binderManager.install()
+        require(binderResults.all { it.installed }) {
+            "Binder Core install failed: ${binderResults.filterNot { it.installed }.joinToString { "${it.service}:${it.failureReason}" }}"
+        }
         val resources = guestLoader.installLoadedApk(thread, loader, app.sourceDir, app)
-        guestLoader.installInstrumentation(thread, loader, identityBridge, activityManager)
+        guestLoader.installInstrumentation(thread, loader, binderManager.identityBridge(), activityManager)
         info.applicationInfo.className = app.className
         val restored = Intent(envelope.originalIntent).apply {
             component = envelope.target
