@@ -10,6 +10,8 @@ import android.view.ViewTreeObserver
 import com.example.appsandbox.platform.ActivityThreadBridge
 import com.example.appsandbox.platform.ClientTransactionBridge
 import com.example.appsandbox.platform.PlatformProbe
+import com.example.appsandbox.platform.ReceiverPlatformBridge
+import com.example.appsandbox.platform.ProviderPlatformBridge
 import com.example.appsandbox.virtual.LaunchEnvelope
 import com.example.appsandbox.service.VirtualServiceRuntime
 import java.lang.reflect.Field
@@ -20,6 +22,8 @@ class ActivityLaunchInterceptor(private val context: android.content.Context) {
     private val bootstrap = GuestProcessBootstrap(context)
 
     fun install(): PlatformProbe {
+        Log.i("AppSandbox.M8", "VRECEIVER_TX probe=${ReceiverPlatformBridge.probe()}")
+        Log.i("AppSandbox.M8", "VPROVIDER probe=${ProviderPlatformBridge.probe()}")
         val handles = activityThreadBridge.resolve().getOrElse { return failure(it) }
         val transactionProbe = transactionBridge.probe()
         if (!transactionProbe.supported) return transactionProbe
