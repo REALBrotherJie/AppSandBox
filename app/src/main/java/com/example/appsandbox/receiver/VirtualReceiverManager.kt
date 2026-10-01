@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** Instance-scoped receiver ownership. Delivery is intentionally delegated to Android. */
 class VirtualReceiverManager {
+    companion object { val GLOBAL = VirtualReceiverManager() }
     data class Key(val instanceId: String, val token: Any)
     data class Registration(
         val key: Key,
@@ -52,6 +53,7 @@ class VirtualReceiverManager {
         return delivery
     }
     fun delivery(id: String, instanceId: String): Delivery? = deliveries[id]?.takeIf { it.instanceId == instanceId }
+    fun consume(id: String): Delivery? = deliveries[id]
     fun finishDelivery(id: String) { deliveries.remove(id) }
     fun pending(instanceId: String? = null): Int = if (instanceId == null) deliveries.size else deliveries.values.count { it.instanceId == instanceId }
     fun removeInstanceDeliveries(instanceId: String): Int {

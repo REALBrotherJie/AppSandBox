@@ -15,6 +15,7 @@ import com.example.appsandbox.platform.ProviderPlatformBridge
 import com.example.appsandbox.virtual.LaunchEnvelope
 import com.example.appsandbox.service.VirtualServiceRuntime
 import java.lang.reflect.Field
+import com.example.appsandbox.receiver.VirtualReceiverManager
 
 class ActivityLaunchInterceptor(private val context: android.content.Context) {
     private val activityThreadBridge = ActivityThreadBridge()
@@ -41,7 +42,25 @@ class ActivityLaunchInterceptor(private val context: android.content.Context) {
 
     private fun intercept(message: Message, handler: Handler, activityThread: Any) {
         if (message.what == RECEIVER && message.obj != null) {
-            Log.i("AppSandbox.M8", "VRECEIVER_TX event=H_RECEIVER object=${message.obj.javaClass.name} fields=${ReceiverPlatformBridge.inspectReceiverData(message.obj)}")
+            val data = message.obj
+            val before = ReceiverPlatformBridge.inspectReceiverData(data)
+            val intent = before["intent"]?.let { _ -> findField(data.javaClass, "intent").apply { isAccessible = true }.get(data) as? android.content.Intent }
+            val deliveryId = intent?.getStringExtra("com.example.appsandbox.receiver.DELIVERY_ID")
+            val delivery = deliveryId?.let(VirtualReceiverManager.GLOBAL::consume)
+            if (delivery != null) {
+                runCatching {
+                    val intentField = findField(data.javaClass, "intent")
+                    val infoField = findField(data.javaClass, "info")
+                    intentField.set(data, android.content.Intent(delivery.guestIntent).apply {
+                        component = android.content.ComponentName(delivery.guestInfo.packageName, delivery.guestInfo.name)
+                        setExtrasClassLoader(Thread.currentThread().contextClassLoader)
+                    })
+                    infoField.set(data, android.content.pm.ActivityInfo(delivery.guestInfo))
+                    Log.i("AppSandbox.M8", "VRECEIVER_TX event=RESTORE delivery=${delivery.id} guest=${android.content.ComponentName(delivery.guestInfo.packageName, delivery.guestInfo.name).flattenToShortString()} before=$before after=${ReceiverPlatformBridge.inspectReceiverData(data)}")
+                }.onFailure { Log.e("AppSandbox.M8", "VRECEIVER_TX event=RESTORE_FAILED delivery=${delivery.id}", it) }
+            } else {
+                Log.i("AppSandbox.M8", "VRECEIVER_TX event=H_RECEIVER object=${data.javaClass.name} delivery=$deliveryId fields=$before")
+            }
         }
         if (VirtualServiceRuntime.restore(message, context)) return
         if (message.what != EXECUTE_TRANSACTION || message.obj == null) return

@@ -32,7 +32,7 @@ class ActivityManagerAdapter(
         }
         val iface = Class.forName(interfaceName)
         val registry = MethodPolicyRegistry()
-        val receivers = VirtualReceiverManager()
+        val receivers = VirtualReceiverManager.GLOBAL
         registry.register("getContentProvider") { context, physical ->
             val rewritten = IdentityPolicy(identity).rewritePackageUidAt(context.args, setOf(1), emptySet())
             val result = physical(rewritten)
