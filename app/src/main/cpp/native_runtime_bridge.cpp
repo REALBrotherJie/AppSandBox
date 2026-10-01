@@ -8,8 +8,10 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 #include <atomic>
 #include <mutex>
@@ -31,6 +33,7 @@ std::mutex g_lock;
 Binding g_binding;
 std::atomic<bool> g_ready{false};
 std::atomic<uint64_t> g_guest_rewrites{0};
+thread_local bool g_translation_denied = false;
 
 using OpenFunction = int (*)(const char*, int, ...);
 using OpenAtFunction = int (*)(int, const char*, int, ...);
@@ -56,7 +59,17 @@ bool match_namespace(const std::string& path, const std::string& prefix, std::st
     return false;
 }
 
+bool is_logical_namespace(const char* raw) {
+    if (raw == nullptr) return false;
+    const std::string path(raw);
+    std::string suffix;
+    return match_namespace(path, "/data/data/" + g_binding.package_name, &suffix) ||
+        match_namespace(path, "/data/user/0/" + g_binding.package_name, &suffix) ||
+        match_namespace(path, "/data/user_de/0/" + g_binding.package_name, &suffix);
+}
+
 std::string translate(const char* raw) {
+    g_translation_denied = false;
     if (raw == nullptr || raw[0] != '/' || !g_ready.load(std::memory_order_acquire)) {
         return raw == nullptr ? std::string() : std::string(raw);
     }
@@ -74,6 +87,19 @@ std::string translate(const char* raw) {
     } else {
         return path;
     }
+    size_t cursor = 0;
+    while (cursor <= suffix.size()) {
+        const size_t slash = suffix.find('/', cursor);
+        const std::string component = suffix.substr(cursor, slash == std::string::npos ? std::string::npos : slash - cursor);
+        if (component == "..") {
+            errno = EACCES;
+            g_translation_denied = true;
+            __android_log_print(ANDROID_LOG_WARN, kTag, "PATH_DENY traversal logical=%s", raw);
+            return {};
+        }
+        if (slash == std::string::npos) break;
+        cursor = slash + 1;
+    }
     std::string translated = *root;
     if (!suffix.empty()) translated += "/" + suffix;
     g_guest_rewrites.fetch_add(1, std::memory_order_relaxed);
@@ -82,6 +108,23 @@ std::string translate(const char* raw) {
         g_binding.process_slot, g_binding.instance_id.c_str(), raw, translated.c_str());
     return translated;
 }
+
+std::string reverse_map(const std::string& physical) {
+    std::lock_guard<std::mutex> guard(g_lock);
+    const auto map_root = [&](const std::string& root, const std::string& logical) -> std::string {
+        if (physical == root) return logical;
+        if (physical.size() > root.size() && physical.compare(0, root.size(), root) == 0 && physical[root.size()] == '/') {
+            return logical + physical.substr(root.size());
+        }
+        return {};
+    };
+    std::string mapped = map_root(g_binding.credential_root, "/data/user/0/" + g_binding.package_name);
+    if (!mapped.empty()) return mapped;
+    mapped = map_root(g_binding.device_root, "/data/user_de/0/" + g_binding.package_name);
+    return mapped.empty() ? physical : mapped;
+}
+
+bool denied() { return g_translation_denied; }
 
 extern "C" __attribute__((visibility("default"))) int appsandbox_open(const char* path, int flags, ...) {
     mode_t mode = 0;
@@ -92,6 +135,7 @@ extern "C" __attribute__((visibility("default"))) int appsandbox_open(const char
         va_end(args);
     }
     const std::string physical = translate(path);
+    if (denied()) return -1;
     return static_cast<int>(syscall(SYS_openat, AT_FDCWD, physical.c_str(), flags, mode));
 }
 
@@ -104,17 +148,107 @@ extern "C" __attribute__((visibility("default"))) int appsandbox_openat(int dirf
         va_end(args);
     }
     const std::string physical = translate(path);
+    if (denied()) return -1;
     return static_cast<int>(syscall(SYS_openat, dirfd, physical.c_str(), flags, mode));
 }
 
 extern "C" __attribute__((visibility("default"))) int appsandbox_open_fortify(const char* path, int flags) {
     const std::string physical = translate(path);
+    if (denied()) return -1;
     return static_cast<int>(syscall(SYS_openat, AT_FDCWD, physical.c_str(), flags, 0));
 }
 
 extern "C" __attribute__((visibility("default"))) int appsandbox_openat_fortify(int dirfd, const char* path, int flags) {
     const std::string physical = translate(path);
+    if (denied()) return -1;
     return static_cast<int>(syscall(SYS_openat, dirfd, physical.c_str(), flags, 0));
+}
+
+extern "C" __attribute__((visibility("default"))) int appsandbox_stat(const char* path, struct stat* out) {
+    const std::string physical = translate(path);
+    if (denied()) return -1;
+    return static_cast<int>(syscall(SYS_newfstatat, AT_FDCWD, physical.c_str(), out, 0));
+}
+
+extern "C" __attribute__((visibility("default"))) int appsandbox_lstat(const char* path, struct stat* out) {
+    const std::string physical = translate(path);
+    if (denied()) return -1;
+    return static_cast<int>(syscall(SYS_newfstatat, AT_FDCWD, physical.c_str(), out, AT_SYMLINK_NOFOLLOW));
+}
+
+extern "C" __attribute__((visibility("default"))) int appsandbox_access(const char* path, int mode) {
+    const std::string physical = translate(path);
+    if (denied()) return -1;
+    return static_cast<int>(syscall(SYS_faccessat, AT_FDCWD, physical.c_str(), mode));
+}
+
+extern "C" __attribute__((visibility("default"))) ssize_t appsandbox_readlink(const char* path, char* buffer, size_t size) {
+    const bool logical_input = is_logical_namespace(path);
+    const std::string physical = translate(path);
+    if (denied()) return -1;
+    std::string temporary(size == 0 ? 1 : size, '\0');
+    const ssize_t count = static_cast<ssize_t>(syscall(SYS_readlinkat, AT_FDCWD, physical.c_str(), temporary.data(), size));
+    if (count < 0) return count;
+    const std::string target(temporary.data(), static_cast<size_t>(count));
+    const std::string logical = logical_input ? reverse_map(target) : target;
+    const size_t copied = logical.size() < size ? logical.size() : size;
+    if (copied > 0) memcpy(buffer, logical.data(), copied);
+    return static_cast<ssize_t>(copied);
+}
+
+extern "C" __attribute__((visibility("default"))) char* appsandbox_realpath(const char* path, char* resolved) {
+    const bool logical_input = is_logical_namespace(path);
+    const std::string physical = translate(path);
+    if (denied()) return nullptr;
+    const int fd = static_cast<int>(syscall(SYS_openat, AT_FDCWD, physical.c_str(), O_PATH | O_CLOEXEC, 0));
+    if (fd < 0) return nullptr;
+    char proc[64];
+    snprintf(proc, sizeof(proc), "/proc/self/fd/%d", fd);
+    char actual[PATH_MAX];
+    const ssize_t count = static_cast<ssize_t>(syscall(SYS_readlinkat, AT_FDCWD, proc, actual, sizeof(actual) - 1));
+    const int saved = errno;
+    close(fd);
+    if (count < 0) { errno = saved; return nullptr; }
+    actual[count] = '\0';
+    const std::string logical = logical_input ? reverse_map(actual) : actual;
+    char* output = resolved == nullptr ? static_cast<char*>(malloc(logical.size() + 1)) : resolved;
+    if (output == nullptr) { errno = ENOMEM; return nullptr; }
+    memcpy(output, logical.c_str(), logical.size() + 1);
+    return output;
+}
+
+extern "C" __attribute__((visibility("default"))) int appsandbox_rename(const char* old_path, const char* new_path) {
+    const std::string old_physical = translate(old_path);
+    if (denied()) return -1;
+    const std::string new_physical = translate(new_path);
+    if (denied()) return -1;
+    return static_cast<int>(syscall(SYS_renameat, AT_FDCWD, old_physical.c_str(), AT_FDCWD, new_physical.c_str()));
+}
+
+extern "C" __attribute__((visibility("default"))) int appsandbox_unlink(const char* path) {
+    const std::string physical = translate(path);
+    if (denied()) return -1;
+    return static_cast<int>(syscall(SYS_unlinkat, AT_FDCWD, physical.c_str(), 0));
+}
+
+extern "C" __attribute__((visibility("default"))) int appsandbox_mkdir(const char* path, mode_t mode) {
+    const std::string physical = translate(path);
+    if (denied()) return -1;
+    return static_cast<int>(syscall(SYS_mkdirat, AT_FDCWD, physical.c_str(), mode));
+}
+
+extern "C" __attribute__((visibility("default"))) int appsandbox_rmdir(const char* path) {
+    const std::string physical = translate(path);
+    if (denied()) return -1;
+    return static_cast<int>(syscall(SYS_unlinkat, AT_FDCWD, physical.c_str(), AT_REMOVEDIR));
+}
+
+extern "C" __attribute__((visibility("default"))) int appsandbox_symlink(const char* target, const char* link_path) {
+    const std::string physical_target = translate(target);
+    if (denied()) return -1;
+    const std::string physical_link = translate(link_path);
+    if (denied()) return -1;
+    return static_cast<int>(syscall(SYS_symlinkat, physical_target.c_str(), AT_FDCWD, physical_link.c_str()));
 }
 
 bool patch_entry(void* target, void* replacement) {
@@ -148,6 +282,14 @@ bool patch_entry(void* target, void* replacement) {
     return true;
 }
 
+bool patch_optional(const char* symbol, void* replacement, bool required = true) {
+    void* target = dlsym(RTLD_DEFAULT, symbol);
+    const bool ok = target == nullptr ? !required : patch_entry(target, replacement);
+    __android_log_print(ok ? ANDROID_LOG_INFO : ANDROID_LOG_ERROR, kTag,
+        "HOOK_SYMBOL name=%s target=%p installed=%d", symbol, target, ok);
+    return ok;
+}
+
 bool install_open_hooks() {
     void* open_target = dlsym(RTLD_DEFAULT, "open");
     void* openat_target = dlsym(RTLD_DEFAULT, "openat");
@@ -157,10 +299,21 @@ bool install_open_hooks() {
     const bool openat_ok = patch_entry(openat_target, reinterpret_cast<void*>(appsandbox_openat));
     const bool open2_ok = open2_target == nullptr || patch_entry(open2_target, reinterpret_cast<void*>(appsandbox_open_fortify));
     const bool openat2_ok = openat2_target == nullptr || patch_entry(openat2_target, reinterpret_cast<void*>(appsandbox_openat_fortify));
-    __android_log_print(open_ok && openat_ok && open2_ok && openat2_ok ? ANDROID_LOG_INFO : ANDROID_LOG_ERROR, kTag,
+    bool path_ok = true;
+    path_ok &= patch_optional("stat", reinterpret_cast<void*>(appsandbox_stat));
+    path_ok &= patch_optional("lstat", reinterpret_cast<void*>(appsandbox_lstat));
+    path_ok &= patch_optional("access", reinterpret_cast<void*>(appsandbox_access));
+    path_ok &= patch_optional("readlink", reinterpret_cast<void*>(appsandbox_readlink));
+    path_ok &= patch_optional("realpath", reinterpret_cast<void*>(appsandbox_realpath));
+    path_ok &= patch_optional("rename", reinterpret_cast<void*>(appsandbox_rename));
+    path_ok &= patch_optional("unlink", reinterpret_cast<void*>(appsandbox_unlink));
+    path_ok &= patch_optional("mkdir", reinterpret_cast<void*>(appsandbox_mkdir));
+    path_ok &= patch_optional("rmdir", reinterpret_cast<void*>(appsandbox_rmdir));
+    path_ok &= patch_optional("symlink", reinterpret_cast<void*>(appsandbox_symlink));
+    __android_log_print(open_ok && openat_ok && open2_ok && openat2_ok && path_ok ? ANDROID_LOG_INFO : ANDROID_LOG_ERROR, kTag,
         "HOOK_INSTALL open=%p/%d openat=%p/%d __open_2=%p/%d __openat_2=%p/%d",
         open_target, open_ok, openat_target, openat_ok, open2_target, open2_ok, openat2_target, openat2_ok);
-    return open_ok && openat_ok && open2_ok && openat2_ok;
+    return open_ok && openat_ok && open2_ok && openat2_ok && path_ok;
 }
 
 std::string utf(JNIEnv* env, jstring value) {
