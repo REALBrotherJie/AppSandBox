@@ -22,9 +22,9 @@ class ActivityLaunchInterceptor(private val context: android.content.Context) {
     private val bootstrap = GuestProcessBootstrap(context)
 
     fun install(): PlatformProbe {
-        Log.i("AppSandbox.M8", "VRECEIVER_TX probe=${ReceiverPlatformBridge.probe()}")
-        Log.i("AppSandbox.M8", "VPROVIDER probe=${ProviderPlatformBridge.probe()}")
         val handles = activityThreadBridge.resolve().getOrElse { return failure(it) }
+        Log.i("AppSandbox.M8", "VRECEIVER_TX probe=${ReceiverPlatformBridge.probe(handles.activityThread)}")
+        Log.i("AppSandbox.M8", "VPROVIDER probe=${ProviderPlatformBridge.probe()}")
         val transactionProbe = transactionBridge.probe()
         if (!transactionProbe.supported) return transactionProbe
         return runCatching {
@@ -40,6 +40,9 @@ class ActivityLaunchInterceptor(private val context: android.content.Context) {
     }
 
     private fun intercept(message: Message, handler: Handler, activityThread: Any) {
+        if (message.what == RECEIVER && message.obj != null) {
+            Log.i("AppSandbox.M8", "VRECEIVER_TX event=H_RECEIVER object=${message.obj.javaClass.name} fields=${ReceiverPlatformBridge.inspectReceiverData(message.obj)}")
+        }
         if (VirtualServiceRuntime.restore(message, context)) return
         if (message.what != EXECUTE_TRANSACTION || message.obj == null) return
         runCatching {
@@ -108,5 +111,6 @@ class ActivityLaunchInterceptor(private val context: android.content.Context) {
     companion object {
         private const val TAG = "AppSandbox.M2"
         private const val EXECUTE_TRANSACTION = 159
+        private const val RECEIVER = 113
     }
 }
