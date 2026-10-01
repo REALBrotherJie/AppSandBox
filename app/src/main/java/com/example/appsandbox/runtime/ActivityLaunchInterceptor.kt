@@ -11,6 +11,7 @@ import com.example.appsandbox.platform.ActivityThreadBridge
 import com.example.appsandbox.platform.ClientTransactionBridge
 import com.example.appsandbox.platform.PlatformProbe
 import com.example.appsandbox.virtual.LaunchEnvelope
+import com.example.appsandbox.service.VirtualServiceRuntime
 import java.lang.reflect.Field
 
 class ActivityLaunchInterceptor(private val context: android.content.Context) {
@@ -35,6 +36,7 @@ class ActivityLaunchInterceptor(private val context: android.content.Context) {
     }
 
     private fun intercept(message: Message, handler: Handler, activityThread: Any) {
+        if (VirtualServiceRuntime.restore(message, context)) return
         if (message.what != EXECUTE_TRANSACTION || message.obj == null) return
         runCatching {
             transactionBridge.findNewIntentRecords(message.obj).forEach { record ->

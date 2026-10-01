@@ -9,6 +9,7 @@ import com.example.appsandbox.vpm.VirtualPackageManagerService
 import java.lang.reflect.Proxy
 
 class ActivityManagerAdapter(
+    private val context: Context,
     private val identity: RuntimeIdentity,
     private val identityBridge: SystemIdentityBridge,
     private val providerAdapter: ContentProviderIdentityAdapter,
@@ -45,6 +46,44 @@ class ActivityManagerAdapter(
                 val rewritten = IdentityPolicy(identity).rewritePackageUidAt(context.args, emptySet(), setOf(2))
                 identityBridge.logIdentityRewrite(serviceName, context.methodName, "PHYSICAL_UID_FOR_SYSTEM")
                 BinderCallResult(physical(rewritten), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
+            }
+        }
+        setOf("startService", "startForegroundService", "stopService", "bindService", "bindServiceInstance", "bindIsolatedService").forEach { name ->
+            registry.register(name) { call, physical ->
+                val intentIndex = call.args.indexOfFirst { it is android.content.Intent }
+                val originalIntent = call.args.getOrNull(intentIndex) as? android.content.Intent
+                val routed = originalIntent?.let { com.example.appsandbox.service.VirtualServiceRuntime.route(context, identity, packageService, it) }
+                if (routed == null) return@register BinderCallResult(physical(call.args), BinderRoute.PHYSICAL, IdentityDecision.PASSTHROUGH)
+                val args = call.args.copyOf().apply { this[intentIndex] = routed }
+                call.method.parameterTypes.indices.filter { call.method.parameterTypes[it] == String::class.java && args[it] == identity.guestPackageName }
+                    .forEach { args[it] = identity.hostPackageName }
+                if (name.startsWith("bind")) {
+                    val connectionIndex = call.method.parameterTypes.indexOfFirst { it.name == "android.app.IServiceConnection" }
+                    val connection = args.getOrNull(connectionIndex)
+                    if (connectionIndex >= 0) args[connectionIndex] = com.example.appsandbox.service.VirtualServiceRuntime.wrapConnection(
+                        connection, requireNotNull(originalIntent.component), call.method.parameterTypes[connectionIndex])
+                }
+                identityBridge.logIdentityRewrite(serviceName, name, "PHYSICAL_FOR_SYSTEM")
+                BinderCallResult(com.example.appsandbox.service.VirtualServiceRuntime.logicalResult(physical(args), routed), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
+            }
+        }
+        setOf("stopServiceToken", "setServiceForeground", "publishService", "unbindFinished").forEach { name ->
+            registry.register(name) { call, physical ->
+                val args = com.example.appsandbox.service.VirtualServiceRuntime.restoreCallbackArgs(name, call.args)
+                BinderCallResult(physical(args), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
+            }
+        }
+        registry.register("unbindService") { call, physical ->
+            val args = call.args.copyOf()
+            val index = call.method.parameterTypes.indexOfFirst { it.name == "android.app.IServiceConnection" }
+            if (index >= 0) args[index] = com.example.appsandbox.service.VirtualServiceRuntime.facadeFor(args[index])
+            BinderCallResult(physical(args), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
+        }
+        setOf("getIntentSender", "getIntentSenderWithFeature").forEach { name ->
+            registry.register(name) { call, physical ->
+                val args = call.args.copyOf()
+                args.indices.filter { args[it] is String && args[it] == identity.guestPackageName }.forEach { args[it] = identity.hostPackageName }
+                BinderCallResult(physical(args), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
             }
         }
         val proxy = ProxySupport.create(original, iface, serviceName, identity, registry)

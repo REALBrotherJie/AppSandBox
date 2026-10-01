@@ -20,9 +20,10 @@ class VirtualBinderManager(
     private val content = ContentProviderIdentityAdapter(identity, identityBridge)
     private val adapters = BinderAdapterRegistry(listOf(
         GuestPackageManagerBridge(identity, vpm, activityThread),
-        ActivityManagerAdapter(identity, identityBridge, content, vpm),
+        ActivityManagerAdapter(context, identity, identityBridge, content, vpm),
         GuestActivityStartBridge(context, identity, activityManager),
         AppOpsAdapter(context, identity, identityBridge)
+        , NotificationIdentityAdapter(identity)
     ))
 
     fun install(): List<AdapterInstallResult> {
