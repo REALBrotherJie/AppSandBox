@@ -82,8 +82,13 @@ class GuestRuntimePreparation(
         override fun getDataDir() = root
         override fun getFilesDir() = File(root, "files").apply { mkdirs() }
         override fun getCacheDir() = File(root, "cache").apply { mkdirs() }
+        override fun getCodeCacheDir() = instanceDirectory("code_cache")
         override fun getNoBackupFilesDir() = File(root, "no_backup").apply { mkdirs() }
         override fun getDatabasePath(name: String) = File(File(root, "databases").apply { mkdirs() }, name)
+        override fun getDir(name: String, mode: Int): File {
+            require(name.isNotEmpty() && !name.contains(File.separatorChar)) { "Directory name is invalid" }
+            return instanceDirectory("app_$name")
+        }
         override fun getSharedPreferences(name: String, mode: Int): SharedPreferences {
             require(!name.contains(File.separatorChar)) { "SharedPreferences name contains a path separator" }
             val file = File(File(root, "shared_prefs").apply { mkdirs() }, "$name.xml")
@@ -99,6 +104,15 @@ class GuestRuntimePreparation(
             return GuestContext(baseContext.createDeviceProtectedStorageContext(), guestLoader, guestResources, guestInfo, deviceRoot).also {
                 guestApplication?.let(it::bindApplication)
             }
+        }
+
+        private fun instanceDirectory(name: String): File {
+            val directory = File(root, name).canonicalFile
+            check(directory.parentFile == root.canonicalFile) { "Guest directory escapes instance root" }
+            check(directory.isDirectory || directory.mkdirs() || directory.isDirectory) {
+                "Guest directory unavailable: $directory"
+            }
+            return directory
         }
 
         companion object {
