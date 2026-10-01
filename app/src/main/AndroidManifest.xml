@@ -16,6 +16,15 @@
             </intent-filter>
         </activity>
         <service android:name=".runtime.GuestRuntimeService" android:exported="false" android:process=":vs" />
+        <receiver android:name=".stub.P0Receiver" android:exported="false" android:process=":p0" />
+        <receiver android:name=".stub.P1Receiver" android:exported="false" android:process=":p1" />
+        <receiver android:name=".stub.P2Receiver" android:exported="false" android:process=":p2" />
+        <receiver android:name=".stub.P3Receiver" android:exported="false" android:process=":p3" />
+        <receiver android:name=".stub.P4Receiver" android:exported="false" android:process=":p4" />
+        <receiver android:name=".stub.P5Receiver" android:exported="false" android:process=":p5" />
+        <receiver android:name=".stub.P6Receiver" android:exported="false" android:process=":p6" />
+        <receiver android:name=".stub.P7Receiver" android:exported="false" android:process=":p7" />
+        <receiver android:name=".stub.P8Receiver" android:exported="false" android:process=":p8" />
         <activity android:name=".stub.P0StandardActivity" android:exported="false" android:process=":p0" />
         <activity android:name=".stub.P0SingleTopActivity" android:exported="false" android:process=":p0" android:launchMode="singleTop" />
         <activity android:name=".stub.P0SingleTaskActivity" android:exported="false" android:process=":p0" android:launchMode="singleTask" />
