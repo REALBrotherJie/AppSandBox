@@ -56,3 +56,24 @@ No app reached Notification, Alarm, or Job as its first AppSandbox-specific bloc
 | QQ Browser (`com.tencent.mtt`) | 36 | unchanged: virtual package not registered |
 
 Evidence is under `build/reports/real-app-recovery-1/`. `BASELINE_FIRST_FRAME = 0/7`; `AFTER_FIX_FIRST_FRAME = 1/7`; `FIRST_BLOCKER_CHANGED_APPS = 2` (Momo, WPS). Ranking: (1) native/JNI/ABI startup, (2) complex provider/application bootstrap, (3) PendingIntent/Receiver API contracts, (4) Host physical permission capability, (5) virtual package visibility. M12 remains frozen because no audited app reaches Notification/Alarm/Job as its first blocker.
+
+## Recovery Round 2
+
+| App | API | After Recovery Round 2 |
+| --- | --- | --- |
+| Momo SDK sample (`com.reel.mylibrary`) | 31 | I0/I1 PASS: stable interactive first frame; native path and DB regression remain healthy |
+| Momo SDK sample (`com.reel.mylibrary`) | 36 | I0/I1 PASS: stable interactive first frame; arm64 translation path remains usable |
+| Chrome (`com.android.chrome`) | 31 | I0/I1 load base + 3 splits and Guest native path; first blocker remains `J.N.ZO` JNI registration |
+| Chrome (`com.android.chrome`) | 36 | I0/I1 load base + 3 splits and Guest native path; first blocker remains `J.N.ZO` JNI registration |
+| Termux (`com.termux`) | 31 | I0/I1 native setup reaches Activity; first blocker remains PendingIntent mutability contract |
+| Termux (`com.termux`) | 36 | I0/I1 native setup reaches Activity; first blocker remains PendingIntent/receiver API contract |
+| Coolapk (`com.coolapk.market`) | 31 | I0/I1 native/classloader setup completes; first blocker remains provider/application bootstrap stall |
+| Coolapk (`com.coolapk.market`) | 36 | I0/I1 native/classloader setup completes; first blocker remains provider/application bootstrap stall |
+| Zhihu (`com.zhihu.android`) | 31 | I0/I1 native initialization reaches ART abort before stable frame |
+| Zhihu (`com.zhihu.android`) | 36 | I0/I1 `libDexHelper.so` is AArch64 on x86_64: `GUEST_APP_ABI_INCOMPATIBLE` |
+| WPS (`cn.wps.moffice_eng`) | 31 | I0/I1 arm64 native path loads; first blocker remains RePlugin `BinderCursor` null |
+| WPS (`cn.wps.moffice_eng`) | 36 | I0/I1 arm64-only `libcp-lib.so` fails ELF load on x86_64: `GUEST_APP_ABI_INCOMPATIBLE` |
+| QQ Browser (`com.tencent.mtt`) | 31 | I0/I1 native setup reaches Guest; first blocker remains Host physical network capability |
+| QQ Browser (`com.tencent.mtt`) | 36 | I0/I1 package is not registered in current virtual inventory |
+
+Evidence is under `build/reports/real-app-recovery-2/`. `ROUND_1_FIRST_FRAME = 1/7`; `ROUND_2_FIRST_FRAME = 1/7`; split/native audit proves no generic split omission or Guest native search-path bug. Ranking remains (1) native/JNI/ABI startup, (2) complex provider/application bootstrap, (3) PendingIntent/Receiver API contracts, (4) Host physical permission capability, (5) virtual package visibility. M12 remains frozen.
