@@ -20,7 +20,7 @@ class NativeIoPolicy(
         val match = prefixes.firstOrNull { (prefix, _) ->
             path == prefix || path.startsWith("$prefix/")
         } ?: run {
-            if (isUnder(instanceRoot) || deviceProtectedRoot?.let(::isUnder) == true) {
+            if (isUnder(path, instanceRoot) || deviceProtectedRoot?.let { isUnder(path, it) } == true) {
                 return Result(Decision.PASSTHROUGH, path, path)
             }
             return Result(Decision.PASSTHROUGH, path, path)
@@ -37,8 +37,9 @@ class NativeIoPolicy(
         return Result(Decision.VIRTUAL_INSTANCE_PATH, path, canonical.path)
     }
 
-    private fun isUnder(root: File): Boolean {
-        val canonical = runCatching { root.canonicalFile }.getOrNull() ?: return false
-        return canonical.path == instanceRoot.canonicalPath || canonical.path.startsWith(instanceRoot.canonicalPath + File.separator)
+    private fun isUnder(path: String, root: File): Boolean {
+        val canonical = runCatching { File(path).canonicalFile }.getOrNull() ?: return false
+        val canonicalRoot = runCatching { root.canonicalFile }.getOrNull() ?: return false
+        return canonical == canonicalRoot || canonical.path.startsWith(canonicalRoot.path + File.separator)
     }
 }

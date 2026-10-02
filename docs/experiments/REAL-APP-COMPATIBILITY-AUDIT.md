@@ -35,3 +35,24 @@ Audit anchor: `57c31b41aec3ad00feb58c341e1152e5c6d86185`. API31 device: `7b67002
 ## Decision Input
 
 No app reached Notification, Alarm, or Job as its first AppSandbox-specific blocker. Most failed in M2-M10 startup, storage, native, provider, permission, or receiver boundaries. `RECOMMEND_RESUME_M12 = NO`. `NATIVE_REAL_APP_GAP` is present: M9 initializes for Momo, but Momo first fails on duplicated virtual DB path; Chrome separately exposes missing JNI registration. Raw evidence is under `build/reports/real-app-audit/`.
+
+## Recovery Round 1
+
+| App | API | After Recovery Round 1 |
+| --- | --- | --- |
+| Momo SDK sample (`com.reel.mylibrary`) | 31 | I0/I1 PASS: stable interactive first frame; next issue is non-fatal Host physical `INTERNET` capability |
+| Momo SDK sample (`com.reel.mylibrary`) | 36 | I0/I1 PASS: stable interactive first frame; no `SQLITE_CANTOPEN` |
+| Chrome (`com.android.chrome`) | 31 | unchanged: I0/I1 fail at `J.N.ZO` JNI |
+| Chrome (`com.android.chrome`) | 36 | unchanged: I0/I1 null Context, then `J.N.ZO` JNI |
+| Termux (`com.termux`) | 31 | unchanged: I0/I1 reach RESUME, then PendingIntent mutability exception |
+| Termux (`com.termux`) | 36 | unchanged: I0/I1 fail dynamic Receiver exported flag contract |
+| Coolapk (`com.coolapk.market`) | 31 | unchanged: I0/I1 stall during large provider bootstrap |
+| Coolapk (`com.coolapk.market`) | 36 | unchanged: I0/I1 repeat provider/native startup without stable frame |
+| Zhihu (`com.zhihu.android`) | 31 | I0/I1 reach native initialization, then ART `SIGABRT` before frame |
+| Zhihu (`com.zhihu.android`) | 36 | unchanged: I0/I1 fail AArch64 `libDexHelper.so` on x86_64 |
+| WPS (`cn.wps.moffice_eng`) | 31 | provider denial fixed; new blocker is null RePlugin `BinderCursor.BinderParcelable` |
+| WPS (`cn.wps.moffice_eng`) | 36 | self-provider route succeeds; first blocker remains arm64 `libcp-lib.so` on x86_64 |
+| QQ Browser (`com.tencent.mtt`) | 31 | unchanged: no stable frame; physical network capability boundary |
+| QQ Browser (`com.tencent.mtt`) | 36 | unchanged: virtual package not registered |
+
+Evidence is under `build/reports/real-app-recovery-1/`. `BASELINE_FIRST_FRAME = 0/7`; `AFTER_FIX_FIRST_FRAME = 1/7`; `FIRST_BLOCKER_CHANGED_APPS = 2` (Momo, WPS). Ranking: (1) native/JNI/ABI startup, (2) complex provider/application bootstrap, (3) PendingIntent/Receiver API contracts, (4) Host physical permission capability, (5) virtual package visibility. M12 remains frozen because no audited app reaches Notification/Alarm/Job as its first blocker.

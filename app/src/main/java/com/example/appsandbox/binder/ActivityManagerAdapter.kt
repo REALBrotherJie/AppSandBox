@@ -12,6 +12,7 @@ import com.example.appsandbox.receiver.BroadcastSessionClient
 import com.example.appsandbox.receiver.BroadcastSessionProvider
 import com.example.appsandbox.runtime.VirtualProcessCoordinatorClient
 import com.example.appsandbox.runtime.VirtualProcessKey
+import com.example.appsandbox.provider.VirtualProviderManager
 
 class ActivityManagerAdapter(
     private val context: Context,
@@ -55,7 +56,8 @@ class ActivityManagerAdapter(
         }
         registry.register("getContentProvider") { context, physical ->
             val authority = context.args.firstOrNull { it is String && packageService.ownsProviderAuthority(it) } as? String
-            val remoteInfo = authority?.let(packageService::getProviderInfo)?.takeIf {
+            val providerInfo = authority?.let(packageService::getProviderInfo)
+            val remoteInfo = providerInfo?.takeIf {
                 VirtualProcessKey.canonicalProcessName(identity.guestPackageName, it.processName) != identity.guestPackageName
             }
             if (remoteInfo != null) {
@@ -73,6 +75,21 @@ class ActivityManagerAdapter(
                 runCatching { holderType.getDeclaredField("noReleaseNeeded").apply { isAccessible = true }.setBoolean(holder, true) }
                 Log.i("AppSandbox.M10", "REMOTE_PROVIDER_ROUTE authority=$authority slot=${route.slot} pid=${route.pid} generation=${route.generation}")
                 return@register BinderCallResult(providerAdapter.wrapHolder(holder), BinderRoute.VIRTUAL, IdentityDecision.VIRTUALIZE)
+            }
+            if (providerInfo != null) {
+                val selfAuthority = requireNotNull(authority)
+                val record = VirtualProviderManager.GLOBAL.findSelfProvider(
+                    identity.instanceId, identity.guestPackageName, identity.virtualUid, selfAuthority
+                )
+                if (record != null) {
+                    Log.i("AppSandbox.M8", "VPROVIDER event=SELF_ROUTE authority=$selfAuthority instance=${identity.instanceId} " +
+                        "package=${identity.guestPackageName} virtualUid=${identity.virtualUid}")
+                    return@register BinderCallResult(
+                        providerAdapter.wrapHolder(record.provider), BinderRoute.VIRTUAL, IdentityDecision.VIRTUALIZE
+                    )
+                }
+                Log.w("AppSandbox.M8", "VPROVIDER event=SELF_ROUTE_MISS authority=$selfAuthority instance=${identity.instanceId} " +
+                    "package=${identity.guestPackageName} virtualUid=${identity.virtualUid}")
             }
             val rewritten = IdentityPolicy(identity).rewritePackageUidAt(context.args, setOf(1), emptySet())
             val result = physical(rewritten)

@@ -13,6 +13,7 @@ import java.io.File
 import com.example.appsandbox.identity.RuntimeIdentity
 import com.example.appsandbox.platform.ProviderPlatformBridge
 import com.example.appsandbox.provider.VirtualProviderManager
+import com.example.appsandbox.storage.InstancePathPolicy
 
 class GuestRuntimePreparation(
     private val host: Context,
@@ -29,35 +30,61 @@ class GuestRuntimePreparation(
 
     fun prepare(providers: Array<ProviderInfo>, logicalProcessName: String = identity.guestPackageName): Result {
         val guestContext = GuestContext(host, loader, resources, applicationInfo, dataRoot)
+        val localProviders = providers.filter {
+            !it.authority.isNullOrBlank() &&
+                VirtualProcessKey.canonicalProcessName(identity.guestPackageName, it.processName) == logicalProcessName
+        }.map(::overlayProvider)
+        localProviders.forEach { overlay ->
+            overlay.authority.split(';').forEach { authority ->
+                val key = VirtualProviderManager.Key(identity.instanceId, authority)
+                VirtualProviderManager.GLOBAL.registerSelfProvider(
+                    key, identity.guestPackageName, identity.virtualUid
+                ) {
+                    installProvider(guestContext, overlay, key)
+                }
+            }
+        }
         val appClass = applicationInfo.className?.takeIf { it.isNotBlank() } ?: Application::class.java.name
         val application = instrumentation.newApplication(loader, appClass, guestContext)
         guestContext.bindApplication(application)
         bindApplication(application)
-        val installed = providers.filter {
-            VirtualProcessKey.canonicalProcessName(identity.guestPackageName, it.processName) == logicalProcessName
-        }.map { info ->
-            val overlay = ProviderInfo(info).apply {
-                packageName = identity.guestPackageName
-                applicationInfo = ApplicationInfo(applicationInfo)
-                this.applicationInfo.packageName = identity.guestPackageName
-                this.applicationInfo.dataDir = dataRoot.path
-                this.applicationInfo.sourceDir = applicationInfo.sourceDir
-                this.name = info.name
-            }
-            val holder = ProviderPlatformBridge.installLocalProvider(activityThread, application, overlay)
-            android.util.Log.i("AppSandbox.M8", "VPROVIDER event=GUEST_CONTEXT instance=${identity.instanceId} provider=${overlay.name} " +
-                "application=${System.identityHashCode(application)} applicationContext=${System.identityHashCode(application.applicationContext)} " +
-                "package=${application.packageName} data=${application.dataDir} databaseRoot=${File(dataRoot, "databases")} holder=${System.identityHashCode(holder)}")
-            overlay.authority.split(';').forEach { authority ->
-                VirtualProviderManager.GLOBAL.install(VirtualProviderManager.Record(
-                    VirtualProviderManager.Key(identity.instanceId, authority), identity.guestPackageName,
-                    identity.virtualUid, ProviderInfo(overlay), holder
-                ))
-            }
-            info.name
+        val installed = localProviders.map { overlay ->
+            val authority = overlay.authority.substringBefore(';')
+            requireNotNull(VirtualProviderManager.GLOBAL.findSelfProvider(
+                identity.instanceId, identity.guestPackageName, identity.virtualUid, authority
+            ))
+            overlay.name
         }
         instrumentation.callApplicationOnCreate(application)
         return Result(application, guestContext, installed)
+    }
+
+    private fun overlayProvider(info: ProviderInfo) = ProviderInfo(info).apply {
+        packageName = identity.guestPackageName
+        applicationInfo = ApplicationInfo(applicationInfo)
+        this.applicationInfo.packageName = identity.guestPackageName
+        this.applicationInfo.dataDir = dataRoot.path
+        this.applicationInfo.sourceDir = applicationInfo.sourceDir
+        name = info.name
+    }
+
+    private fun installProvider(
+        guestContext: GuestContext,
+        overlay: ProviderInfo,
+        requestedKey: VirtualProviderManager.Key
+    ): VirtualProviderManager.Record {
+        val holder = ProviderPlatformBridge.installLocalProvider(activityThread, guestContext, overlay)
+        android.util.Log.i("AppSandbox.M8", "VPROVIDER event=GUEST_CONTEXT instance=${identity.instanceId} provider=${overlay.name} " +
+            "applicationContext=${System.identityHashCode(guestContext.applicationContext)} package=${guestContext.packageName} " +
+            "data=${guestContext.dataDir} databaseRoot=${File(dataRoot, "databases")} holder=${System.identityHashCode(holder)}")
+        val records = overlay.authority.split(';').associateWith { authority ->
+            VirtualProviderManager.Record(
+                VirtualProviderManager.Key(identity.instanceId, authority), identity.guestPackageName,
+                identity.virtualUid, ProviderInfo(overlay), holder
+            )
+        }
+        records.values.filterNot { it.key == requestedKey }.forEach(VirtualProviderManager.GLOBAL::install)
+        return requireNotNull(records[requestedKey.authority])
     }
 
     private class GuestContext(
@@ -68,6 +95,7 @@ class GuestRuntimePreparation(
         private val root: File
     ) : ContextWrapper(base) {
         @Volatile private var guestApplication: Application? = null
+        private val pathPolicy = InstancePathPolicy(guestInfo.packageName, root)
 
         fun bindApplication(application: Application) {
             check(guestApplication == null || guestApplication === application) { "Guest Application already bound" }
@@ -86,7 +114,7 @@ class GuestRuntimePreparation(
         override fun getCacheDir() = File(root, "cache").apply { mkdirs() }
         override fun getCodeCacheDir() = instanceDirectory("code_cache")
         override fun getNoBackupFilesDir() = File(root, "no_backup").apply { mkdirs() }
-        override fun getDatabasePath(name: String) = File(File(root, "databases").apply { mkdirs() }, name)
+        override fun getDatabasePath(name: String) = pathPolicy.databasePath(name)
         override fun getDir(name: String, mode: Int): File {
             require(name.isNotEmpty() && !name.contains(File.separatorChar)) { "Directory name is invalid" }
             return instanceDirectory("app_$name")
