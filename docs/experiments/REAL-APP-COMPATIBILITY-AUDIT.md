@@ -125,3 +125,19 @@ Round 5 rechecked the same seven apps with both instances. Termux API31 reaches 
 | QQ Browser | unchanged | unchanged | Host network capability / package visibility |
 
 `ROUND_5_FIRST_FRAME = 1/7`; no generic PendingIntent/Receiver production defect was proven, so `VirtualPendingIntentRegistry` was not expanded and M12 remains frozen.
+
+## Recovery Round 6
+
+Round 6 did not change production code. Termux Guest metadata is `targetSdk=28` on both devices, while Host AppSandbox is `targetSdk=36`. On API31, Guest execution uses Host UID 10293 and the system reports change `160794467` enabled for that UID before the Guest PendingIntent failure; physical Termux uses UID 10257, reports the change disabled, and launches normally. This proves client-side targetSdk compat leakage. API36 retains the analogous Host-identity receiver enforcement candidate (`161145287`), but per-Guest VMRuntime/server compat state is not isolated or directly instrumented yet.
+
+| App | API31 Round 6 | API36 Round 6 | first blocker |
+| --- | --- | --- | --- |
+| Momo SDK sample | I0/I1 PASS | I0/I1 PASS | none observed |
+| Chrome | unchanged | unchanged | `J.N.ZO` no native implementation |
+| Termux | compat leakage confirmed; PendingIntent mutability failure | compat leakage candidate; dynamic receiver exported flag failure | Host target/UID compat applied to Guest |
+| Coolapk | unchanged | unchanged | provider/application bootstrap stall |
+| Zhihu | unchanged | `GUEST_APP_ABI_INCOMPATIBLE` | native startup / AArch64 on x86_64 |
+| WPS | `REPLUGIN_INTERNAL_ASSUMPTION` | `GUEST_APP_ABI_INCOMPATIBLE` | unchanged |
+| QQ Browser | unchanged | unchanged | Host network capability / package visibility |
+
+`ROUND_6_FIRST_FRAME = NOT_RERUN` because no production runtime change was made. The remaining defect is a general per-process targetSdk/compat isolation gap, not a Termux-specific issue; M12 remains frozen.
