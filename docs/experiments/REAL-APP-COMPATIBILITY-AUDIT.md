@@ -157,3 +157,9 @@ Round 7 confirmed the correction boundary but made no production change. The API
 | QQ Browser | unchanged | unchanged | Host network capability / package visibility |
 
 `ROUND_7_FIRST_FRAME = 1/7`; no additional app advanced. M12 remains frozen.
+
+## Recovery Round 8
+
+Round 8 architecture review selected no client interception architecture. M10 proves one Guest `VirtualProcessKey` per READY physical slot/generation, but a process-global compat delegate cannot be safely isolated from Host runtime state and the hidden API is not exposed in the compile SDK. Candidate B is also unproven because PendingIntent factories/checks execute before Binder and the existing registry is not wired to a Guest-only framework call boundary. No production runtime changes were made.
+
+`ROUND_8_FIRST_FRAME = NOT_RERUN`; Momo remains the API31/API36 I0/I1 PASS oracle. M12 remains frozen.
