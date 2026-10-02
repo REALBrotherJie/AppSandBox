@@ -109,3 +109,19 @@ Round 4 preserved the same seven-app sample and Instance0/Instance1 scope. WPS A
 | QQ Browser | unchanged | unchanged | Host network capability / package visibility |
 
 `ROUND_4_FIRST_FRAME = 1/7`; blocker ranking remains native/JNI/ABI, provider/application bootstrap, PendingIntent/receiver contracts, physical capability, and package visibility. M12 remains frozen.
+
+## Recovery Round 5
+
+Round 5 rechecked the same seven apps with both instances. Termux API31 reaches Guest service startup, then fails in its own `TermuxService.buildNotification()` at `PendingIntent.getActivity()` because targetSdk S+ requires an explicit mutability flag. Termux API36 fails at the Android `registerReceiverWithFeature` contract because neither `RECEIVER_EXPORTED` nor `RECEIVER_NOT_EXPORTED` is supplied after the Host identity boundary. No PendingIntent registry collapse, wrong logical identity, wrong requestCode/type, or delayed receiver routing was reached or proven.
+
+| App | API31 Round 5 | API36 Round 5 | first blocker |
+| --- | --- | --- | --- |
+| Momo SDK sample | I0/I1 PASS | I0/I1 PASS | none observed |
+| Chrome | unchanged | unchanged | `J.N.ZO` no native implementation |
+| Termux | FAIL during service startup | FAIL during receiver registration | API version contract / app-specific missing flags |
+| Coolapk | unchanged | unchanged | provider/application bootstrap stall |
+| Zhihu | unchanged | `GUEST_APP_ABI_INCOMPATIBLE` | native startup / AArch64 on x86_64 |
+| WPS | `REPLUGIN_INTERNAL_ASSUMPTION` | `GUEST_APP_ABI_INCOMPATIBLE` | unchanged |
+| QQ Browser | unchanged | unchanged | Host network capability / package visibility |
+
+`ROUND_5_FIRST_FRAME = 1/7`; no generic PendingIntent/Receiver production defect was proven, so `VirtualPendingIntentRegistry` was not expanded and M12 remains frozen.
