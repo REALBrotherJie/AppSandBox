@@ -77,3 +77,19 @@ Evidence is under `build/reports/real-app-recovery-1/`. `BASELINE_FIRST_FRAME = 
 | QQ Browser (`com.tencent.mtt`) | 36 | I0/I1 package is not registered in current virtual inventory |
 
 Evidence is under `build/reports/real-app-recovery-2/`. `ROUND_1_FIRST_FRAME = 1/7`; `ROUND_2_FIRST_FRAME = 1/7`; split/native audit proves no generic split omission or Guest native search-path bug. Ranking remains (1) native/JNI/ABI startup, (2) complex provider/application bootstrap, (3) PendingIntent/Receiver API contracts, (4) Host physical permission capability, (5) virtual package visibility. M12 remains frozen.
+
+## Recovery Round 3
+
+Round 3 rechecked the unchanged seven-app sample on API31 (`7b670025`) and API36 (`emulator-5554`) with Instance0/Instance1, stopping at the first blocker. Physical Chrome launches were captured for comparison. Guest Chrome still resolves base + `split_chrome` + `split_config.zh` + `split_on_demand`, and its materialized arm64 native directory is present; however no Guest `cr_LibraryLoader`/`System.loadLibrary` success or JNI registration is observed before `J.N.ZO`. The same-version physical Chrome reaches Chrome UI and logs successful `libchrome.so` loading. This does not prove a generic AppSandbox ClassLoader/JNI defect, so no Chrome-specific or fake-JNI change was made.
+
+| App | API31 Round 3 | API36 Round 3 | first blocker |
+| --- | --- | --- | --- |
+| Momo SDK sample | I0/I1 PASS | I0/I1 PASS | none observed |
+| Chrome | I0/I1 FAIL before frame | I0/I1 FAIL before frame | `J.N.ZO` no native implementation; generic runtime defect unproven |
+| Termux | first blocker unchanged | first blocker unchanged | PendingIntent/receiver API contract |
+| Coolapk | first blocker unchanged | first blocker unchanged | provider/application bootstrap stall |
+| Zhihu | first blocker unchanged | `GUEST_APP_ABI_INCOMPATIBLE` | native startup / AArch64 on x86_64 |
+| WPS | RePlugin `BinderCursor` null | `GUEST_APP_ABI_INCOMPATIBLE` | RePlugin internal contract / ABI |
+| QQ Browser | Host physical network capability | virtual package visibility/registration | platform boundary |
+
+`ROUND_3_FIRST_FRAME = 1/7`; no new first-frame app was obtained. Momo remained the regression oracle on both APIs and both instances. WPS API31 null was localized to the RePlugin internal BinderCursor contract after provider routing, not to the shared JNI/ClassLoader path.
