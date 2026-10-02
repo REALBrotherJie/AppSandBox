@@ -1,17 +1,21 @@
 # M11 CLOSURE VALIDATION RESULT
-STATUS = PARTIAL (M11 core PASS; M2-M10 regression retains pre-existing harness/scope debt)
-START_HEAD = d5835406fddfd04367e005fd66d924e14ba75b04; FINAL_HEAD = pending focused commit
-API31 = PASS: M11 8/8, M11_ISOLATION 3/3; API36 = PASS: M11 8/8, M11_ISOLATION 3/3
-SELECTED_LOCATION_ARCHITECTURE = VirtualLocationCoordinator + M6 LocationServiceAdapter + M10 generation binding
-FIXED / ROUTE / provider / last / current / listener / removeUpdates = PASS on API31/API36
-REQUEST_INTERVAL / MIN_DISTANCE / MAX_UPDATES / DURATION = PASS on API31/API36; route cursor advance verified by points 0→2 with max=2
-MULTI_INSTANCE_LOCATION_ISOLATION = PASS (I0 35.11,139.11; I1 34.22,135.22; default+remote)
-MULTI_PROCESS_LOCATION_CONSISTENCY = PASS; PROCESS_DEATH_LOCATION_CLEANUP = PASS; STALE_CALLBACK_REJECTION = PASS
-INSTANCE_DELETE = PASS for target removal and survivor retention; post-delete query I0=ABSENT, I1=FIXED (recreate-empty not separately scripted)
-LOCATION_PROFILE_PERSISTENCE = PASS; registration persistence = intentionally absent; LOCATION_PENDING_INTENT = DEFERRED
-GNSS_STATUS_POLICY = SUPPRESSED_IN_VIRTUAL_MODE; GNSS lifecycle = PASS; raw GNSS/NMEA/GMS/Geocoder = OUT_OF_SCOPE
-COARSE_PRECISE_PERMISSION_BEHAVIOR = DEFERRED_TO_M12; LOCATION_IS_MOCK_API31=false; LOCATION_IS_MOCK_API36=false
-M2-M10 CURRENT-HEAD REGRESSION: Demo1 core PASS; Demo2 M7 PASS/M10 PASS; M8 manifest timeout remains AUTOMATION_HARNESS; Demo3 M9 25 PASS + 1 BLOCKED (scope/harness)
-BUILD_GATES = PASS: testDebugUnitTest, assembleDebug, assembleRelease; arm64-v8a and x86_64 compiled
-EVIDENCE = build/reports/m11/{7b670025,emulator-5554}-m11-final-suite.log, *-m11-isolation-final.log, *-instance-lifecycle.log
-M11_READY_TO_CLOSE = NO (Planner must classify retained M2-M10 evidence debt); M12_STARTED = NO; STOPPED_AFTER_M11 = YES
+START_BRANCH = main; START_HEAD = a2bd63943cf63d22e8d713e9d4b6c8228457cadc
+API36_ENV = PASS: emulator-5554, SDK 36, x86_64, google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.E1/13823249
+API31_DEVICE = PASS: 7b670025, SDK 31, arm64-v8a, Xiaomi/umi/umi:12/SKQ1.220303.001/22.10.26
+API31_M11 = PASS: 8/8; M11_ISOLATION = PASS: 3/3; focused current-head evidence retained
+API36_M11 = PASS: 8/8; M11_ISOLATION = PASS: 3/3; fixed/route/provider/last/current/listener/threading/removeUpdates all PASS
+REQUEST_INTERVAL = PASS; MIN_DISTANCE = PASS; MAX_UPDATES = PASS; DURATION = PASS; filtered route points advanced cursor and later eligible point delivered
+VIRTUAL_LOCATION_COORDINATOR_PROVEN = YES; LOCATION_SERVICE_INTERCEPTION_PROVEN = YES; FIXED_LOCATION_PROVEN = YES; ROUTE_LOCATION_PROVEN = YES
+MULTI_INSTANCE_LOCATION_ISOLATION_PROVEN = YES: I0 35.11/139.11, I1 34.22/135.22, default+remote on both devices
+MULTI_PROCESS_LOCATION_CONSISTENCY_PROVEN = YES; PROCESS_DEATH_LOCATION_CLEANUP_PROVEN = YES; STALE_LOCATION_CALLBACK_REJECTION_PROVEN = YES
+INSTANCE_DELETE = PASS: I0 profile ABSENT and I1 FIXED after deletion on API31/API36; registrations/runtime cleanup logged
+INSTANCE_RECREATE = PASS: normal I0 recreation remains ABSENT and does not inherit deleted profile; I1 remains FIXED
+LOCATION_PROFILE_PERSISTENCE_PROVEN = YES; process-local registrations intentionally not persisted; LOCATION_PENDING_INTENT = DEFERRED
+GNSS_STATUS_POLICY = SUPPRESSED_IN_VIRTUAL_MODE; GNSS_STATUS_LIFECYCLE_PROVEN = YES; raw GNSS/NMEA/GMS/Geocoder = OUT_OF_SCOPE
+COARSE_PRECISE_PERMISSION_BEHAVIOR = DEFERRED_TO_M12; LOCATION_IS_MOCK_API31 = false; LOCATION_IS_MOCK_API36 = false
+M2-M10 API31 = Demo1 PASS; M7 PASS; M10 PASS; M8 runtime PASS with known manifest AUTOMATION_HARNESS timeout; M9 25 PASS + 1 BLOCKED + 2 MANUAL scope/harness
+M2-M10 API36 = Demo1 PASS; M7 PASS; M10 PASS; M8 runtime PASS with same AUTOMATION_HARNESS timeout; M9 25 PASS + 1 BLOCKED + 2 MANUAL scope/harness
+BUILD_GATES = PASS: :app:testDebugUnitTest, :app:assembleDebug, :app:assembleRelease; arm64-v8a/x86_64 compile outputs present
+STATUS = PARTIAL (M11 core and dual-device closure PASS; retained M2-M10 harness/scope debt prevents final closure classification)
+M11_READY_TO_CLOSE = NO; M12_STARTED = NO; STOPPED_AFTER_M11_CLOSURE = YES
+FINAL_HEAD = focused commit recorded by this closure; COMMITS = docs(m11): close API36 validation; EVIDENCE = build/reports/m11/*-m11-final*.log, *-isolation*.log, *-instance-recreate-final.log, build-*.log
