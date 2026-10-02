@@ -33,7 +33,14 @@ std::mutex g_lock;
 Binding g_binding;
 std::atomic<bool> g_ready{false};
 std::atomic<uint64_t> g_guest_rewrites{0};
+std::atomic<uint32_t> g_passthrough_evidence{0};
 thread_local bool g_translation_denied = false;
+
+enum PassthroughEvidence : uint32_t {
+    kWebViewPath = 1u << 0,
+    kVirtualInstancePath = 1u << 1,
+    kHostRuntimePath = 1u << 2,
+};
 
 using OpenFunction = int (*)(const char*, int, ...);
 using OpenAtFunction = int (*)(int, const char*, int, ...);
@@ -68,6 +75,15 @@ bool is_logical_namespace(const char* raw) {
         match_namespace(path, "/data/user_de/0/" + g_binding.package_name, &suffix);
 }
 
+void log_passthrough_once(uint32_t bit, const char* category, const std::string& path) {
+    const uint32_t previous = g_passthrough_evidence.fetch_or(bit, std::memory_order_relaxed);
+    if ((previous & bit) == 0) {
+        __android_log_print(ANDROID_LOG_INFO, kTag,
+            "PATH_PASSTHROUGH category=%s slot=%d instance=%s path=%s",
+            category, g_binding.process_slot, g_binding.instance_id.c_str(), path.c_str());
+    }
+}
+
 std::string translate(const char* raw) {
     g_translation_denied = false;
     if (raw == nullptr || raw[0] != '/' || !g_ready.load(std::memory_order_acquire)) {
@@ -85,6 +101,19 @@ std::string translate(const char* raw) {
     } else if (match_namespace(path, user_de, &suffix)) {
         root = &g_binding.device_root;
     } else {
+        if (path.find("/app_webview_") != std::string::npos) {
+            log_passthrough_once(kWebViewPath, "WEBVIEW_PHYSICAL", path);
+        } else if ((!g_binding.credential_root.empty() &&
+                    path.compare(0, g_binding.credential_root.size(), g_binding.credential_root) == 0) ||
+                   (!g_binding.device_root.empty() &&
+                    path.compare(0, g_binding.device_root.size(), g_binding.device_root) == 0)) {
+            log_passthrough_once(kVirtualInstancePath, "VIRTUAL_INSTANCE_PHYSICAL", path);
+        } else if (path.compare(0, strlen("/data/user/0/com.example.appsandbox"),
+                                "/data/user/0/com.example.appsandbox") == 0 ||
+                   path.compare(0, strlen("/data/data/com.example.appsandbox"),
+                                "/data/data/com.example.appsandbox") == 0) {
+            log_passthrough_once(kHostRuntimePath, "HOST_RUNTIME", path);
+        }
         return path;
     }
     size_t cursor = 0;
@@ -348,6 +377,7 @@ Java_com_example_appsandbox_runtime_NativeRuntimeBridge_nativeBindAndInstall(
         return JNI_FALSE;
     }
     g_binding = requested;
+    g_passthrough_evidence.store(0, std::memory_order_relaxed);
     if (!install_open_hooks()) {
         g_binding = Binding{};
         return JNI_FALSE;

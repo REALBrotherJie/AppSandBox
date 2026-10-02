@@ -17,7 +17,6 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.Message
 import android.os.Messenger
-import android.os.SystemClock
 import android.util.Log
 import java.io.File
 import java.util.UUID
@@ -146,12 +145,13 @@ object VirtualProcessCoordinatorClient {
 }
 
 private class ProductionVirtualProcessCoordinator(private val context: Context) {
-    private enum class State { ALLOCATING, STARTING_PHYSICAL_PROCESS, AGENT_CONNECTED, BINDING_GUEST, READY, DEAD }
+    private enum class State { ALLOCATING, STARTING_PHYSICAL_PROCESS, AGENT_CONNECTED, BINDING_GUEST, READY, DYING, DEAD }
     private data class Record(
         val key: VirtualProcessKey,
         val slot: Int,
         val generation: Long,
         val ready: CountDownLatch = CountDownLatch(1),
+        val physicalDeath: CountDownLatch = CountDownLatch(1),
         var state: State = State.ALLOCATING,
         var pid: Int = -1,
         var agent: IBinder? = null,
@@ -172,7 +172,7 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
         )
         val transaction = UUID.randomUUID().toString()
         val record = synchronized(this) {
-            records[key]?.takeIf { it.state != State.DEAD } ?: allocate(key).also {
+            records[key]?.takeIf { it.state != State.DEAD && it.state != State.DYING } ?: allocate(key).also {
                 records[key] = it
                 slots[it.slot] = key
                 handler.post { startAgent(it, M10ArchProtocol.COMPONENT_SERVICE, info, null) }
@@ -202,18 +202,24 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
 
     fun terminateInstance(instanceId: String): List<String> {
         val owned = synchronized(this) {
-            records.values.filter { it.key.instanceId == instanceId && it.state != State.DEAD }
+            records.values.filter { it.key.instanceId == instanceId && it.state != State.DEAD }.onEach {
+                if (it.state != State.DYING) it.state = State.DYING
+            }
         }
         val suffixes = owned.map { VirtualWebViewProcessPolicy.stableSuffix(it.key) }.distinct()
+        Log.i(TAG, "VPROCESS_TEARDOWN event=REQUEST thread=${Thread.currentThread().name} instance=$instanceId records=${owned.size}")
         owned.forEach { record ->
             record.agent?.let { binder ->
                 runCatching { Messenger(binder).send(Message.obtain(null, M10ArchProtocol.MSG_DIE)) }
-                    .onFailure { markDead(record) }
-            } ?: markDead(record)
+                    .onFailure { record.physicalDeath.countDown() }
+            } ?: record.physicalDeath.countDown()
         }
-        val deadline = SystemClock.elapsedRealtime() + 5_000L
-        while (owned.any { it.state != State.DEAD } && SystemClock.elapsedRealtime() < deadline) Thread.sleep(25)
-        check(owned.all { it.state == State.DEAD }) { "remote process termination timeout instance=$instanceId" }
+        owned.forEach { record ->
+            check(record.physicalDeath.await(5, TimeUnit.SECONDS)) {
+                "remote physical death timeout instance=$instanceId generation=${record.generation}"
+            }
+            markDead(record)
+        }
         Log.i(TAG, "VPROCESS_INSTANCE_TERMINATED instance=$instanceId records=${owned.size} suffixes=$suffixes")
         return suffixes
     }
@@ -221,7 +227,7 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
     private fun ensure(key: VirtualProcessKey, starter: (Record) -> Unit): ProcessRoute {
         val transaction = UUID.randomUUID().toString()
         val record = synchronized(this) {
-            records[key]?.takeIf { it.state != State.DEAD } ?: allocate(key).also {
+            records[key]?.takeIf { it.state != State.DEAD && it.state != State.DYING } ?: allocate(key).also {
                 records[key] = it
                 slots[it.slot] = key
                 handler.post { starter(it) }
@@ -249,7 +255,11 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
             override fun onServiceConnected(name: ComponentName, binder: IBinder) {
                 record.state = State.AGENT_CONNECTED
                 record.agent = binder
-                binder.linkToDeath({ handler.post { markDead(record) } }, 0)
+                binder.linkToDeath({
+                    Log.i(TAG, "VPROCESS_TEARDOWN event=PHYSICAL_DEATH thread=${Thread.currentThread().name} key=${record.key} generation=${record.generation}")
+                    record.physicalDeath.countDown()
+                    handler.post { markDead(record) }
+                }, 0)
                 record.state = State.BINDING_GUEST
                 Messenger(binder).send(Message.obtain(null, M10ArchProtocol.MSG_BIND_PROCESS).apply {
                     data = Bundle().apply {
@@ -277,7 +287,10 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
                     })
                 })
             }
-            override fun onServiceDisconnected(name: ComponentName) = markDead(record)
+            override fun onServiceDisconnected(name: ComponentName) {
+                record.physicalDeath.countDown()
+                markDead(record)
+            }
         }
         record.connection = connection
         val bound = context.bindService(Intent(context, agentClass(record.slot)), connection, Context.BIND_AUTO_CREATE)
@@ -290,6 +303,7 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
     @Synchronized
     private fun markDead(record: Record) {
         if (record.state == State.DEAD) return
+        record.physicalDeath.countDown()
         record.state = State.DEAD
         record.agent = null
         record.connection?.let { runCatching { context.unbindService(it) } }
@@ -297,7 +311,7 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
         slots.remove(record.slot, record.key)
         records.remove(record.key, record)
         record.ready.countDown()
-        Log.i(TAG, "VPROCESS_DEAD key=${record.key} slot=${record.slot} generation=${record.generation}")
+        Log.i(TAG, "VPROCESS_DEAD thread=${Thread.currentThread().name} key=${record.key} slot=${record.slot} generation=${record.generation}")
     }
 
     private fun agentClass(slot: Int): Class<out android.app.Service> = arrayOf(
