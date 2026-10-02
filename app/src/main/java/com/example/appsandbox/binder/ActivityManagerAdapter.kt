@@ -13,6 +13,7 @@ import com.example.appsandbox.receiver.BroadcastSessionProvider
 import com.example.appsandbox.runtime.VirtualProcessCoordinatorClient
 import com.example.appsandbox.runtime.VirtualProcessKey
 import com.example.appsandbox.provider.VirtualProviderManager
+import com.example.appsandbox.runtime.GuestFrameworkCompatibilityPolicy
 
 class ActivityManagerAdapter(
     private val context: Context,
@@ -38,10 +39,41 @@ class ActivityManagerAdapter(
         val registry = MethodPolicyRegistry()
         setOf("registerReceiver", "registerReceiverWithFeature").forEach { name ->
             registry.register(name) { call, physical ->
+                val guestCall = call.args.any { value ->
+                    value == identity.guestPackageName ||
+                        (value is android.content.AttributionSource && value.packageName == identity.guestPackageName)
+                }
                 val args = IdentityPolicy(identity).rewriteAttributionArgs(call.args.copyOf()).also { rewritten ->
                     rewritten.indices
                         .filter { call.method.parameterTypes[it] == String::class.java && rewritten[it] == identity.guestPackageName }
                         .forEach { rewritten[it] = identity.hostPackageName }
+                }
+                val receiverIndex = call.method.parameterTypes.indexOfFirst { it.name == "android.content.IIntentReceiver" }
+                val filterIndex = call.method.parameterTypes.indexOfFirst { it == android.content.IntentFilter::class.java }
+                val flagsIndex = call.method.parameterTypes.indices.lastOrNull {
+                    call.method.parameterTypes[it] == Int::class.javaPrimitiveType
+                } ?: -1
+                if (flagsIndex >= 0) {
+                    val filter = args.getOrNull(filterIndex) as? android.content.IntentFilter
+                    val protectedOnly = filter != null && filter.countActions() > 0 &&
+                        (0 until filter.countActions()).all { isProtectedBroadcast(filter.getAction(it)) }
+                    val originalFlags = args[flagsIndex] as Int
+                    val translatedFlags = GuestFrameworkCompatibilityPolicy.receiverFlags(
+                        guestCall,
+                        android.os.Build.VERSION.SDK_INT,
+                        packageService.guestTargetSdk,
+                        originalFlags,
+                        args.getOrNull(receiverIndex) != null,
+                        protectedOnly
+                    )
+                    args[flagsIndex] = translatedFlags
+                    Log.i(
+                        "AppSandbox.M8",
+                        "VRECEIVER event=COMPAT_FLAGS instance=${identity.instanceId} " +
+                            "guestCall=$guestCall guestTarget=${packageService.guestTargetSdk} " +
+                            "before=$originalFlags after=$translatedFlags " +
+                            "hasReceiver=${args.getOrNull(receiverIndex) != null} protectedOnly=$protectedOnly"
+                    )
                 }
                 val before = call.args.mapIndexedNotNull { index, value ->
                     if (value is String || value is android.content.AttributionSource) "$index=$value" else null
@@ -212,6 +244,13 @@ class ActivityManagerAdapter(
         Log.i("AppSandbox.M6", "VBINDER_INSTALL service=$serviceName interface=$interfaceName instance=${identity.instanceId} result=PASS")
         AdapterInstallResult(serviceName, true)
     }.getOrElse { AdapterInstallResult(serviceName, false, failureReason = it.toString()) }
+
+    private fun isProtectedBroadcast(action: String): Boolean = runCatching {
+        val globals = Class.forName("android.app.AppGlobals")
+        val pm = globals.getDeclaredMethod("getPackageManager").invoke(null)
+        pm.javaClass.methods.first { it.name == "isProtectedBroadcast" && it.parameterCount == 1 }
+            .invoke(pm, action) as Boolean
+    }.getOrDefault(false)
 }
 
 class AppOpsAdapter(private val context: Context, private val identity: RuntimeIdentity, private val identityBridge: SystemIdentityBridge) : BinderServiceAdapter {

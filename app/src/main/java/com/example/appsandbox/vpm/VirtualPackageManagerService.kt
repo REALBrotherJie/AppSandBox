@@ -11,6 +11,7 @@ class VirtualPackageManagerService(
     private val identity: RuntimeIdentity,
     private val dataRoot: String
 ) {
+    val guestTargetSdk: Int get() = source.applicationInfo?.targetSdkVersion ?: 0
     fun getPackageInfo(packageName: String): PackageInfo? = source.takeIf { it.packageName == packageName }?.let(::sanitize)
     fun getApplicationInfo(packageName: String): ApplicationInfo? = getPackageInfo(packageName)?.applicationInfo
     fun getActivityInfo(component: ComponentName): ActivityInfo? = getPackageInfo(component.packageName)?.activities?.firstOrNull { it.name == component.className }

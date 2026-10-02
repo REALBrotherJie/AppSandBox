@@ -163,3 +163,19 @@ Round 7 confirmed the correction boundary but made no production change. The API
 Round 8 architecture review selected no client interception architecture. M10 proves one Guest `VirtualProcessKey` per READY physical slot/generation, but a process-global compat delegate cannot be safely isolated from Host runtime state and the hidden API is not exposed in the compile SDK. Candidate B is also unproven because PendingIntent factories/checks execute before Binder and the existing registry is not wired to a Guest-only framework call boundary. No production runtime changes were made.
 
 `ROUND_8_FIRST_FRAME = NOT_RERUN`; Momo remains the API31/API36 I0/I1 PASS oracle. M12 remains frozen.
+
+## Recovery Round 9
+
+Round 9 found no safe Guest-only PendingIntent interception: the project has Bionic IO hooks but no ART method hook with a reliable original-call path, and Guest DEX rewriting would not safely cover split/dynamic DEX or integrity checks. PendingIntent remains blocked before Binder. A separate Guest-caller-gated `IActivityManager` receiver translation now preserves pre-33 semantics without changing Host calls, sticky queries, protected-only filters, explicit flags, or modern Guest policy.
+
+| App | API31 Round 9 | API36 Round 9 | first blocker |
+| --- | --- | --- | --- |
+| Momo SDK sample | I0/I1 PASS | I0/I1 PASS | none observed |
+| Chrome | I0/I1 unchanged | I0/I1 unchanged | `J.N.ZO` no native implementation |
+| Termux | I0/I1 PendingIntent failure | I0/I1 receiver fixed, then PendingIntent failure | Guest-only PendingIntent interception missing |
+| Coolapk | I0/I1 bootstrap stall | I0/I1 bootstrap stall | provider/application bootstrap |
+| Zhihu | I0/I1 ART `SIGABRT` | I0/I1 `GUEST_APP_ABI_INCOMPATIBLE` | native startup / AArch64 on x86_64 |
+| WPS | I0/I1 RePlugin assumption | I0/I1 `GUEST_APP_ABI_INCOMPATIBLE` | RePlugin private contract / ABI |
+| QQ Browser | I0/I1 Host network capability | I0/I1 package registration failure | physical capability / visibility |
+
+API36 Termux I0/I1 logs prove `guestTarget=28`, `guestCall=true`, and receiver flags `0 -> 2`; the prior exported-flag exception is absent and the next first blocker is PendingIntent mutability. `ROUND_9_FIRST_FRAME = 1/7`; M12 remains frozen and M13 was not started. Evidence is under `build/reports/real-app-recovery-9/`.
