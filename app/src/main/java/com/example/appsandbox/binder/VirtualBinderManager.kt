@@ -8,6 +8,7 @@ import com.example.appsandbox.identity.RuntimeIdentity
 import com.example.appsandbox.identity.SystemIdentityBridge
 import com.example.appsandbox.vpm.GuestPackageManagerBridge
 import com.example.appsandbox.vpm.VirtualPackageManagerService
+import com.example.appsandbox.location.GuestProcessLocationBindings
 
 class VirtualBinderManager(
     context: Context,
@@ -26,6 +27,7 @@ class VirtualBinderManager(
         AppOpsAdapter(context, identity, identityBridge)
         , contentService
         , NotificationIdentityAdapter(identity)
+        , LocationServiceAdapter(context, identity, requireNotNull(GuestProcessLocationBindings.current()) { "Guest process location binding missing" })
     ))
 
     fun install(): List<AdapterInstallResult> {

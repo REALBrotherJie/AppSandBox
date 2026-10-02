@@ -8,6 +8,7 @@ import com.example.appsandbox.storage.InstanceStorageManager
 import com.example.appsandbox.stub.StubProcessPool
 import com.example.appsandbox.stub.StubServices
 import com.example.appsandbox.vpm.VirtualPackageRegistry
+import com.example.appsandbox.location.VirtualLocationCoordinatorClient
 
 data class VirtualInstanceDeleteResult(val slot: Int, val running: Boolean, val storageRemoved: Boolean)
 
@@ -49,6 +50,7 @@ class VirtualInstanceDeletionManager(
             storageRemoved = InstanceStorageManager.delete(context, instanceId, it.dataRoot)
         }
         val webViewStorageRemoved = VirtualWebViewProcessPolicy.deleteDataDirectories(context, webViewSuffixes)
+        val locationStateRemoved = VirtualLocationCoordinatorClient.delete(context, instanceId)
         val after = registry.find(packageName)
         val recordGone = after?.instances?.containsKey(instanceId) != true
         Log.i(TAG, "VINSTANCE_DELETE package=$packageName instance=$instanceId virtualUid=${registered.virtualUid} " +
@@ -57,7 +59,7 @@ class VirtualInstanceDeletionManager(
             "taskCleanup=${if (running) "process-terminated" else "no-record"} " +
             "processCleanup=${if (running) "killed" else "not-running"} " +
             "registryCleanup=${if (recordGone) "removed" else "present"} storageCleanup=$storageRemoved " +
-            "webViewSuffixes=$webViewSuffixes webViewStorageCleanup=$webViewStorageRemoved result=success")
+            "webViewSuffixes=$webViewSuffixes webViewStorageCleanup=$webViewStorageRemoved locationStateCleanup=$locationStateRemoved result=success")
         return VirtualInstanceDeleteResult(slot, running, storageRemoved)
     }
 

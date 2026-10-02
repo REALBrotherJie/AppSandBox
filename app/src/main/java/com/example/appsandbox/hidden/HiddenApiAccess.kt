@@ -41,7 +41,11 @@ object HiddenApiAccess {
             val setExemptions = vmRuntimeClass.declaredMethods.firstOrNull { it.name == "setHiddenApiExemptions" }
                 ?: throw NoSuchMethodException("VMRuntime.setHiddenApiExemptions")
             val runtime = getRuntime.invoke(null)
-            val prefixes = arrayOf("Landroid/app/ActivityThread;", "Landroid/app/ActivityTaskManager;", "Landroid/util/Singleton;")
+            val prefixes = arrayOf(
+                "Landroid/app/ActivityThread;", "Landroid/app/ActivityTaskManager;", "Landroid/util/Singleton;",
+                "Landroid/location/"
+                , "Landroid/os/ServiceManager;", "Landroid/app/ContextImpl;"
+            )
             setExemptions.invoke(runtime, arrayOf<Any>(prefixes))
             exemptionsInstalled = true
         } catch (error: Throwable) {

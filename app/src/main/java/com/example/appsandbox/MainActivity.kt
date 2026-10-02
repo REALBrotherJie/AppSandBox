@@ -17,6 +17,9 @@ import com.example.appsandbox.runtime.GuestRuntimeProtocol
 import com.example.appsandbox.runtime.GuestRuntimeService
 import com.example.appsandbox.runtime.VirtualActivityLauncher
 import com.example.appsandbox.runtime.M10ArchitectureProbeCoordinator
+import com.example.appsandbox.location.VirtualLocationCoordinatorClient
+import com.example.appsandbox.location.VirtualLocationMode
+import com.example.appsandbox.location.VirtualLocationPoint
 
 class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
@@ -42,6 +45,17 @@ class MainActivity : AppCompatActivity() {
             )
             return
         }
+        if (intent.action == ACTION_CONFIGURE_VIRTUAL_LOCATION) {
+            configureVirtualLocation(intent)
+            return
+        }
+        if (intent.action == ACTION_QUERY_VIRTUAL_LOCATION) {
+            val instanceId = requireNotNull(intent.getStringExtra(EXTRA_INSTANCE_ID))
+            val profile = VirtualLocationCoordinatorClient.get(this, instanceId)
+            status.text = "Virtual location: $instanceId / ${profile?.mode ?: "ABSENT"}"
+            Log.i("AppSandbox.M11", "VLOCATION_QUERY instance=$instanceId profile=${profile?.mode ?: "ABSENT"} generation=${profile?.generation ?: -1}")
+            return
+        }
         runFoundationProbe(intent.getIntExtra(EXTRA_STUB_SLOT, 0))
         intent.getStringExtra(EXTRA_GUEST_PACKAGE)?.let { packageName ->
             runCatching {
@@ -60,6 +74,17 @@ class MainActivity : AppCompatActivity() {
                 status.append("\nM2 launch failed: ${error.javaClass.simpleName}: ${error.message}")
             }
         }
+    }
+
+    private fun configureVirtualLocation(intent: Intent) {
+        val instanceId = requireNotNull(intent.getStringExtra(EXTRA_INSTANCE_ID))
+        val mode = VirtualLocationMode.valueOf(intent.getStringExtra("locationMode") ?: VirtualLocationMode.FIXED.name)
+        val encoded = intent.getStringExtra("locationPoints").orEmpty()
+        val points = encoded.split('~').filter(String::isNotBlank).map(VirtualLocationPoint::decode)
+        val providers = intent.getStringExtra("locationProviders").orEmpty().split(',').filter(String::isNotBlank).toSet()
+        val profile = VirtualLocationCoordinatorClient.set(this, instanceId, mode, points, providers)
+        status.text = "Virtual location configured: $instanceId / ${profile.mode} / generation ${profile.generation}"
+        Log.i("AppSandbox.M11", "VLOCATION_CONFIG instance=$instanceId mode=${profile.mode} generation=${profile.generation} points=${profile.points.size} providers=${profile.providers}")
     }
 
     private fun deleteVirtualInstance(packageName: String, instanceId: String) {
@@ -121,6 +146,8 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_GUEST_PACKAGE = "guestPackage"
         const val EXTRA_INSTANCE_ID = "instanceId"
         const val ACTION_DELETE_VIRTUAL_INSTANCE = "com.example.appsandbox.action.DELETE_VIRTUAL_INSTANCE"
+        const val ACTION_CONFIGURE_VIRTUAL_LOCATION = "com.example.appsandbox.action.CONFIGURE_VIRTUAL_LOCATION"
+        const val ACTION_QUERY_VIRTUAL_LOCATION = "com.example.appsandbox.action.QUERY_VIRTUAL_LOCATION"
         private const val TAG = "AppSandbox.M1"
     }
 }

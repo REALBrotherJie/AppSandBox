@@ -20,6 +20,7 @@ import com.example.appsandbox.service.VirtualServiceRecord
 import com.example.appsandbox.service.VirtualServiceRuntime
 import com.example.appsandbox.stub.P2Service
 import java.io.File
+import com.example.appsandbox.location.GuestProcessLocationBindings
 
 /** Minimal architecture-review endpoint. Global lifecycle ownership remains in the coordinator. */
 abstract class BaseProcessAgentService(private val declaredSlot: Int) : Service() {
@@ -57,6 +58,7 @@ abstract class BaseProcessAgentService(private val declaredSlot: Int) : Service(
             data.getLong(M10ArchProtocol.KEY_REVISION), packageName, instanceId,
             requireNotNull(data.getString(M10ArchProtocol.KEY_LOGICAL_PROCESS))
         )
+        GuestProcessLocationBindings.bind(requireNotNull(key), generation)
         val bootstrap = GuestProcessBootstrap(applicationContext)
         var providerBinder: IBinder? = null
         when (componentKind) {
@@ -92,6 +94,11 @@ abstract class BaseProcessAgentService(private val declaredSlot: Int) : Service(
             putLong(M10ArchProtocol.KEY_GENERATION, generation)
             providerBinder?.let { putBinder(M10ArchProtocol.KEY_PROVIDER_BINDER, it) }
         })
+    }
+
+    override fun onDestroy() {
+        GuestProcessLocationBindings.clear(generation)
+        super.onDestroy()
     }
 
     private fun reply(message: Message, data: Bundle) {

@@ -18,6 +18,9 @@ import com.example.appsandbox.binder.VirtualBinderManager
 import com.example.appsandbox.stub.StubActivities
 import com.example.appsandbox.storage.InstanceStorageManager
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
+import com.example.appsandbox.location.GuestProcessLocationBinding
+import com.example.appsandbox.location.GuestProcessLocationBindings
 
 class GuestProcessBootstrap(private val context: Context) {
     private val guestLoader = GuestRuntimeClassLoader(context)
@@ -129,7 +132,11 @@ class GuestProcessBootstrap(private val context: Context) {
         NativeRuntimeBridge.bind(identity, storage)
         val packageRevision = runCatching { File(info.applicationInfo?.sourceDir.orEmpty()).lastModified() }.getOrDefault(0L)
         val logicalProcessName = VirtualProcessKey.canonicalProcessName(envelope.packageName, info.processName)
-        VirtualWebViewProcessPolicy.configure(VirtualProcessKey(packageRevision, envelope.packageName, envelope.instanceId, logicalProcessName))
+        val processKey = VirtualProcessKey(packageRevision, envelope.packageName, envelope.instanceId, logicalProcessName)
+        VirtualWebViewProcessPolicy.configure(processKey)
+        if (GuestProcessLocationBindings.current()?.key != processKey) {
+            GuestProcessLocationBindings.bind(processKey, localLocationGeneration.incrementAndGet())
+        }
         val thread = Class.forName("android.app.ActivityThread").getDeclaredMethod("currentActivityThread")
             .apply { isAccessible = true }.invoke(null) ?: error("ActivityThread unavailable")
         if (!activityLaunch && !bindGuestApplication) {
@@ -240,5 +247,6 @@ class GuestProcessBootstrap(private val context: Context) {
     companion object {
         private const val TAG = "AppSandbox.M2"
         private val runtimeStates = ConcurrentHashMap<String, RuntimeState>()
+        private val localLocationGeneration = AtomicLong((android.os.Process.myPid().toLong() shl 32) or 1L)
     }
 }

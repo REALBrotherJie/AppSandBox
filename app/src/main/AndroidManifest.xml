@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
@@ -27,6 +29,7 @@
         <service android:name=".runtime.P8ProcessAgent" android:exported="false" android:process=":p8" />
         <provider android:name=".receiver.BroadcastSessionProvider" android:authorities="${applicationId}.receiver.sessions" android:exported="false" android:process=":vs" />
         <provider android:name=".runtime.VirtualProcessCoordinatorProvider" android:authorities="${applicationId}.process.coordinator" android:exported="false" android:process=":vs" />
+        <provider android:name=".location.VirtualLocationCoordinatorProvider" android:authorities="${applicationId}.virtual-location" android:exported="false" android:process=":vs" />
         <receiver android:name=".stub.P0ReceiverN2R0" android:exported="false" android:process=":p0">
             <intent-filter android:priority="100"><action android:name="com.example.appsandbox.receiver.ORDERED_P0_N2" /><action android:name="com.example.appsandbox.receiver.ORDERED_MULTI_N2" /></intent-filter>
         </receiver>
