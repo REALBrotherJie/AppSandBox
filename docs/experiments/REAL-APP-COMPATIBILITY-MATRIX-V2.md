@@ -57,3 +57,18 @@ All 18 packages passed installed-package import and package parse on API31. Only
 ## Controls And Build
 
 Momo API31/API36 I0/I1 each emitted a Guest first-frame timestamp. Termux API36 I0/I1 each logged `guestCall=true guestTarget=28 before=0 after=2`; the next blocker remains the frozen PendingIntent path. `:app:testDebugUnitTest`, `:app:assembleDebug`, and `:app:assembleRelease` passed at the unchanged runtime HEAD.
+
+## Round 11 Context Identity Recovery
+
+Round 11 started at `c22757c8f3f573db14f8e49d7320d9407d139679`. QQ Browser and Baidu preserve Guest package/op-package through Application and derived Contexts, but both still stop when ConnectivityService checks the Host UID, which lacks physical `ACCESS_NETWORK_STATE`; no permission or connectivity behavior was changed in this Context-only round. SuperList exposed a separate contract defect: `Toast` sent the Guest op-package to `INotificationManager` while Binder carried the Host UID. The notification system boundary now translates exact Guest package arguments to the Host physical package without changing Guest-facing Context identity.
+
+| App / API | I0 / I1 after Round 11 | First blocker after Round 11 |
+| --- | --- | --- |
+| QQ Browser / API31 | NO / NO | Host physical `ACCESS_NETWORK_STATE` capability missing |
+| Baidu / API31 | NO / NO | Host physical `ACCESS_NETWORK_STATE` capability missing |
+| SuperList / API31 | YES / YES | none through stable first frame |
+| SuperList / API36 | YES / YES | none through stable first frame |
+| Hide App List / API36 | NO / NO | unchanged obfuscated support-class `CLASSLOADER` failure |
+| Damai Helper / API36 | YES / YES | none through stable first frame |
+
+API31 improves from `3/18` to `4/18` independent Apps with dual-instance stable first frames: Momo, Kugou Lite, SuperList, and Damai Helper. API36 eligible improves from `1/3` to `2/3`; the 15 native ABI-ineligible Apps remain excluded. Momo API31 and API36 controls remain I0/I1 PASS. Termux API36 I0/I1 still log `guestCall=true guestTarget=28 before=0 after=2` before reaching the frozen PendingIntent client-compat blocker. Guest package, op-package, Application Context, derived configuration/device Context, storage, Provider Context, Binder translation, and Baidu remote-process routing were observed; Guest-facing `AttributionSource` and Virtual UID in Context-backed `ApplicationInfo` remain unproven. Raw evidence is under `build/reports/real-app-context-identity-11/`.

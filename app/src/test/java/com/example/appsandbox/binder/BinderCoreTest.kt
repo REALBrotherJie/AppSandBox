@@ -66,4 +66,15 @@ class BinderCoreTest {
         assertTrue(error is IllegalStateException)
         assertEquals("physical", error?.message)
     }
+
+    @Test fun notificationIdentityRewritesOnlyExactGuestPackageArguments() {
+        val args = arrayOf<Any?>("guest.pkg", "guest.pkg.channel", "tag", 7)
+        val rewritten = NotificationIdentityPolicy(first).physicalArgs(args)
+
+        assertEquals("host.pkg", rewritten[0])
+        assertEquals("guest.pkg.channel", rewritten[1])
+        assertEquals("tag", rewritten[2])
+        assertEquals(7, rewritten[3])
+        assertEquals("guest.pkg", args[0])
+    }
 }
