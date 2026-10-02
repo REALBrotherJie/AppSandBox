@@ -141,3 +141,19 @@ Round 6 did not change production code. Termux Guest metadata is `targetSdk=28` 
 | QQ Browser | unchanged | unchanged | Host network capability / package visibility |
 
 `ROUND_6_FIRST_FRAME = NOT_RERUN` because no production runtime change was made. The remaining defect is a general per-process targetSdk/compat isolation gap, not a Termux-specific issue; M12 remains frozen.
+
+## Recovery Round 7
+
+Round 7 confirmed the correction boundary but made no production change. The API31 PendingIntent failure occurs in framework `PendingIntent.checkFlags` before Binder, while the existing `VirtualPendingIntentRegistry` is not connected to static PendingIntent factories. A safe fix would require a new Guest-aware framework-call interception boundary; global `VMRuntime` or compat mutation remains forbidden. Dynamic receiver translation was not applied without a complete, verified API-signature/legacy-semantic mapping.
+
+| App | API31 Round 7 | API36 Round 7 | first blocker |
+| --- | --- | --- | --- |
+| Momo SDK sample | I0/I1 PASS (revalidated) | I0/I1 PASS (revalidated) | none observed |
+| Chrome | observe only | observe only | `J.N.ZO` no native implementation |
+| Termux | compat leakage remains; PendingIntent checkFlags | compat leakage remains; receiver flags | Guest-aware framework interception missing |
+| Coolapk | unchanged | unchanged | provider/application bootstrap stall |
+| Zhihu | unchanged | `GUEST_APP_ABI_INCOMPATIBLE` | native startup / AArch64 on x86_64 |
+| WPS | observe only | `GUEST_APP_ABI_INCOMPATIBLE` | RePlugin assumption / ABI |
+| QQ Browser | unchanged | unchanged | Host network capability / package visibility |
+
+`ROUND_7_FIRST_FRAME = 1/7`; no additional app advanced. M12 remains frozen.
