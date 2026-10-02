@@ -1,5 +1,13 @@
 # ChatGPT Task Index
 
+## Current Authoritative Status
+
+- M2-M11: `CLOSED / PASS` by Planner.
+- M12: `FROZEN / PARTIAL`; initial implementation, one FIX, and Architecture Review did not cross the complete production system-service boundary.
+- M13: `NOT STARTED`.
+- Real App Compatibility Audit: `COMPLETED`; most real Apps first block in M2-M10 scope, so resuming M12 is not currently recommended.
+- Current audit: `docs/experiments/REAL-APP-COMPATIBILITY-AUDIT.md` and `docs/Claude/Task/REAL-APP-COMPATIBILITY-AUDIT-RESULT.md`.
+
 | Task | Purpose | Status |
 |---|---|---|
 | task-09 | External Android virtualization technology survey | Historical research task |
