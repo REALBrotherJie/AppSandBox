@@ -93,3 +93,19 @@ Round 3 rechecked the unchanged seven-app sample on API31 (`7b670025`) and API36
 | QQ Browser | Host physical network capability | virtual package visibility/registration | platform boundary |
 
 `ROUND_3_FIRST_FRAME = 1/7`; no new first-frame app was obtained. Momo remained the regression oracle on both APIs and both instances. WPS API31 null was localized to the RePlugin internal BinderCursor contract after provider routing, not to the shared JNI/ClassLoader path.
+
+## Recovery Round 4
+
+Round 4 preserved the same seven-app sample and Instance0/Instance1 scope. WPS API31 boundary evidence shows correct authority and ProviderInfo lookup, local Guest provider installation, successful self-route, valid `IContentProvider` transport, and physical-for-system caller identity rewriting. The first null is inside RePlugin `BinderCursor.a(Cursor)`, when its private `BinderCursor$BinderParcelable` is absent; no framework/provider/CursorWindow transport exception is observed. Physical WPS launches normally. No production runtime change was justified.
+
+| App | API31 Round 4 | API36 Round 4 | first blocker |
+| --- | --- | --- | --- |
+| Momo SDK sample | I0/I1 PASS | I0/I1 PASS | none observed |
+| Chrome | unchanged | unchanged | `J.N.ZO` no native implementation |
+| Termux | unchanged | unchanged | PendingIntent/receiver API contract |
+| Coolapk | unchanged | unchanged | provider/application bootstrap stall |
+| Zhihu | unchanged | `GUEST_APP_ABI_INCOMPATIBLE` | native startup / AArch64 on x86_64 |
+| WPS | FAIL before frame | `GUEST_APP_ABI_INCOMPATIBLE` | `REPLUGIN_INTERNAL_ASSUMPTION` / ABI |
+| QQ Browser | unchanged | unchanged | Host network capability / package visibility |
+
+`ROUND_4_FIRST_FRAME = 1/7`; blocker ranking remains native/JNI/ABI, provider/application bootstrap, PendingIntent/receiver contracts, physical capability, and package visibility. M12 remains frozen.
