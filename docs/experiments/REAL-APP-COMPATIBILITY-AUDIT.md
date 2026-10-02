@@ -179,3 +179,9 @@ Round 9 found no safe Guest-only PendingIntent interception: the project has Bio
 | QQ Browser | I0/I1 Host network capability | I0/I1 package registration failure | physical capability / visibility |
 
 API36 Termux I0/I1 logs prove `guestTarget=28`, `guestCall=true`, and receiver flags `0 -> 2`; the prior exported-flag exception is absent and the next first blocker is PendingIntent mutability. `ROUND_9_FIRST_FRAME = 1/7`; M12 remains frozen and M13 was not started. Evidence is under `build/reports/real-app-recovery-9/`.
+
+## Recovery Round 10
+
+Round 10 evaluated the highest-priority remaining candidate, QQ Browser API36 package/component registration. Both devices physically resolve `com.tencent.mtt/.SplashActivity`. The prior API36 `virtual package is not registered` failure did not reproduce after installing the current baseline build: the package persisted in the virtual registry and launch advanced without a runtime change. Its next first blocker is arm64 `libmmkv.so` on the x86_64 emulator, classified `GUEST_APP_ABI_INCOMPATIBILITY`; API31 remains at the Host physical `ACCESS_NETWORK_STATE` capability boundary. Coolapk's provider/application stall and Zhihu API31's ART abort still lack evidence of a general AppSandbox defect.
+
+No production runtime change was justified, so the seven-app matrix was not rerun. Momo remained API31/API36 I0/I1 PASS, and Termux API36 I0/I1 retained Guest receiver flags `0 -> 2` before reaching the frozen PendingIntent blocker. `ROUND_10_FIRST_FRAME = NOT_RERUN`; `GENERIC_BLOCKER_AVAILABLE = NO`. Evidence is under `build/reports/real-app-recovery-10/`; M12 remains frozen and M13 was not started.
