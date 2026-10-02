@@ -70,14 +70,25 @@ class VirtualPendingIntentRegistry {
 
 data class VirtualNotificationKey(val packageRevision: String, val packageName: String, val instanceId: String, val tag: String?, val id: Int)
 data class VirtualNotificationRecord(val key: VirtualNotificationKey, val physicalTag: String, val channelId: String?, val pendingIntent: VirtualPendingIntentKey?)
+data class VirtualNotificationChannelKey(val packageRevision: String, val packageName: String, val instanceId: String, val guestChannelId: String)
+data class VirtualNotificationChannel(val key: VirtualNotificationChannelKey, val physicalChannelId: String, val name: String, val importance: Int)
 
 class VirtualNotificationRegistry {
     private val values = ConcurrentHashMap<VirtualNotificationKey, VirtualNotificationRecord>()
+    private val channels = ConcurrentHashMap<VirtualNotificationChannelKey, VirtualNotificationChannel>()
     fun physicalTag(key: VirtualNotificationKey) = "m12:${key.instanceId}:${key.tag ?: "_"}"
+    fun physicalChannelId(key: VirtualNotificationChannelKey) = "m12:${key.instanceId}:${key.guestChannelId}"
     fun put(record: VirtualNotificationRecord) { values[record.key] = record }
+    fun putChannel(channel: VirtualNotificationChannel) { channels[channel.key] = channel }
+    fun getChannel(key: VirtualNotificationChannelKey) = channels[key]
     fun remove(key: VirtualNotificationKey) = values.remove(key)
-    fun removeInstance(packageName: String, instanceId: String) { values.keys.removeIf { it.packageName == packageName && it.instanceId == instanceId } }
+    fun removeChannel(key: VirtualNotificationChannelKey) = channels.remove(key)
+    fun removeInstance(packageName: String, instanceId: String) {
+        values.keys.removeIf { it.packageName == packageName && it.instanceId == instanceId }
+        channels.keys.removeIf { it.packageName == packageName && it.instanceId == instanceId }
+    }
     fun snapshot() = values.values.toList()
+    fun channelSnapshot() = channels.values.toList()
 }
 
 data class VirtualAlarmKey(val packageRevision: String, val packageName: String, val instanceId: String, val pendingIntent: VirtualPendingIntentKey)
@@ -89,6 +100,9 @@ class VirtualAlarmRegistry {
     fun remove(key: VirtualAlarmKey) = values.remove(key)
     fun removeInstance(packageName: String, instanceId: String) { values.keys.removeIf { it.packageName == packageName && it.instanceId == instanceId } }
     fun snapshot() = values.values.toList()
+    fun removeAllForInstance(packageName: String, instanceId: String): List<VirtualAlarmRecord> = values.entries
+        .filter { it.key.packageName == packageName && it.key.instanceId == instanceId }
+        .map { it.value }.also { removeInstance(packageName, instanceId) }
 }
 
 data class VirtualJobKey(val packageRevision: String, val packageName: String, val instanceId: String, val guestJobId: Int)
@@ -101,6 +115,9 @@ class VirtualJobRegistry {
     fun get(key: VirtualJobKey) = values[key]
     fun remove(key: VirtualJobKey) = values.remove(key)
     fun removeInstance(packageName: String, instanceId: String) { values.keys.removeIf { it.packageName == packageName && it.instanceId == instanceId } }
+    fun cancelAllForInstance(packageName: String, instanceId: String): List<VirtualJobRecord> = values.entries
+        .filter { it.key.packageName == packageName && it.key.instanceId == instanceId }
+        .map { it.value }.also { removeInstance(packageName, instanceId) }
     fun snapshot() = values.values.toList()
 }
 
