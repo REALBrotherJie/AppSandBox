@@ -9,6 +9,7 @@ import com.example.appsandbox.stub.StubProcessPool
 import com.example.appsandbox.stub.StubServices
 import com.example.appsandbox.vpm.VirtualPackageRegistry
 import com.example.appsandbox.location.VirtualLocationCoordinatorClient
+import com.example.appsandbox.m12.M12RuntimeRegistries
 
 data class VirtualInstanceDeleteResult(val slot: Int, val running: Boolean, val storageRemoved: Boolean)
 
@@ -51,6 +52,7 @@ class VirtualInstanceDeletionManager(
         }
         val webViewStorageRemoved = VirtualWebViewProcessPolicy.deleteDataDirectories(context, webViewSuffixes)
         val locationStateRemoved = VirtualLocationCoordinatorClient.delete(context, instanceId)
+        M12RuntimeRegistries.removeInstance(packageName, instanceId)
         val after = registry.find(packageName)
         val recordGone = after?.instances?.containsKey(instanceId) != true
         Log.i(TAG, "VINSTANCE_DELETE package=$packageName instance=$instanceId virtualUid=${registered.virtualUid} " +
