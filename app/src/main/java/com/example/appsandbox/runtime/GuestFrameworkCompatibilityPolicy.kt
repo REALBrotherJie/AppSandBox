@@ -22,4 +22,16 @@ object GuestFrameworkCompatibilityPolicy {
         // a sticky query or exclusively covered protected system broadcasts.
         return originalFlags or RECEIVER_EXPORTED
     }
+
+    private const val DYNAMIC_RECEIVER_PERMISSION_SUFFIX = ".DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+
+    /**
+     * AndroidX emulates RECEIVER_NOT_EXPORTED before API 33 by protecting the receiver with the
+     * package's own signature permission. The Guest's permission is not held by the Host UID that
+     * sends the Guest's broadcasts, so the system drops every delivery; the Host's equivalent
+     * permission keeps the same "own UID and system only" semantics.
+     */
+    fun receiverPermission(permission: String?, guestPackage: String, hostPackage: String): String? =
+        if (permission == guestPackage + DYNAMIC_RECEIVER_PERMISSION_SUFFIX) hostPackage + DYNAMIC_RECEIVER_PERMISSION_SUFFIX
+        else permission
 }

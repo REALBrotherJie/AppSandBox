@@ -47,6 +47,13 @@ class ActivityManagerAdapter(
                     rewritten.indices
                         .filter { call.method.parameterTypes[it] == String::class.java && rewritten[it] == identity.guestPackageName }
                         .forEach { rewritten[it] = identity.hostPackageName }
+                    rewritten.indices
+                        .filter { call.method.parameterTypes[it] == String::class.java }
+                        .forEach {
+                            rewritten[it] = GuestFrameworkCompatibilityPolicy.receiverPermission(
+                                rewritten[it] as String?, identity.guestPackageName, identity.hostPackageName
+                            )
+                        }
                 }
                 val receiverIndex = call.method.parameterTypes.indexOfFirst { it.name == "android.content.IIntentReceiver" }
                 val filterIndex = call.method.parameterTypes.indexOfFirst { it == android.content.IntentFilter::class.java }

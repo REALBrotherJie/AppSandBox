@@ -178,7 +178,9 @@ class GuestProcessBootstrap(private val context: Context) {
         guestLoader.guestNativeLibraryDir?.let { app.nativeLibraryDir = it }
         val packageFlags = android.content.pm.PackageManager.GET_ACTIVITIES or android.content.pm.PackageManager.GET_SERVICES or
             android.content.pm.PackageManager.GET_RECEIVERS or android.content.pm.PackageManager.GET_PROVIDERS or
-            android.content.pm.PackageManager.GET_PERMISSIONS or android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES
+            android.content.pm.PackageManager.GET_PERMISSIONS or android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES or
+            // Guests read their own manifest <meta-data> (e.g. com.google.android.gms.version) through the VPM.
+            android.content.pm.PackageManager.GET_META_DATA
         val packageInfo = if (android.os.Build.VERSION.SDK_INT >= 33) {
             context.packageManager.getPackageInfo(envelope.packageName, android.content.pm.PackageManager.PackageInfoFlags.of(packageFlags.toLong()))
         } else {

@@ -68,7 +68,7 @@ class GuestPackageManagerBridge(
                     (call.methodName == "resolveIntent" || call.methodName == "queryIntentActivities") && virtualRoute -> {
                         sanitizeResolution(physical(values), call.method.returnType)
                     }
-                    queryRoute == PackageQueryRoute.HOST || queryRoute == PackageQueryRoute.DENY -> null
+                    queryRoute == PackageQueryRoute.HOST || queryRoute == PackageQueryRoute.DENY -> hiddenPackageResult(call.methodName)
                     else -> physical(values)
                 }
                 val loggedRoute = if (call.methodName == "getPackagesForUid" &&
@@ -120,5 +120,11 @@ class GuestPackageManagerBridge(
             it.className.startsWith("com.android.webview.")
     }
 
-    companion object { private const val TAG = "AppSandbox.M3" }
+    companion object {
+        private const val TAG = "AppSandbox.M3"
+
+        /** What the real PMS answers for a package the caller cannot see; checkPermission returns a primitive int. */
+        fun hiddenPackageResult(methodName: String): Any? =
+            if (methodName == "checkPermission") android.content.pm.PackageManager.PERMISSION_DENIED else null
+    }
 }
