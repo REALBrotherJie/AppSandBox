@@ -23,6 +23,17 @@ object GuestFrameworkCompatibilityPolicy {
         return originalFlags or RECEIVER_EXPORTED
     }
 
+    fun guestRunningProcesses(
+        all: List<android.app.ActivityManager.RunningAppProcessInfo>,
+        myPid: Int,
+        logicalProcessName: String,
+        guestPackage: String
+    ): List<android.app.ActivityManager.RunningAppProcessInfo> =
+        all.filter { it.pid == myPid }.onEach {
+            it.processName = logicalProcessName
+            it.pkgList = arrayOf(guestPackage)
+        }
+
     private const val DYNAMIC_RECEIVER_PERMISSION_SUFFIX = ".DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
 
     /**

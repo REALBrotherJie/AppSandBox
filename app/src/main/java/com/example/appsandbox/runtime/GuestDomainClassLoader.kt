@@ -21,7 +21,7 @@ class GuestDomainClassLoader(
         val domain = domainOf(name)
         val loaded = when (domain) {
             ClassLoadingDomain.RUNTIME_BRIDGE -> hostLoader.loadClass(name)
-            else -> resolveInOrder(name, lookupOrder(name, domain, sharedLibraryLoader != null), ::loadFrom)
+            else -> resolveInOrder(name, lookupOrder(domain, sharedLibraryLoader != null), ::loadFrom)
         }
         if (resolve) resolveClass(loaded)
         if (com.example.appsandbox.BuildConfig.DEBUG && shouldDiagnose(name)) {
@@ -57,17 +57,17 @@ class GuestDomainClassLoader(
         // own dex. Framework classes therefore come from the boot class path. Guests may package
         // their own javax, android.support and android classes, and the host APK ships some of the
         // same names (androidx.core's android.support.v4 AIDL compat), so the guest dex must be
-        // consulted before the host loader. java.* stays platform-only. The host loader is only a
-        // last resort for names nothing on the Guest's side defines.
-        fun lookupOrder(name: String, domain: ClassLoadingDomain, hasSharedLibraries: Boolean): List<ClassSource> {
-            if (domain == ClassLoadingDomain.SYSTEM && name.startsWith("java.")) return listOf(ClassSource.PLATFORM, ClassSource.HOST)
-            return listOfNotNull(
+        // consulted before the host loader. Real java.* classes cannot be shadowed because the boot
+        // class path always answers first; like ART, a java.* name the platform lacks (Douyin ships
+        // java.com.ss.android...) still resolves from the Guest dex. The host loader is only a last
+        // resort for names nothing on the Guest's side defines.
+        fun lookupOrder(domain: ClassLoadingDomain, hasSharedLibraries: Boolean): List<ClassSource> =
+            listOfNotNull(
                 ClassSource.PLATFORM.takeIf { domain == ClassLoadingDomain.SYSTEM },
                 ClassSource.SHARED_LIBRARY.takeIf { hasSharedLibraries },
                 ClassSource.GUEST,
                 ClassSource.HOST
             )
-        }
 
         fun <T> resolveInOrder(name: String, order: List<ClassSource>, lookup: (ClassSource, String) -> T): T {
             var failure: Throwable? = null

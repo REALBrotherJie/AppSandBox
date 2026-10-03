@@ -216,12 +216,14 @@ class GuestProcessBootstrap(private val context: Context) {
             }.onFailure { Log.w(TAG, "provider metadata fallback failed package=${envelope.packageName}", it) }
         }
         Log.i(TAG, "guest-provider-metadata package=${envelope.packageName} providers=${providers.map { it.name + ":" + it.authority }}")
+        // handleBindApplication sets the bound process name before the Application exists; Guests read
+        // and cache it (Application.getProcessName/ActivityThread.currentProcessName) during attach.
+        publishLogicalProcessName(thread, logicalProcessName)
         val runtime = preparation.prepare(providers.toTypedArray(), logicalProcessName)
         runtimeStates[envelope.instanceId] = RuntimeState(loader, ApplicationInfo(app), runtime.application)
         val contentRefresh = binderManager.refreshContentService()
         require(contentRefresh.installed) { "ContentService refresh failed: ${contentRefresh.failureReason}" }
         Log.i(TAG, "bootstrap guest-runtime application=${runtime.application.javaClass.name} context=${runtime.context.javaClass.name} providers=${runtime.installedProviders}")
-        publishLogicalProcessName(thread, logicalProcessName)
         info.applicationInfo.className = app.className
         val restored = Intent(envelope.originalIntent).apply {
             component = envelope.target

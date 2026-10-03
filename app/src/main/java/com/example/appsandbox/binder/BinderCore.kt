@@ -30,7 +30,9 @@ fun interface BinderMethodPolicy {
 }
 
 class MethodPolicyRegistry(
-    private val unknownBehavior: UnknownMethodBehavior = UnknownMethodBehavior.PHYSICAL_PASSTHROUGH
+    private val unknownBehavior: UnknownMethodBehavior = UnknownMethodBehavior.PHYSICAL_PASSTHROUGH,
+    /** Applied to every method without its own policy; for interfaces whose methods hidden-API filtering hides. */
+    private val fallback: BinderMethodPolicy? = null
 ) {
     private val policies = ConcurrentHashMap<String, BinderMethodPolicy>()
 
@@ -43,6 +45,7 @@ class MethodPolicyRegistry(
     fun invoke(context: BinderCallContext, physical: (Array<Any?>) -> Any?): BinderCallResult {
         val policy = find(context.methodName)
         if (policy != null) return policy.invoke(context, physical)
+        if (fallback != null) return fallback.invoke(context, physical)
         if (unknownBehavior == UnknownMethodBehavior.EXPLICIT_BLOCK) {
             throw UnsupportedOperationException("No Binder policy for ${context.serviceName}.${context.methodName}")
         }

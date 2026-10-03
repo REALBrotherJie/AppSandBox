@@ -38,18 +38,10 @@ class GuestDomainClassLoaderTest {
         assertEquals("platform", resolve("java.lang.String", all))
     }
 
-    @Test fun javaNamespaceNeverConsultsGuestDex() {
-        val visited = mutableListOf<ClassSource>()
-        try {
-            GuestDomainClassLoader.resolveInOrder("java.lang.Fake", order("java.lang.Fake")) { source, _ ->
-                visited += source
-                throw ClassNotFoundException(source.name)
-            }
-            fail("expected ClassNotFoundException")
-        } catch (expected: ClassNotFoundException) {
-            assertEquals("java.lang.Fake", expected.message)
-        }
-        assertTrue(ClassSource.GUEST !in visited)
+    @Test fun javaNamespaceAppClassResolvesFromGuestOnlyAfterPlatformMiss() {
+        // Douyin Lite defines java.com.ss.android.ugc.aweme.mediachoose.helper.LivePhotoExportModel.
+        assertEquals("guest", resolve("java.com.ss.android.Model", mapOf(ClassSource.GUEST to "guest", ClassSource.HOST to "host")))
+        assertEquals("platform", resolve("java.lang.String", mapOf(ClassSource.PLATFORM to "platform", ClassSource.GUEST to "guest")))
     }
 
     @Test fun guestLinkageFailureFallsBackToHostAndKeepsFirstCause() {
@@ -79,13 +71,13 @@ class GuestDomainClassLoaderTest {
 
     @Test fun lookupOrderWithoutSharedLibrariesKeepsGuestFirstForGuestDomain() {
         assertEquals(listOf(ClassSource.GUEST, ClassSource.HOST),
-            GuestDomainClassLoader.lookupOrder("com.app.Main", ClassLoadingDomain.GUEST, hasSharedLibraries = false))
-        assertEquals(listOf(ClassSource.PLATFORM, ClassSource.HOST),
-            GuestDomainClassLoader.lookupOrder("java.lang.String", ClassLoadingDomain.SYSTEM, hasSharedLibraries = true))
+            GuestDomainClassLoader.lookupOrder(ClassLoadingDomain.GUEST, hasSharedLibraries = false))
+        assertEquals(listOf(ClassSource.PLATFORM, ClassSource.SHARED_LIBRARY, ClassSource.GUEST, ClassSource.HOST),
+            GuestDomainClassLoader.lookupOrder(ClassLoadingDomain.SYSTEM, hasSharedLibraries = true))
     }
 
     private fun order(name: String, shared: Boolean = false) =
-        GuestDomainClassLoader.lookupOrder(name, GuestDomainClassLoader.domainOf(name), shared)
+        GuestDomainClassLoader.lookupOrder(GuestDomainClassLoader.domainOf(name), shared)
 
     private fun resolve(name: String, definitions: Map<ClassSource, String>, shared: Boolean = false): String =
         GuestDomainClassLoader.resolveInOrder(name, order(name, shared)) { source, _ ->

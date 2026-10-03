@@ -27,6 +27,8 @@ class VirtualBinderManager(
         AppOpsAdapter(context, identity, identityBridge)
         , contentService
         , NotificationIdentityAdapter(identity)
+        , PhysicalPackageServiceAdapter(identity, "media_session", "android.media.session.ISessionManager")
+        , PhysicalPackageServiceAdapter(identity, "audio", "android.media.IAudioService")
         , LocationServiceAdapter(context, identity, requireNotNull(GuestProcessLocationBindings.current()) { "Guest process location binding missing" })
     ))
 

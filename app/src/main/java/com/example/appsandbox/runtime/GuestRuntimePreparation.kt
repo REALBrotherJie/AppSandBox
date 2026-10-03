@@ -76,9 +76,12 @@ class GuestRuntimePreparation(
         overlay: ProviderInfo,
         requestedKey: VirtualProviderManager.Key
     ): VirtualProviderManager.Record {
-        val holder = ProviderPlatformBridge.installLocalProvider(activityThread, guestContext, overlay)
+        // ActivityThread attaches a package's own providers to its Application, and Apps rely on
+        // `getContext() as Application`; before the Application exists only the Guest Context is available.
+        val providerContext = guestContext.applicationContext
+        val holder = ProviderPlatformBridge.installLocalProvider(activityThread, providerContext, overlay)
         android.util.Log.i("AppSandbox.M8", "VPROVIDER event=GUEST_CONTEXT instance=${identity.instanceId} provider=${overlay.name} " +
-            "applicationContext=${System.identityHashCode(guestContext.applicationContext)} package=${guestContext.packageName} " +
+            "context=${providerContext.javaClass.name} applicationContext=${System.identityHashCode(guestContext.applicationContext)} package=${guestContext.packageName} " +
             "data=${guestContext.dataDir} databaseRoot=${File(dataRoot, "databases")} holder=${System.identityHashCode(holder)}")
         val records = overlay.authority.split(';').associateWith { authority ->
             VirtualProviderManager.Record(

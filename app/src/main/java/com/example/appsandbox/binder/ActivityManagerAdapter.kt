@@ -239,6 +239,29 @@ class ActivityManagerAdapter(
             if (index >= 0) args[index] = com.example.appsandbox.service.VirtualServiceRuntime.facadeFor(args[index])
             BinderCallResult(physical(args), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
         }
+        registry.register("getRunningAppProcesses") { call, physical ->
+            @Suppress("UNCHECKED_CAST")
+            val all = physical(call.args) as? List<android.app.ActivityManager.RunningAppProcessInfo>
+            // The Host UID's processes are the Host and every stub slot. A Guest only sees itself,
+            // under its logical process name; Apps (Tinker killSubsProcess) kill "other" names.
+            val visible = all?.let {
+                GuestFrameworkCompatibilityPolicy.guestRunningProcesses(
+                    it, android.os.Process.myPid(), android.app.Application.getProcessName(), identity.guestPackageName
+                )
+            }
+            BinderCallResult(visible, BinderRoute.VIRTUAL, IdentityDecision.VIRTUALIZE)
+        }
+        registry.register("getHistoricalProcessExitReasons") { call, physical ->
+            if (call.args.firstOrNull() != identity.guestPackageName) {
+                return@register BinderCallResult(physical(call.args), BinderRoute.PHYSICAL, IdentityDecision.PASSTHROUGH)
+            }
+            // AMS keys exit history by the Host UID, so it would either demand DUMP (Guest package) or
+            // expose every clone's exits (Host package). The Guest has no recorded exits of its own.
+            val slice = call.method.returnType.declaredConstructors
+                .first { it.parameterTypes.contentEquals(arrayOf(List::class.java)) }
+                .apply { isAccessible = true }.newInstance(emptyList<Any>())
+            BinderCallResult(slice, BinderRoute.VIRTUAL, IdentityDecision.VIRTUALIZE)
+        }
         setOf("getIntentSender", "getIntentSenderWithFeature").forEach { name ->
             registry.register(name) { call, physical ->
                 val args = call.args.copyOf()
