@@ -40,6 +40,11 @@ class VirtualProcessCoordinatorProvider : ContentProvider() {
             val info = requireNotNull(data.parcelable<ActivityInfo>(KEY_RECEIVER_INFO))
             coordinator.ensureReceiver(requireNotNull(data.getString(KEY_INSTANCE)), info).toBundle()
         }
+        METHOD_ENSURE_ACTIVITY -> {
+            val data = requireNotNull(extras)
+            val info = requireNotNull(data.parcelable<ActivityInfo>(KEY_RECEIVER_INFO))
+            coordinator.ensureActivity(requireNotNull(data.getString(KEY_INSTANCE)), info).toBundle()
+        }
         METHOD_ENSURE_PROVIDER -> {
             val data = requireNotNull(extras)
             val info = requireNotNull(data.parcelable<ProviderInfo>(KEY_PROVIDER_INFO))
@@ -65,6 +70,7 @@ class VirtualProcessCoordinatorProvider : ContentProvider() {
         const val METHOD_ENSURE_SERVICE = "ensureService"
         const val METHOD_ENSURE_RECEIVER = "ensureReceiver"
         const val METHOD_ENSURE_PROVIDER = "ensureProvider"
+        const val METHOD_ENSURE_ACTIVITY = "ensureActivity"
         const val METHOD_TERMINATE_INSTANCE = "terminateInstance"
         const val KEY_INSTANCE = "instance"
         const val KEY_SERVICE_INFO = "serviceInfo"
@@ -119,6 +125,21 @@ object VirtualProcessCoordinatorClient {
         val authority = context.packageName + VirtualProcessCoordinatorProvider.AUTHORITY_SUFFIX
         val result = requireNotNull(context.contentResolver.call(Uri.parse("content://$authority"),
             VirtualProcessCoordinatorProvider.METHOD_ENSURE_RECEIVER, null, Bundle().apply {
+                putString(VirtualProcessCoordinatorProvider.KEY_INSTANCE, instanceId)
+                putParcelable(VirtualProcessCoordinatorProvider.KEY_RECEIVER_INFO, ActivityInfo(info))
+            }))
+        return ProcessRoute(
+            result.getInt(VirtualProcessCoordinatorProvider.KEY_SLOT),
+            result.getInt(VirtualProcessCoordinatorProvider.KEY_PID),
+            result.getLong(VirtualProcessCoordinatorProvider.KEY_GENERATION),
+            requireNotNull(result.getString(VirtualProcessCoordinatorProvider.KEY_TRANSACTION))
+        )
+    }
+
+    fun ensureActivity(context: Context, instanceId: String, info: ActivityInfo): ProcessRoute {
+        val authority = context.packageName + VirtualProcessCoordinatorProvider.AUTHORITY_SUFFIX
+        val result = requireNotNull(context.contentResolver.call(Uri.parse("content://$authority"),
+            VirtualProcessCoordinatorProvider.METHOD_ENSURE_ACTIVITY, null, Bundle().apply {
                 putString(VirtualProcessCoordinatorProvider.KEY_INSTANCE, instanceId)
                 putParcelable(VirtualProcessCoordinatorProvider.KEY_RECEIVER_INFO, ActivityInfo(info))
             }))
@@ -192,6 +213,12 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
             VirtualProcessKey.canonicalProcessName(info.packageName, info.processName)
         )
         return ensure(key) { record -> startAgent(record, M10ArchProtocol.COMPONENT_RECEIVER, null, info) }
+    }
+
+    fun ensureActivity(instanceId: String, info: ActivityInfo): ProcessRoute {
+        val key = VirtualProcessKey(File(info.applicationInfo.sourceDir).lastModified(), info.packageName, instanceId,
+            VirtualProcessKey.canonicalProcessName(info.packageName, info.processName))
+        return ensure(key) { record -> startAgent(record, M10ArchProtocol.COMPONENT_ACTIVITY, null, info) }
     }
 
     fun ensureProvider(instanceId: String, info: ProviderInfo): ProcessRoute {

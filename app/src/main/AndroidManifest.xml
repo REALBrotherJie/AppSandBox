@@ -95,76 +95,76 @@
         <receiver android:name=".stub.P6Receiver" android:exported="false" android:process=":p6" />
         <receiver android:name=".stub.P7Receiver" android:exported="false" android:process=":p7" />
         <receiver android:name=".stub.P8Receiver" android:exported="false" android:process=":p8" />
-        <activity android:name=".stub.P0StandardActivity" android:exported="false" android:process=":p0" />
-        <activity android:name=".stub.P0SingleTopActivity" android:exported="false" android:process=":p0" android:launchMode="singleTop" />
-        <activity android:name=".stub.P0SingleTaskActivity" android:exported="false" android:process=":p0" android:launchMode="singleTask" />
-        <activity android:name=".stub.P0SingleInstanceActivity" android:exported="false" android:process=":p0" android:launchMode="singleInstance" />
-        <activity android:name=".stub.P0TranslucentActivity" android:exported="false" android:process=":p0" android:theme="@style/Theme.AppSandbox.Translucent" />
-        <activity android:name=".stub.P0DialogActivity" android:exported="false" android:process=":p0" android:theme="@style/Theme.AppSandbox.Dialog" />
+        <activity android:name=".stub.P0StandardActivity" android:taskAffinity="${applicationId}.vtask.p0" android:exported="false" android:process=":p0" />
+        <activity android:name=".stub.P0SingleTopActivity" android:taskAffinity="${applicationId}.vtask.p0" android:exported="false" android:process=":p0" android:launchMode="singleTop" />
+        <activity android:name=".stub.P0SingleTaskActivity" android:taskAffinity="${applicationId}.vtask.p0" android:exported="false" android:process=":p0" android:launchMode="singleTask" />
+        <activity android:name=".stub.P0SingleInstanceActivity" android:taskAffinity="${applicationId}.vtask.p0" android:exported="false" android:process=":p0" android:launchMode="singleInstance" />
+        <activity android:name=".stub.P0TranslucentActivity" android:taskAffinity="${applicationId}.vtask.p0" android:exported="false" android:process=":p0" android:theme="@style/Theme.AppSandbox.Translucent" />
+        <activity android:name=".stub.P0DialogActivity" android:taskAffinity="${applicationId}.vtask.p0" android:exported="false" android:process=":p0" android:theme="@style/Theme.AppSandbox.Dialog" />
         <service android:name=".stub.P0Service" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
         <provider android:name=".stub.P0Provider" android:authorities="${applicationId}.stub.p0" android:exported="false" android:process=":p0" />
-        <activity android:name=".stub.P1StandardActivity" android:exported="false" android:process=":p1" />
-        <activity android:name=".stub.P1SingleTopActivity" android:exported="false" android:process=":p1" android:launchMode="singleTop" />
-        <activity android:name=".stub.P1SingleTaskActivity" android:exported="false" android:process=":p1" android:launchMode="singleTask" />
-        <activity android:name=".stub.P1SingleInstanceActivity" android:exported="false" android:process=":p1" android:launchMode="singleInstance" />
-        <activity android:name=".stub.P1TranslucentActivity" android:exported="false" android:process=":p1" android:theme="@style/Theme.AppSandbox.Translucent" />
-        <activity android:name=".stub.P1DialogActivity" android:exported="false" android:process=":p1" android:theme="@style/Theme.AppSandbox.Dialog" />
+        <activity android:name=".stub.P1StandardActivity" android:taskAffinity="${applicationId}.vtask.p1" android:exported="false" android:process=":p1" />
+        <activity android:name=".stub.P1SingleTopActivity" android:taskAffinity="${applicationId}.vtask.p1" android:exported="false" android:process=":p1" android:launchMode="singleTop" />
+        <activity android:name=".stub.P1SingleTaskActivity" android:taskAffinity="${applicationId}.vtask.p1" android:exported="false" android:process=":p1" android:launchMode="singleTask" />
+        <activity android:name=".stub.P1SingleInstanceActivity" android:taskAffinity="${applicationId}.vtask.p1" android:exported="false" android:process=":p1" android:launchMode="singleInstance" />
+        <activity android:name=".stub.P1TranslucentActivity" android:taskAffinity="${applicationId}.vtask.p1" android:exported="false" android:process=":p1" android:theme="@style/Theme.AppSandbox.Translucent" />
+        <activity android:name=".stub.P1DialogActivity" android:taskAffinity="${applicationId}.vtask.p1" android:exported="false" android:process=":p1" android:theme="@style/Theme.AppSandbox.Dialog" />
         <service android:name=".stub.P1Service" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
         <provider android:name=".stub.P1Provider" android:authorities="${applicationId}.stub.p1" android:exported="false" android:process=":p1" />
-        <activity android:name=".stub.P2StandardActivity" android:exported="false" android:process=":p2" />
-        <activity android:name=".stub.P2SingleTopActivity" android:exported="false" android:process=":p2" android:launchMode="singleTop" />
-        <activity android:name=".stub.P2SingleTaskActivity" android:exported="false" android:process=":p2" android:launchMode="singleTask" />
-        <activity android:name=".stub.P2SingleInstanceActivity" android:exported="false" android:process=":p2" android:launchMode="singleInstance" />
-        <activity android:name=".stub.P2TranslucentActivity" android:exported="false" android:process=":p2" android:theme="@style/Theme.AppSandbox.Translucent" />
-        <activity android:name=".stub.P2DialogActivity" android:exported="false" android:process=":p2" android:theme="@style/Theme.AppSandbox.Dialog" />
+        <activity android:name=".stub.P2StandardActivity" android:taskAffinity="${applicationId}.vtask.p2" android:exported="false" android:process=":p2" />
+        <activity android:name=".stub.P2SingleTopActivity" android:taskAffinity="${applicationId}.vtask.p2" android:exported="false" android:process=":p2" android:launchMode="singleTop" />
+        <activity android:name=".stub.P2SingleTaskActivity" android:taskAffinity="${applicationId}.vtask.p2" android:exported="false" android:process=":p2" android:launchMode="singleTask" />
+        <activity android:name=".stub.P2SingleInstanceActivity" android:taskAffinity="${applicationId}.vtask.p2" android:exported="false" android:process=":p2" android:launchMode="singleInstance" />
+        <activity android:name=".stub.P2TranslucentActivity" android:taskAffinity="${applicationId}.vtask.p2" android:exported="false" android:process=":p2" android:theme="@style/Theme.AppSandbox.Translucent" />
+        <activity android:name=".stub.P2DialogActivity" android:taskAffinity="${applicationId}.vtask.p2" android:exported="false" android:process=":p2" android:theme="@style/Theme.AppSandbox.Dialog" />
         <service android:name=".stub.P2Service" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
         <provider android:name=".stub.P2Provider" android:authorities="${applicationId}.stub.p2" android:exported="false" android:process=":p2" />
-        <activity android:name=".stub.P3StandardActivity" android:exported="false" android:process=":p3" />
-        <activity android:name=".stub.P3SingleTopActivity" android:exported="false" android:process=":p3" android:launchMode="singleTop" />
-        <activity android:name=".stub.P3SingleTaskActivity" android:exported="false" android:process=":p3" android:launchMode="singleTask" />
-        <activity android:name=".stub.P3SingleInstanceActivity" android:exported="false" android:process=":p3" android:launchMode="singleInstance" />
-        <activity android:name=".stub.P3TranslucentActivity" android:exported="false" android:process=":p3" android:theme="@style/Theme.AppSandbox.Translucent" />
-        <activity android:name=".stub.P3DialogActivity" android:exported="false" android:process=":p3" android:theme="@style/Theme.AppSandbox.Dialog" />
+        <activity android:name=".stub.P3StandardActivity" android:taskAffinity="${applicationId}.vtask.p3" android:exported="false" android:process=":p3" />
+        <activity android:name=".stub.P3SingleTopActivity" android:taskAffinity="${applicationId}.vtask.p3" android:exported="false" android:process=":p3" android:launchMode="singleTop" />
+        <activity android:name=".stub.P3SingleTaskActivity" android:taskAffinity="${applicationId}.vtask.p3" android:exported="false" android:process=":p3" android:launchMode="singleTask" />
+        <activity android:name=".stub.P3SingleInstanceActivity" android:taskAffinity="${applicationId}.vtask.p3" android:exported="false" android:process=":p3" android:launchMode="singleInstance" />
+        <activity android:name=".stub.P3TranslucentActivity" android:taskAffinity="${applicationId}.vtask.p3" android:exported="false" android:process=":p3" android:theme="@style/Theme.AppSandbox.Translucent" />
+        <activity android:name=".stub.P3DialogActivity" android:taskAffinity="${applicationId}.vtask.p3" android:exported="false" android:process=":p3" android:theme="@style/Theme.AppSandbox.Dialog" />
         <service android:name=".stub.P3Service" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
         <provider android:name=".stub.P3Provider" android:authorities="${applicationId}.stub.p3" android:exported="false" android:process=":p3" />
-        <activity android:name=".stub.P4StandardActivity" android:exported="false" android:process=":p4" />
-        <activity android:name=".stub.P4SingleTopActivity" android:exported="false" android:process=":p4" android:launchMode="singleTop" />
-        <activity android:name=".stub.P4SingleTaskActivity" android:exported="false" android:process=":p4" android:launchMode="singleTask" />
-        <activity android:name=".stub.P4SingleInstanceActivity" android:exported="false" android:process=":p4" android:launchMode="singleInstance" />
-        <activity android:name=".stub.P4TranslucentActivity" android:exported="false" android:process=":p4" android:theme="@style/Theme.AppSandbox.Translucent" />
-        <activity android:name=".stub.P4DialogActivity" android:exported="false" android:process=":p4" android:theme="@style/Theme.AppSandbox.Dialog" />
+        <activity android:name=".stub.P4StandardActivity" android:taskAffinity="${applicationId}.vtask.p4" android:exported="false" android:process=":p4" />
+        <activity android:name=".stub.P4SingleTopActivity" android:taskAffinity="${applicationId}.vtask.p4" android:exported="false" android:process=":p4" android:launchMode="singleTop" />
+        <activity android:name=".stub.P4SingleTaskActivity" android:taskAffinity="${applicationId}.vtask.p4" android:exported="false" android:process=":p4" android:launchMode="singleTask" />
+        <activity android:name=".stub.P4SingleInstanceActivity" android:taskAffinity="${applicationId}.vtask.p4" android:exported="false" android:process=":p4" android:launchMode="singleInstance" />
+        <activity android:name=".stub.P4TranslucentActivity" android:taskAffinity="${applicationId}.vtask.p4" android:exported="false" android:process=":p4" android:theme="@style/Theme.AppSandbox.Translucent" />
+        <activity android:name=".stub.P4DialogActivity" android:taskAffinity="${applicationId}.vtask.p4" android:exported="false" android:process=":p4" android:theme="@style/Theme.AppSandbox.Dialog" />
         <service android:name=".stub.P4Service" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
         <provider android:name=".stub.P4Provider" android:authorities="${applicationId}.stub.p4" android:exported="false" android:process=":p4" />
-        <activity android:name=".stub.P5StandardActivity" android:exported="false" android:process=":p5" />
-        <activity android:name=".stub.P5SingleTopActivity" android:exported="false" android:process=":p5" android:launchMode="singleTop" />
-        <activity android:name=".stub.P5SingleTaskActivity" android:exported="false" android:process=":p5" android:launchMode="singleTask" />
-        <activity android:name=".stub.P5SingleInstanceActivity" android:exported="false" android:process=":p5" android:launchMode="singleInstance" />
-        <activity android:name=".stub.P5TranslucentActivity" android:exported="false" android:process=":p5" android:theme="@style/Theme.AppSandbox.Translucent" />
-        <activity android:name=".stub.P5DialogActivity" android:exported="false" android:process=":p5" android:theme="@style/Theme.AppSandbox.Dialog" />
+        <activity android:name=".stub.P5StandardActivity" android:taskAffinity="${applicationId}.vtask.p5" android:exported="false" android:process=":p5" />
+        <activity android:name=".stub.P5SingleTopActivity" android:taskAffinity="${applicationId}.vtask.p5" android:exported="false" android:process=":p5" android:launchMode="singleTop" />
+        <activity android:name=".stub.P5SingleTaskActivity" android:taskAffinity="${applicationId}.vtask.p5" android:exported="false" android:process=":p5" android:launchMode="singleTask" />
+        <activity android:name=".stub.P5SingleInstanceActivity" android:taskAffinity="${applicationId}.vtask.p5" android:exported="false" android:process=":p5" android:launchMode="singleInstance" />
+        <activity android:name=".stub.P5TranslucentActivity" android:taskAffinity="${applicationId}.vtask.p5" android:exported="false" android:process=":p5" android:theme="@style/Theme.AppSandbox.Translucent" />
+        <activity android:name=".stub.P5DialogActivity" android:taskAffinity="${applicationId}.vtask.p5" android:exported="false" android:process=":p5" android:theme="@style/Theme.AppSandbox.Dialog" />
         <service android:name=".stub.P5Service" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
         <provider android:name=".stub.P5Provider" android:authorities="${applicationId}.stub.p5" android:exported="false" android:process=":p5" />
-        <activity android:name=".stub.P6StandardActivity" android:exported="false" android:process=":p6" />
-        <activity android:name=".stub.P6SingleTopActivity" android:exported="false" android:process=":p6" android:launchMode="singleTop" />
-        <activity android:name=".stub.P6SingleTaskActivity" android:exported="false" android:process=":p6" android:launchMode="singleTask" />
-        <activity android:name=".stub.P6SingleInstanceActivity" android:exported="false" android:process=":p6" android:launchMode="singleInstance" />
-        <activity android:name=".stub.P6TranslucentActivity" android:exported="false" android:process=":p6" android:theme="@style/Theme.AppSandbox.Translucent" />
-        <activity android:name=".stub.P6DialogActivity" android:exported="false" android:process=":p6" android:theme="@style/Theme.AppSandbox.Dialog" />
+        <activity android:name=".stub.P6StandardActivity" android:taskAffinity="${applicationId}.vtask.p6" android:exported="false" android:process=":p6" />
+        <activity android:name=".stub.P6SingleTopActivity" android:taskAffinity="${applicationId}.vtask.p6" android:exported="false" android:process=":p6" android:launchMode="singleTop" />
+        <activity android:name=".stub.P6SingleTaskActivity" android:taskAffinity="${applicationId}.vtask.p6" android:exported="false" android:process=":p6" android:launchMode="singleTask" />
+        <activity android:name=".stub.P6SingleInstanceActivity" android:taskAffinity="${applicationId}.vtask.p6" android:exported="false" android:process=":p6" android:launchMode="singleInstance" />
+        <activity android:name=".stub.P6TranslucentActivity" android:taskAffinity="${applicationId}.vtask.p6" android:exported="false" android:process=":p6" android:theme="@style/Theme.AppSandbox.Translucent" />
+        <activity android:name=".stub.P6DialogActivity" android:taskAffinity="${applicationId}.vtask.p6" android:exported="false" android:process=":p6" android:theme="@style/Theme.AppSandbox.Dialog" />
         <service android:name=".stub.P6Service" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
         <provider android:name=".stub.P6Provider" android:authorities="${applicationId}.stub.p6" android:exported="false" android:process=":p6" />
-        <activity android:name=".stub.P7StandardActivity" android:exported="false" android:process=":p7" />
-        <activity android:name=".stub.P7SingleTopActivity" android:exported="false" android:process=":p7" android:launchMode="singleTop" />
-        <activity android:name=".stub.P7SingleTaskActivity" android:exported="false" android:process=":p7" android:launchMode="singleTask" />
-        <activity android:name=".stub.P7SingleInstanceActivity" android:exported="false" android:process=":p7" android:launchMode="singleInstance" />
-        <activity android:name=".stub.P7TranslucentActivity" android:exported="false" android:process=":p7" android:theme="@style/Theme.AppSandbox.Translucent" />
-        <activity android:name=".stub.P7DialogActivity" android:exported="false" android:process=":p7" android:theme="@style/Theme.AppSandbox.Dialog" />
+        <activity android:name=".stub.P7StandardActivity" android:taskAffinity="${applicationId}.vtask.p7" android:exported="false" android:process=":p7" />
+        <activity android:name=".stub.P7SingleTopActivity" android:taskAffinity="${applicationId}.vtask.p7" android:exported="false" android:process=":p7" android:launchMode="singleTop" />
+        <activity android:name=".stub.P7SingleTaskActivity" android:taskAffinity="${applicationId}.vtask.p7" android:exported="false" android:process=":p7" android:launchMode="singleTask" />
+        <activity android:name=".stub.P7SingleInstanceActivity" android:taskAffinity="${applicationId}.vtask.p7" android:exported="false" android:process=":p7" android:launchMode="singleInstance" />
+        <activity android:name=".stub.P7TranslucentActivity" android:taskAffinity="${applicationId}.vtask.p7" android:exported="false" android:process=":p7" android:theme="@style/Theme.AppSandbox.Translucent" />
+        <activity android:name=".stub.P7DialogActivity" android:taskAffinity="${applicationId}.vtask.p7" android:exported="false" android:process=":p7" android:theme="@style/Theme.AppSandbox.Dialog" />
         <service android:name=".stub.P7Service" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
         <provider android:name=".stub.P7Provider" android:authorities="${applicationId}.stub.p7" android:exported="false" android:process=":p7" />
-        <activity android:name=".stub.P8StandardActivity" android:exported="false" android:process=":p8" />
-        <activity android:name=".stub.P8SingleTopActivity" android:exported="false" android:process=":p8" android:launchMode="singleTop" />
-        <activity android:name=".stub.P8SingleTaskActivity" android:exported="false" android:process=":p8" android:launchMode="singleTask" />
-        <activity android:name=".stub.P8SingleInstanceActivity" android:exported="false" android:process=":p8" android:launchMode="singleInstance" />
-        <activity android:name=".stub.P8TranslucentActivity" android:exported="false" android:process=":p8" android:theme="@style/Theme.AppSandbox.Translucent" />
-        <activity android:name=".stub.P8DialogActivity" android:exported="false" android:process=":p8" android:theme="@style/Theme.AppSandbox.Dialog" />
+        <activity android:name=".stub.P8StandardActivity" android:taskAffinity="${applicationId}.vtask.p8" android:exported="false" android:process=":p8" />
+        <activity android:name=".stub.P8SingleTopActivity" android:taskAffinity="${applicationId}.vtask.p8" android:exported="false" android:process=":p8" android:launchMode="singleTop" />
+        <activity android:name=".stub.P8SingleTaskActivity" android:taskAffinity="${applicationId}.vtask.p8" android:exported="false" android:process=":p8" android:launchMode="singleTask" />
+        <activity android:name=".stub.P8SingleInstanceActivity" android:taskAffinity="${applicationId}.vtask.p8" android:exported="false" android:process=":p8" android:launchMode="singleInstance" />
+        <activity android:name=".stub.P8TranslucentActivity" android:taskAffinity="${applicationId}.vtask.p8" android:exported="false" android:process=":p8" android:theme="@style/Theme.AppSandbox.Translucent" />
+        <activity android:name=".stub.P8DialogActivity" android:taskAffinity="${applicationId}.vtask.p8" android:exported="false" android:process=":p8" android:theme="@style/Theme.AppSandbox.Dialog" />
         <service android:name=".stub.P8Service" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
         <provider android:name=".stub.P8Provider" android:authorities="${applicationId}.stub.p8" android:exported="false" android:process=":p8" />
         <service android:name=".stub.P0Service1" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />

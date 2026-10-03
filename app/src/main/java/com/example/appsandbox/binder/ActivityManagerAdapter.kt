@@ -94,7 +94,10 @@ class ActivityManagerAdapter(
             }
         }
         registry.register("getContentProvider") { context, physical ->
-            val authority = context.args.firstOrNull { it is String && packageService.ownsProviderAuthority(it) } as? String
+            // getContentProvider(caller, [callingPackage,] name, userId, stable): only the authority name
+            // (the last String) may match; a Guest whose provider authority equals its package name would
+            // otherwise capture every lookup through the callingPackage argument.
+            val authority = (context.args.lastOrNull { it is String } as? String)?.takeIf(packageService::ownsProviderAuthority)
             val providerInfo = authority?.let(packageService::getProviderInfo)
             val remoteInfo = providerInfo?.takeIf {
                 VirtualProcessKey.canonicalProcessName(identity.guestPackageName, it.processName) != identity.guestPackageName

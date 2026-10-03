@@ -39,7 +39,7 @@ class VirtualActivityLauncher(private val context: Context) {
         }
         val envelope = LaunchEnvelope(packageName, instanceId, requireNotNull(original.component), original,
             snapshot.launcherActivity, slot, UUID.randomUUID().toString(), dataRoot.path)
-        val stub = envelope.putInto(StubActivities.intent(context, slot, snapshot.launcherActivity.launchMode)
+        val stub = envelope.putInto(StubActivities.standardIntent(context, slot)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         Log.i(TAG, "substitute original=${original.component?.flattenToShortString()} stub=${stub.component?.flattenToShortString()} " +
             "instance=${instance.instanceId} slot=$slot flags=0x${stub.flags.toString(16)} launchMode=${snapshot.launcherActivity.launchMode} " +

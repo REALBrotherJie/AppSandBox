@@ -117,9 +117,13 @@ object VirtualServiceRuntime {
     private fun restoreIntent(what: Int, data: Any): Boolean {
         val intentField = field(data.javaClass, "intent") ?: field(data.javaClass, "args") ?: return false
         val routed = intentField.get(data) as? Intent ?: return false
-        val guest = original(routed) ?: return false
         val record = routed.component?.let(byStub::get) ?: return false
-        guest.setExtrasClassLoader(record.guestInfo.applicationInfo?.let { Thread.currentThread().contextClassLoader })
+        val guestLoader = record.guestInfo.applicationInfo?.let { Thread.currentThread().contextClassLoader }
+        // The routed extras carry the Guest's own Parcelable/Serializable values; unparcelling them with
+        // the Host loader throws ClassNotFoundException before the Guest Service ever sees the Intent.
+        routed.setExtrasClassLoader(guestLoader)
+        val guest = original(routed) ?: return false
+        guest.setExtrasClassLoader(guestLoader)
         intentField.set(data, guest)
         val event = when (what) { 115 -> "START_COMMAND"; 121 -> "BIND"; else -> "UNBIND" }
         if (what == 115) record.starts++ else record.bound = what == 121

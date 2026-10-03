@@ -147,6 +147,23 @@ class GuestRuntimePreparation(
             return derived(base, derivedResources, root, "configuration")
         }
 
+        // Display/window/params contexts are built by the Host ContextImpl and would carry Host
+        // resources; keep the Guest's assets with the derived context's display metrics and config.
+        override fun createDisplayContext(display: android.view.Display): Context =
+            derivedWithGuestAssets(baseContext.createDisplayContext(display), "display")
+
+        override fun createWindowContext(type: Int, options: android.os.Bundle?): Context =
+            derivedWithGuestAssets(baseContext.createWindowContext(type, options), "window")
+
+        override fun createWindowContext(display: android.view.Display, type: Int, options: android.os.Bundle?): Context =
+            derivedWithGuestAssets(baseContext.createWindowContext(display, type, options), "window")
+
+        override fun createContext(contextParams: android.content.ContextParams): Context =
+            derivedWithGuestAssets(baseContext.createContext(contextParams), "params")
+
+        private fun derivedWithGuestAssets(base: Context, kind: String): Context =
+            derived(base, Resources(guestResources.assets, base.resources.displayMetrics, base.resources.configuration), root, kind)
+
         override fun createContextForSplit(splitName: String): Context {
             val names = guestInfo.splitNames.orEmpty()
             val paths = guestInfo.splitSourceDirs.orEmpty()

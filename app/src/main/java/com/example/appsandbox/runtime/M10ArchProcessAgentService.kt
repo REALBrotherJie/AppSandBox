@@ -84,6 +84,12 @@ abstract class BaseProcessAgentService(private val declaredSlot: Int) : Service(
                 slot,
                 requireNotNull(data.parcelable<ProviderInfo>(M10ArchProtocol.KEY_PROVIDER_INFO))
             )
+            M10ArchProtocol.COMPONENT_ACTIVITY -> bootstrap.prepareActivityProcess(
+                packageName,
+                instanceId,
+                slot,
+                requireNotNull(data.parcelable<ActivityInfo>(M10ArchProtocol.KEY_RECEIVER_INFO))
+            )
             else -> error("unsupported process component kind=$componentKind")
         }
         Log.i(TAG, "AGENT_READY slot=$slot pid=${Process.myPid()} generation=$generation key=$key native=BOUND webView=CONFIGURED")
@@ -140,6 +146,7 @@ object M10ArchProtocol {
     const val COMPONENT_SERVICE = "service"
     const val COMPONENT_RECEIVER = "receiver"
     const val COMPONENT_PROVIDER = "provider"
+    const val COMPONENT_ACTIVITY = "activity"
 
 }
 

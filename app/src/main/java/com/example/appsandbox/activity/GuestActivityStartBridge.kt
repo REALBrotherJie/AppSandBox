@@ -78,23 +78,38 @@ class GuestActivityStartBridge(
         return deliveredLocally
     }
 
+    /** An Activity declaring another android:process runs in that logical process's own stub slot. */
+    private fun targetSlot(info: android.content.pm.ActivityInfo): Int {
+        val targetProcess = com.example.appsandbox.runtime.VirtualProcessKey.canonicalProcessName(identity.guestPackageName, info.processName)
+        if (targetProcess == android.app.Application.getProcessName()) return identity.processSlot
+        val route = com.example.appsandbox.runtime.VirtualProcessCoordinatorClient.ensureActivity(context, identity.instanceId, info)
+        android.util.Log.i("AppSandbox.M10", "ACTIVITY_PROCESS_ROUTE component=${info.name} logicalProcess=$targetProcess " +
+            "slot=${route.slot} pid=${route.pid} generation=${route.generation}")
+        return route.slot
+    }
+
     private data class RoutedIntent(val intent: Intent, val reused: Boolean)
 
     private fun virtualize(original: Intent, method: Method, args: Array<Any?>, intentIndex: Int): RoutedIntent? {
         val resolved = resolveGuest(original) ?: return null
         val target = ComponentName(identity.guestPackageName, resolved.name)
         val root = File(context.filesDir, "virtual/instances/${identity.instanceId}").canonicalFile
+        val slot = targetSlot(resolved)
         val envelope = LaunchEnvelope(identity.guestPackageName, identity.instanceId, target, Intent(original), resolved,
-            identity.processSlot, UUID.randomUUID().toString(), root.path)
-        val stub = StubActivities.intent(context, identity.processSlot, resolved.launchMode).apply {
+            slot, UUID.randomUUID().toString(), root.path)
+        val stub = StubActivities.standardIntent(context, slot).apply {
             action = original.action
             data = original.data
             type = original.type
-            flags = original.flags
+            // Reuse (SINGLE_TOP / CLEAR_TOP) was already resolved against the Guest's virtual task; on
+            // the system side every Guest component shares stub classes, so these flags would target an
+            // unrelated Guest Activity.
+            flags = original.flags and (Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP).inv()
             clipData = original.clipData
             original.categories?.forEach(::addCategory)
         }
-        envelope.putReferenceInto(stub)
+        // The reference registry is per process; another logical process needs the full envelope.
+        if (slot == identity.processSlot) envelope.putReferenceInto(stub) else envelope.putInto(stub)
         val tokenIndex = method.parameterTypes.indices.firstOrNull { it > intentIndex && method.parameterTypes[it] == android.os.IBinder::class.java }
         val requestIndex = method.parameterTypes.indices.firstOrNull { it > intentIndex && method.parameterTypes[it] == Int::class.javaPrimitiveType }
         val caller = tokenIndex?.let { args[it]?.toString() }

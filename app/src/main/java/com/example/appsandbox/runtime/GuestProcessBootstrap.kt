@@ -90,6 +90,18 @@ class GuestProcessBootstrap(private val context: Context) {
         )
     }
 
+    /** Prepares a Guest Activity's own android:process (Application bound) before the Activity arrives on its stub. */
+    fun prepareActivityProcess(packageName: String, instanceId: String, processSlot: Int, activityInfo: ActivityInfo) {
+        val root = InstanceStorageManager(context, instanceId).root.path
+        prepare(
+            LaunchEnvelope(packageName, instanceId, android.content.ComponentName(packageName, activityInfo.name),
+                Intent().setComponent(android.content.ComponentName(packageName, activityInfo.name)), activityInfo,
+                processSlot, "activity-agent", root),
+            activityLaunch = false,
+            bindGuestApplication = true
+        )
+    }
+
     fun prepareProvider(packageName: String, instanceId: String, processSlot: Int, providerInfo: ProviderInfo): IBinder {
         val anchor = ActivityInfo().apply {
             name = providerInfo.name
@@ -147,7 +159,7 @@ class GuestProcessBootstrap(private val context: Context) {
             guestLoader.unbindApplication(thread)
         }
         if (activityLaunch) {
-            val stub = StubActivities.intent(context, envelope.processSlot, envelope.activityInfo.launchMode)
+            val stub = StubActivities.standardIntent(context, envelope.processSlot)
             activityManager.requested(envelope, requireNotNull(stub.component), null, -1)
         }
         val app = ApplicationInfo(requireNotNull(info.applicationInfo))
@@ -179,6 +191,9 @@ class GuestProcessBootstrap(private val context: Context) {
         val loader = guestLoader.prepare(app.sourceDir, app.splitSourceDirs.orEmpty().toList(), app.nativeLibraryDir, envelope.packageName,
             root.path, primaryCpuAbi, sharedLibraryFiles)
         guestLoader.guestNativeLibraryDir?.let { app.nativeLibraryDir = it }
+        // LoadedApk.makeApplication installs the App's loader as the main thread's context loader
+        // (initializeJavaContextClassLoader); Guests and ServiceLoader rely on it.
+        Thread.currentThread().contextClassLoader = loader
         val packageFlags = android.content.pm.PackageManager.GET_ACTIVITIES or android.content.pm.PackageManager.GET_SERVICES or
             android.content.pm.PackageManager.GET_RECEIVERS or android.content.pm.PackageManager.GET_PROVIDERS or
             android.content.pm.PackageManager.GET_PERMISSIONS or android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES or
