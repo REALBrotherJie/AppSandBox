@@ -174,7 +174,10 @@ class GuestProcessBootstrap(private val context: Context) {
         val primaryCpuAbi = runCatching {
             app.javaClass.getDeclaredField("primaryCpuAbi").apply { isAccessible = true }.get(app) as? String
         }.getOrNull()
-        val loader = guestLoader.prepare(app.sourceDir, app.splitSourceDirs.orEmpty().toList(), app.nativeLibraryDir, envelope.packageName, root.path, primaryCpuAbi)
+        val sharedLibraryFiles = guestSharedLibraryFiles(context, envelope.packageName)
+        if (sharedLibraryFiles.isNotEmpty()) app.sharedLibraryFiles = sharedLibraryFiles.toTypedArray()
+        val loader = guestLoader.prepare(app.sourceDir, app.splitSourceDirs.orEmpty().toList(), app.nativeLibraryDir, envelope.packageName,
+            root.path, primaryCpuAbi, sharedLibraryFiles)
         guestLoader.guestNativeLibraryDir?.let { app.nativeLibraryDir = it }
         val packageFlags = android.content.pm.PackageManager.GET_ACTIVITIES or android.content.pm.PackageManager.GET_SERVICES or
             android.content.pm.PackageManager.GET_RECEIVERS or android.content.pm.PackageManager.GET_PROVIDERS or
@@ -246,6 +249,20 @@ class GuestProcessBootstrap(private val context: Context) {
     private fun physicalProcessName(): String = runCatching {
         File("/proc/self/cmdline").readText().trim { it <= ' ' || it == '\u0000' }
     }.getOrDefault(context.packageName)
+
+    /** The installed Guest's resolved uses-library paths (e.g. /system/framework/org.apache.http.legacy.jar). */
+    private fun guestSharedLibraryFiles(context: Context, packageName: String): List<String> = runCatching {
+        val flags = android.content.pm.PackageManager.GET_SHARED_LIBRARY_FILES
+        val info = if (android.os.Build.VERSION.SDK_INT >= 33) {
+            context.packageManager.getApplicationInfo(packageName, android.content.pm.PackageManager.ApplicationInfoFlags.of(flags.toLong()))
+        } else {
+            @Suppress("DEPRECATION") context.packageManager.getApplicationInfo(packageName, flags)
+        }
+        info.sharedLibraryFiles.orEmpty().toList()
+    }.getOrElse { error ->
+        Log.w(TAG, "shared-library lookup failed package=$packageName", error)
+        emptyList()
+    }
 
     private data class RuntimeState(val loader: ClassLoader, val applicationInfo: ApplicationInfo, val application: android.app.Application)
 

@@ -5,22 +5,23 @@ import dalvik.system.DexClassLoader
 
 enum class ClassLoadingDomain { SYSTEM, RUNTIME_BRIDGE, GUEST }
 
-enum class SystemClassSource { PLATFORM, GUEST, HOST }
+enum class ClassSource { PLATFORM, SHARED_LIBRARY, GUEST, HOST }
 
 class GuestDomainClassLoader(
     private val guestDexPath: String,
     optimizedDirectory: String,
     librarySearchPath: String?,
     private val hostLoader: ClassLoader,
-    private val platformLoader: ClassLoader? = android.content.Context::class.java.classLoader
+    private val platformLoader: ClassLoader? = android.content.Context::class.java.classLoader,
+    /** Loader over the Guest's declared uses-library files (ApplicationInfo.sharedLibraryFiles). */
+    private val sharedLibraryLoader: ClassLoader? = null
 ) : DexClassLoader(guestDexPath, optimizedDirectory, librarySearchPath, hostLoader) {
     override fun loadClass(name: String, resolve: Boolean): Class<*> = synchronized(this) {
         findLoadedClass(name)?.let { return it }
         val domain = domainOf(name)
         val loaded = when (domain) {
-            ClassLoadingDomain.SYSTEM -> loadSystemClass(name)
             ClassLoadingDomain.RUNTIME_BRIDGE -> hostLoader.loadClass(name)
-            ClassLoadingDomain.GUEST -> runCatching { findClass(name) }.getOrElse { hostLoader.loadClass(name) }
+            else -> resolveInOrder(name, lookupOrder(name, domain, sharedLibraryLoader != null), ::loadFrom)
         }
         if (resolve) resolveClass(loaded)
         if (com.example.appsandbox.BuildConfig.DEBUG && shouldDiagnose(name)) {
@@ -32,14 +33,12 @@ class GuestDomainClassLoader(
         loaded
     }
 
-    private fun loadSystemClass(name: String): Class<*> =
-        resolveInOrder(name, systemLookupOrder(name)) { source ->
-            when (source) {
-                SystemClassSource.PLATFORM -> (platformLoader ?: hostLoader).loadClass(name)
-                SystemClassSource.GUEST -> findClass(name)
-                SystemClassSource.HOST -> hostLoader.loadClass(name)
-            }
-        }
+    private fun loadFrom(source: ClassSource, name: String): Class<*> = when (source) {
+        ClassSource.PLATFORM -> (platformLoader ?: hostLoader).loadClass(name)
+        ClassSource.SHARED_LIBRARY -> requireNotNull(sharedLibraryLoader).loadClass(name)
+        ClassSource.GUEST -> findClass(name)
+        ClassSource.HOST -> hostLoader.loadClass(name)
+    }
 
     companion object {
         private const val TAG = "AppSandbox.M3"
@@ -54,19 +53,27 @@ class GuestDomainClassLoader(
             "com.example.appsandbox.vpm."
         )
 
-        // Framework classes come from the boot class path. Guests may package their own
-        // javax, android.support and android classes, and the host APK ships some of the same
-        // names (androidx.core's android.support.v4 AIDL compat), so the guest dex must be
-        // consulted before the host loader. java.* stays platform-only.
-        fun systemLookupOrder(name: String): List<SystemClassSource> =
-            if (name.startsWith("java.")) listOf(SystemClassSource.PLATFORM, SystemClassSource.HOST)
-            else listOf(SystemClassSource.PLATFORM, SystemClassSource.GUEST, SystemClassSource.HOST)
+        // Mirrors ART's app loader: boot class path, then uses-library loaders, then the APK's
+        // own dex. Framework classes therefore come from the boot class path. Guests may package
+        // their own javax, android.support and android classes, and the host APK ships some of the
+        // same names (androidx.core's android.support.v4 AIDL compat), so the guest dex must be
+        // consulted before the host loader. java.* stays platform-only. The host loader is only a
+        // last resort for names nothing on the Guest's side defines.
+        fun lookupOrder(name: String, domain: ClassLoadingDomain, hasSharedLibraries: Boolean): List<ClassSource> {
+            if (domain == ClassLoadingDomain.SYSTEM && name.startsWith("java.")) return listOf(ClassSource.PLATFORM, ClassSource.HOST)
+            return listOfNotNull(
+                ClassSource.PLATFORM.takeIf { domain == ClassLoadingDomain.SYSTEM },
+                ClassSource.SHARED_LIBRARY.takeIf { hasSharedLibraries },
+                ClassSource.GUEST,
+                ClassSource.HOST
+            )
+        }
 
-        fun <T> resolveInOrder(name: String, order: List<SystemClassSource>, lookup: (SystemClassSource) -> T): T {
+        fun <T> resolveInOrder(name: String, order: List<ClassSource>, lookup: (ClassSource, String) -> T): T {
             var failure: Throwable? = null
             for (source in order) {
                 try {
-                    return lookup(source)
+                    return lookup(source, name)
                 } catch (e: ClassNotFoundException) {
                     failure = failure ?: e
                 } catch (e: LinkageError) {

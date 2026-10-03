@@ -19,17 +19,32 @@ class GuestRuntimeClassLoader(private val host: Context) {
     @Volatile var guestNativeLibraryDir: String? = null
         private set
 
-    fun prepare(sourceDir: String, splitSourceDirs: List<String>, nativeLibraryDir: String?, packageName: String, dataRoot: String, primaryCpuAbi: String? = null): ClassLoader {
+    fun prepare(
+        sourceDir: String,
+        splitSourceDirs: List<String>,
+        nativeLibraryDir: String?,
+        packageName: String,
+        dataRoot: String,
+        primaryCpuAbi: String? = null,
+        sharedLibraryFiles: List<String> = emptyList()
+    ): ClassLoader {
         val current = loader
         if (current != null && this.packageName == packageName) return current
         val optimized = File(dataRoot, "dex").apply { mkdirs() }
         val dexPath = (listOf(sourceDir) + splitSourceDirs).joinToString(File.pathSeparator)
         val materializedNative = materializeNativeLibraries(listOf(sourceDir) + splitSourceDirs, packageName, primaryCpuAbi)
         guestNativeLibraryDir = materializedNative ?: nativeLibraryDir
-        return GuestDomainClassLoader(dexPath, optimized.path, guestNativeLibraryDir, host.classLoader).also {
+        val platform = android.content.Context::class.java.classLoader
+        val libraries = sharedLibraryFiles.filter { File(it).isFile }
+        // One loader over the Guest's uses-library jars/APKs, parented to the boot class path like
+        // the platform's shared-library loaders; the Host loader never sits underneath it.
+        val sharedLoader = libraries.takeIf { it.isNotEmpty() }
+            ?.let { dalvik.system.PathClassLoader(it.joinToString(File.pathSeparator), platform) }
+        return GuestDomainClassLoader(dexPath, optimized.path, guestNativeLibraryDir, host.classLoader, platform, sharedLoader).also {
             loader = it
             this.packageName = packageName
-            Log.i("AppSandbox.M3", "CLASSLOAD_SETUP package=$packageName base=$sourceDir splits=$splitSourceDirs dexPath=$dexPath loader=$it")
+            Log.i("AppSandbox.M3", "CLASSLOAD_SETUP package=$packageName base=$sourceDir splits=$splitSourceDirs dexPath=$dexPath " +
+                "sharedLibraries=$libraries loader=$it")
         }
     }
 
