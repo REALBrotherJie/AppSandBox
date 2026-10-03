@@ -1,19 +1,18 @@
-STATUS = PARTIAL (Play Console not rerun: package removed from API31 device; user asked not to reinstall)
-EXPANSION_2_CLUSTER_CLASSIFICATION_CORRECTED = YES (matrix V2 POST_EXPANSION_2_RECLASSIFICATION, R4 Dagger sentence corrected)
-CLASSLOADER_PREFIX_DEFECT_PROVEN = YES; FIXED = YES; ORDER = PLATFORM_GUEST_HOST; HOST_SUPPORT_CLASS_LEAK_TO_GUEST = NO (fixture ResultReceiver -> Guest)
-CLASSLOADER_AFFECTED_APPS_BEFORE = 6; ADVANCED = 6 (Hide/NetworkToolbox/Dragon PASS; Lark NPE DI, Douyin Provider GuestContext!=Application, Arrow GMS meta-data); Host fallback not observed
-HOST_INTERNET_DEFECT_PROVEN = YES; ADDED = YES; INTERNET_APPS_BEFORE = 4; ADVANCED = 4 (MusicPlayGo PASS; Sudoku/Arrow GMS meta-data; Incy kotlinx MainDispatcherFactory CCE)
-GUEST_INTERNET_MANIFEST_ENFORCEMENT = NOT_IMPLEMENTED; GUEST_INTERNET_OVERGRANT = YES
-HOST_ACCESS_NETWORK_STATE_ADDED = YES; NETWORK_STATE_APPS_ADVANCED = 2/2 (denial gone; no first frame); GUEST_NETWORK_STATE_OVERGRANT = YES
-SPLIT_NATIVE_PATH_DEFECT_PROVEN = YES; FIXED = YES; NATIVE_LIBRARY_DIR_SINGLE_PATH = YES (fixture split-only .so loads API31 arm64 + API36 x86_64)
-SPLIT_NATIVE_APPS_BEFORE = 2; ADVANCED = 1 (EnhanceFox); Play Console NOT_RERUN; isolated split loading not modelled
-ENHANCEFOX_NEXT_BLOCKER = APP_PROTECTION / OUT_OF_SCOPE (pairip VMRunner bytecode); ANTI_TAMPER_BYPASS_ATTEMPTED = NO
-API31_FIRST_FRAME: 5/31 -> 9/31 (+Hide, Dragon, Kuaixun, MusicPlayGo, NetworkToolbox; Kugou regressed -1)
-KUGOU_REGRESSION = now reaches org.apache.http.legacy; Guest loader omits usesLibraryFiles (20/31 Apps declare it)
-API36_ELIGIBLE_FIRST_FRAME: 2/3 -> 4/4 (NetworkToolbox newly eligible x86_64)
-MOMO_REGRESSION = PASS; SUPERLIST_REGRESSION = PASS; TERMUX_RECEIVER_REGRESSION = PASS (API36 flags 0->2)
-INTERCEPTION_SUBSTRATE_CLUSTER_COUNT = 2
-NEXT_GENERIC_BLOCKER = GUEST_APPINFO_METADATA (GMS version: Arrow/Sudoku/PDFEditor) + GUEST_SHARED_LIBRARIES (usesLibraryFiles)
-NEXT_ACTION = CONTINUE_REAL_APP_RECOVERY
-BUILD_GATES = PASS (testDebugUnitTest, assembleDebug, assembleRelease arm64/x86_64); evidence build/reports/m15/
+STATUS = PARTIAL (Play Console not rerun; user requested no reinstall)
+EXPANSION_2_CLASSIFICATION_CORRECTED = YES; CLASSLOADER/INTERNET/SPLIT_NATIVE = FIXED
+API31_FIRST_FRAME = 5/31 -> 25/31 dual-instance PASS; Douyin Lite additionally reaches feed but is not counted
+API31_PASS = Arrow,Baidu,Coolapk,Damai,DamaiHelper,Detector,DingTalk,DragonRead,Duokan,HideAppList,iQIYI,Incy,Kuaixun,KugouLite,Lark,Momo,MusicPlayGo,NetworkToolbox,PDFEditor,QQBrowser,Qunar,Sudoku,SuperList,WeChat,Zhihu
+REMAINING = Chrome; DouyinLite measurement; EnhanceFox APP_PROTECTION; Termux frozen PendingIntent; WPS RePlugin; PlayConsole not installed
+GUEST_INTERNET_MANIFEST_ENFORCEMENT = NOT_IMPLEMENTED; INTERNET/NETWORK_STATE_OVERGRANT = YES
+SPLIT_NATIVE_FIXTURE = PASS API31 arm64 + API36 x86_64; isolated split loading not modelled
+STUB_SERVICE_POOL = PASS; 31 Guest stubs/slot, index 0 Host-only, destroyed-stub oldest-first reclaim
+SERVICE_STRESS = PASS API31/API36 I0/I1; wave1 28/28 + wave2 20/20, 40 distinct main-process Services
+SERVICE_REGRESSION = PASS WeChat,QQBrowser,Baidu,iQIYI,KugouLite,DingTalk,Momo I0/I1; no FATAL/interface mismatch/pool exhaustion
+API36_LATEST = Momo,NetworkToolbox,R15 fixture PASS I0/I1; emulator-5554 stopped after validation
+TERMUX_RECEIVER = PASS flags 0->2; M12 remains frozen
+FIXTURE_INSTALL_NOTE = current device fixture installs are base APK, not prior split install; native load still PASS
+KNOWN_LIMIT = Provider acquire still round-trips coordinator; WPS/Chrome frozen; Douyin first-frame measurement pending
+BUILD_GATES = PASS (testDebugUnitTest, assembleDebug, assembleRelease; arm64-v8a/x86_64)
+EVIDENCE = build/reports/m15/api31t, build/reports/m15/api36t, build/reports/m15/sweep-s17.txt
+RUNTIME_COMMIT = 9b47f4ddc5dcfe321fc586e24d35fe9ed4893e41; PUSHED = NO
 M12_REMAINS_FROZEN = YES; M13_STARTED = NO; STOPPED_AFTER_GENERIC_RUNTIME_CORRECTION_15 = YES
