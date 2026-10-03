@@ -33,6 +33,21 @@ class GuestDomainClassLoader(
         loaded
     }
 
+    // Classpath resources (META-INF/services, properties) come from the boot class path, the Guest's
+    // shared libraries and its own APKs, never from the Host APK: ServiceLoader would otherwise read
+    // the Host's provider lists and mix Host implementations into Guest interfaces.
+    override fun getResource(name: String): java.net.URL? =
+        platformLoader?.getResource(name) ?: sharedLibraryLoader?.getResource(name) ?: findResource(name)
+
+    override fun getResources(name: String): java.util.Enumeration<java.net.URL> {
+        val urls = mutableListOf<java.net.URL>()
+        platformLoader?.getResources(name)?.toList()?.let(urls::addAll)
+        sharedLibraryLoader?.getResources(name)?.toList()
+            ?.filterNot { it in urls }?.let(urls::addAll)
+        findResources(name)?.toList()?.let(urls::addAll)
+        return java.util.Collections.enumeration(urls)
+    }
+
     private fun loadFrom(source: ClassSource, name: String): Class<*> = when (source) {
         ClassSource.PLATFORM -> (platformLoader ?: hostLoader).loadClass(name)
         ClassSource.SHARED_LIBRARY -> requireNotNull(sharedLibraryLoader).loadClass(name)

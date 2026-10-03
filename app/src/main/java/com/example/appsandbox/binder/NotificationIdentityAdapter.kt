@@ -21,31 +21,21 @@ class NotificationIdentityAdapter(private val identity: RuntimeIdentity) : Binde
         if (Proxy.isProxyClass(original.javaClass) && original.toString().startsWith("VirtualBinderProxy(")) {
             return AdapterInstallResult(serviceName, true, true)
         }
-        val registry = MethodPolicyRegistry()
         val iface = Class.forName(interfaceName)
-        listOf(
-            "getNotificationChannel",
-            "createNotificationChannels",
-            "enqueueNotificationWithTag",
-            "cancelNotificationWithTag",
-            "enqueueToast",
-            "enqueueTextToast",
-            "cancelToast",
-            "finishToken"
-        ).forEach { name ->
-            registry.register(name) { call, physical ->
-                val args = NotificationIdentityPolicy(identity).physicalArgs(call.args)
-                if (!args.contentEquals(call.args)) {
-                    Log.i(
-                        "AppSandbox.M2.1",
-                        "CONTEXT_SYSTEM_IDENTITY service=notification method=$name instance=${identity.instanceId} " +
-                            "logical=${identity.guestPackageName}/${identity.virtualUidNumber} " +
-                            "physical=${identity.hostPackageName}/${identity.hostUid}"
-                    )
-                }
-                BinderCallResult(physical(args), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
+        // Every INotificationManager call carrying the Guest package (areNotificationsEnabled,
+        // channels, toasts, ...) is checked against the Host UID, so translate all of them.
+        val registry = MethodPolicyRegistry(fallback = { call, physical ->
+            val args = NotificationIdentityPolicy(identity).physicalArgs(call.args)
+            if (!args.contentEquals(call.args)) {
+                Log.i(
+                    "AppSandbox.M2.1",
+                    "CONTEXT_SYSTEM_IDENTITY service=notification method=${call.methodName} instance=${identity.instanceId} " +
+                        "logical=${identity.guestPackageName}/${identity.virtualUidNumber} " +
+                        "physical=${identity.hostPackageName}/${identity.hostUid}"
+                )
             }
-        }
+            BinderCallResult(physical(args), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
+        })
         val proxy = ProxySupport.create(original, iface, serviceName, identity, registry)
         field.set(null, proxy)
         HiddenApiAccess.probe().getOrThrow()

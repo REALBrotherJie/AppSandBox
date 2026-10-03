@@ -149,6 +149,9 @@ class GuestRuntimeClassLoader(private val host: Context) {
                 "logical=${identityBridge.logicalPackageName()}/${identityBridge.logicalUid()} physical=${identityBridge.physicalPackageName()}/${identityBridge.physicalUid()}")
             activityManager.created(activity)
             delegate?.callActivityOnCreate(activity, state) ?: super.callActivityOnCreate(activity, state)
+            // Aliases and splash-forwarding launches never match the launch target class, so every
+            // Guest Activity is observed here.
+            GuestFirstFrameMonitor.observe(activity, identityBridge.instanceId, identityBridge.processSlot)
         }
 
         override fun callActivityOnStart(activity: android.app.Activity) {

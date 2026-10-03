@@ -5,6 +5,9 @@ import android.os.Build
 import android.util.Log
 
 class SystemIdentityBridge(private val identity: RuntimeIdentity) {
+    val instanceId: String get() = identity.instanceId
+    val processSlot: Int get() = identity.processSlot
+
     fun logicalPackageName() = identity.guestPackageName
     fun physicalPackageName() = identity.hostPackageName
     fun logicalUid() = identity.virtualUid
