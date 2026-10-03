@@ -27,6 +27,7 @@ class GuestRuntimePreparation(
     private val dataRoot: File,
     private val activityThread: Any,
     private val instrumentation: Instrumentation,
+    private val applicationBase: () -> Context? = { null },
     private val bindApplication: (Application) -> Unit
 ) {
     data class Result(val application: Application, val context: Context, val installedProviders: List<String>)
@@ -48,7 +49,10 @@ class GuestRuntimePreparation(
             }
         }
         val appClass = applicationInfo.className?.takeIf { it.isNotBlank() } ?: Application::class.java.name
-        val application = instrumentation.newApplication(loader, appClass, guestContext)
+        val base = applicationBase()
+        Log.i("AppSandbox.M2", "GUEST_APPLICATION_BASE class=${(base ?: guestContext).javaClass.name} " +
+            "data=${(base ?: guestContext).dataDir} package=${(base ?: guestContext).packageName}")
+        val application = instrumentation.newApplication(loader, appClass, base ?: guestContext)
         guestContext.bindApplication(application)
         bindApplication(application)
         val installed = localProviders.map { overlay ->

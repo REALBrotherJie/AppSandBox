@@ -62,7 +62,7 @@ class GuestRuntimeClassLoader(private val host: Context) {
             .mapNotNull { runCatching { it.getDeclaredField("mInstrumentation") }.getOrNull() }.first()
             .apply { isAccessible = true }
         val previous = field.get(activityThread) as? Instrumentation
-        if (previous !is GuestInstrumentation) field.set(activityThread, GuestInstrumentation(classLoader, previous, identityBridge, activityManager))
+        if (previous !is GuestInstrumentation) field.set(activityThread, GuestInstrumentation({ currentGuestClassLoader() ?: classLoader }, previous, identityBridge, activityManager))
     }
 
     fun installLoadedApk(activityThread: Any, classLoader: ClassLoader, sourceDir: String, appInfo: android.content.pm.ApplicationInfo): Resources {
@@ -95,6 +95,26 @@ class GuestRuntimeClassLoader(private val host: Context) {
         return resources
     }
 
+    /**
+     * A framework ContextImpl on the Guest LoadedApk, as handleBindApplication gives the Application.
+     * Apps reflect Application.mBase.mPackageInfo (Lark, plugin/hotfix frameworks hook its mClassLoader);
+     * its ApplicationInfo already points data/device-protected directories at the instance.
+     */
+    fun createAppContext(activityThread: Any): android.content.Context? {
+        val apk = loadedApk ?: return null
+        return runCatching {
+            Class.forName("android.app.ContextImpl").declaredMethods.first {
+                it.name == "createAppContext" && it.parameterTypes.size == 2 &&
+                    it.parameterTypes[0].isInstance(activityThread) && it.parameterTypes[1].isInstance(apk)
+            }.apply { isAccessible = true }.invoke(null, activityThread, apk) as android.content.Context
+        }.onFailure { Log.w("AppSandbox.M2", "Guest ContextImpl creation failed; using GuestContext", it) }.getOrNull()
+    }
+
+    /** The Guest LoadedApk's current class loader; Apps may replace LoadedApk.mClassLoader with a wrapper. */
+    private fun currentGuestClassLoader(): ClassLoader? = loadedApk?.let { apk ->
+        runCatching { apk.javaClass.getDeclaredField("mClassLoader").apply { isAccessible = true }.get(apk) as? ClassLoader }.getOrNull()
+    }
+
     fun bindApplication(activityThread: Any, application: android.app.Application) {
         val apk = requireNotNull(loadedApk) { "Guest LoadedApk unavailable" }
         val applicationField = generateSequence(apk.javaClass) { it.superclass }
@@ -125,17 +145,19 @@ class GuestRuntimeClassLoader(private val host: Context) {
     }
 
     private class GuestInstrumentation(
-        private val guestLoader: ClassLoader,
+        private val guestLoaderProvider: () -> ClassLoader,
         private val delegate: Instrumentation?,
         private val identityBridge: SystemIdentityBridge,
         private val activityManager: VirtualActivityManager
     ) : Instrumentation() {
         override fun newApplication(cl: ClassLoader?, className: String?, context: android.content.Context?): android.app.Application {
+            val guestLoader = guestLoaderProvider()
             return delegate?.newApplication(guestLoader, className, context)
                 ?: super.newApplication(guestLoader, className, context)
         }
 
         override fun newActivity(cl: ClassLoader?, className: String?, intent: android.content.Intent?): android.app.Activity {
+            val guestLoader = guestLoaderProvider()
             return delegate?.newActivity(guestLoader, className, intent)
                 ?: super.newActivity(guestLoader, className, intent)
         }
@@ -181,7 +203,7 @@ class GuestRuntimeClassLoader(private val host: Context) {
 
         override fun callActivityOnNewIntent(activity: android.app.Activity, intent: android.content.Intent) {
             val restored = com.example.appsandbox.virtual.LaunchEnvelope.from(intent)?.originalIntent ?: intent
-            restored.setExtrasClassLoader(guestLoader)
+            restored.setExtrasClassLoader(guestLoaderProvider())
             activityManager.newIntent(activity, restored)
             delegate?.callActivityOnNewIntent(activity, restored) ?: super.callActivityOnNewIntent(activity, restored)
         }

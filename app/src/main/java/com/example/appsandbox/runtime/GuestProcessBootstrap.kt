@@ -171,9 +171,12 @@ class GuestProcessBootstrap(private val context: Context) {
         if (android.os.Build.VERSION.SDK_INT >= 24) {
             app.deviceProtectedDataDir = storage.deviceProtected.path
         }
-        app.processName = context.packageName + ":p${envelope.processSlot}"
+        val physicalProcessName = context.packageName + ":p${envelope.processSlot}"
+        // ApplicationInfo.processName is the App's default process, as in its manifest; Apps compare it
+        // with the current (logical) process name to decide whether they run in their main process.
+        app.processName = app.processName?.takeIf { it.isNotBlank() } ?: envelope.packageName
         info.applicationInfo = app
-        info.processName = app.processName
+        info.processName = physicalProcessName
         runtimeStates[envelope.instanceId]?.let { state ->
             info.applicationInfo = ApplicationInfo(state.applicationInfo)
             val restored = Intent(envelope.originalIntent).apply {
@@ -218,7 +221,8 @@ class GuestProcessBootstrap(private val context: Context) {
             val field = generateSequence(thread.javaClass) { it.superclass }.mapNotNull { runCatching { it.getDeclaredField("mInstrumentation") }.getOrNull() }.first().apply { isAccessible = true }
             field.get(thread) as android.app.Instrumentation
         }
-        val preparation = GuestRuntimePreparation(context, identity, loader, resources, app, root, thread, guestInstrumentation) {
+        val preparation = GuestRuntimePreparation(context, identity, loader, resources, app, root, thread, guestInstrumentation,
+            applicationBase = { guestLoader.createAppContext(thread) }) {
             // Activity/provider paths need the canonical Guest Application on LoadedApk.
             // Receiver dispatch is entered by ActivityThread.handleReceiver(), which
             // requires its LoadedApk application base to remain a framework ContextImpl.
