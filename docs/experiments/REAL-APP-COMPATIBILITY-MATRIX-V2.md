@@ -99,4 +99,30 @@ The API36 emulator was unavailable after the API31 campaign, and none of the 13 
 
 ## Generic Runtime Correction 15
 
-The Expansion-2 `NEW_REPEATED_GENERIC_BLOCKERS=NONE` classification was corrected from the second-pass evidence. This checkpoint added only Host `INTERNET`, Guest class-loader fallback after a failed Host lookup for non-`java.*` `android.*`/`javax.*` namespaces, and split-aware native materialization using Guest base/split APKs and reflected `primaryCpuAbi`. The API31 device was online; API36 `emulator-5554` was unavailable on 2026-10-03, so no new API36 eligible denominator was created. Build and unit gates passed. Full 31-App and fixture reruns were not completed in this session; prior baseline remains API31 `5/31`, API36 eligible `2/3`. Host INTERNET manifest enforcement is intentionally not Guest-manifest-faithful: `GUEST_INTERNET_OVERGRANT=NOT_TESTED`, `GUEST_INTERNET_MANIFEST_ENFORCEMENT=NOT_IMPLEMENTED`. EnhanceFox/Play Console native runtime acceptance remains unverified; no integrity bypass was attempted.
+### POST_EXPANSION_2_RECLASSIFICATION
+
+Expansion-2's `NEW_REPEATED_GENERIC_BLOCKERS=NONE` is corrected; the Expansion-2 section above is kept as the historical record. Its sentence "Three Dagger-like class failures ... the reported classes were not defined as matching class descriptors" is wrong: `dagger.internal.Provider` is defined in Network Toolbox `classes23.dex` and Firebase sessions `Factory` in Arrow `classes6.dex`, both extending a Guest-packaged `javax.inject.Provider`. Second-pass dex/log/merged-manifest review grouped three repeated clusters by first failing runtime boundary: `CLASSLOADER_PREFIX_DELEGATION` (Lark, Douyin Lite, Hide App List, Network Toolbox, Arrow, Dragon Read: a SYSTEM-prefixed class defined only in Guest dex was never searched there), `HOST_INTERNET_CAPABILITY` (Sudoku, Incy, Arrow, MusicPlayGo; plus QQ Browser and Baidu for `ACCESS_NETWORK_STATE`), and `SPLIT_NATIVE_LIBRARY_SEARCH_PATH` (EnhanceFox, Play Console).
+
+### Fix and acceptance (API31 `7b670025`, API36 `emulator-5554`)
+
+SYSTEM-domain classes now resolve platform (boot) -> Guest dex -> Host; `java.*` stays platform -> Host. The `RuntimeCorrectionFixture` (I0/I1, both APIs) resolves `android.app.Activity`/`java.lang.String` from BootClassLoader and Guest-packaged `javax.inject.Provider`, `android.support.v4.os.ResultReceiver` (also shipped by the Host APK), `android.support.v4.content.FileProvider`, and `android.view.OdViewStub` from the Guest loader, so the Host support-class leak is closed. The selected ABI's base and split `.so` files are materialized into one directory that is both `nativeLibraryDir` and the ClassLoader search path; the fixture's split-only `libr15native.so` (`extractNativeLibs=false`) loads in I0/I1 on arm64 and x86_64. Isolated split loading is not modelled; all splits share one Guest loader. Host `INTERNET` and `ACCESS_NETWORK_STATE` are in debug and release merged manifests. The fixture without either permission could still call `getActiveNetwork()` and open a TCP socket: `GUEST_INTERNET_OVERGRANT=YES`, `GUEST_NETWORK_STATE_OVERGRANT=YES`, Guest manifest enforcement is not implemented (security debt, not permission isolation).
+
+| App | Cluster | Before | After (API31 I0/I1) / next blocker |
+| --- | --- | --- | --- |
+| Lark | ClassLoader | `javax.inject.Provider` CNFE | NO/NO: NPE `pi5.b.getContext()` in App DI |
+| Douyin Lite | ClassLoader | `OdViewStub` CNFE | NO/NO: Provider receives `GuestContext`, expects `Application` |
+| Hide App List | ClassLoader | support class CNFE | YES/YES (API36 YES/YES) |
+| Network Toolbox | ClassLoader | Dagger chain | YES/YES (API36 YES/YES) |
+| Dragon Read | ClassLoader | support class | YES/YES |
+| Arrow | ClassLoader+INTERNET | Firebase/Dagger, network | NO/NO: `GooglePlayServicesMissingManifestValueException` |
+| Sudoku | INTERNET | missing INTERNET | first frame, then same GMS meta-data crash |
+| Incy | INTERNET | missing INTERNET | NO/NO: kotlinx `MainDispatcherFactory` ClassCastException |
+| MusicPlayGo | INTERNET | missing INTERNET | YES/YES |
+| QQ Browser | NETWORK_STATE | ConnectivityService denial | NO/NO: denial gone; MainActivity requested, no first frame |
+| Baidu | NETWORK_STATE | ConnectivityService denial | NO/NO: denial gone; no first frame |
+| EnhanceFox | split native | `libpairipcore.so` not found | library found; next `com.pairip.VMRunner` bytecode check = `APP_PROTECTION / OUT_OF_SCOPE`, not bypassed |
+| Play Console | split native | Flutter VM data | NOT_RERUN: package removed from device; MIUI rejected reinstall (`INSTALL_FAILED_USER_RESTRICTED`) |
+
+API31 dual-instance first frame moves from `5/31` to `9/31`: Momo, SuperList, Damai Helper, Detector, Hide App List, Dragon Read, Kuaixun, MusicPlayGo, Network Toolbox. Kugou Lite regressed from PASS: with network now available its statistics path reaches `org.apache.http.conn.util.InetAddressUtils`, which needs the declared optional `org.apache.http.legacy` shared library; Guest class loaders never include `usesLibraryFiles` (20 of the 31 Apps declare that library). API36 eligible becomes `4/4` (SuperList, Hide App List, Damai Helper, Network Toolbox; Network Toolbox newly eligible with an x86_64 payload). Momo and SuperList stay PASS on both APIs; Termux API36 I0/I1 keep `guestCall=true guestTarget=28 before=0 after=2`.
+
+Remaining counts: `CLASSLOADER_PREFIX_DELEGATION` 0, `HOST_INTERNET_CAPABILITY` 0, `SPLIT_NATIVE_LIBRARY_SEARCH_PATH` 0 measured (Play Console unmeasured). New repeated boundaries for the planner: Guest `ApplicationInfo.metaData` for GMS `com.google.android.gms.version` (Arrow, Sudoku, PDF Editor) and Guest shared libraries `usesLibraryFiles` (Kugou observed; 20 declarers). Evidence: `build/reports/m15/`.

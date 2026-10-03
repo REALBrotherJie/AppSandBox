@@ -24,7 +24,7 @@ class GuestRuntimeClassLoader(private val host: Context) {
         if (current != null && this.packageName == packageName) return current
         val optimized = File(dataRoot, "dex").apply { mkdirs() }
         val dexPath = (listOf(sourceDir) + splitSourceDirs).joinToString(File.pathSeparator)
-        val materializedNative = materializeNativeLibraries(listOf(sourceDir) + splitSourceDirs, packageName, dataRoot, primaryCpuAbi)
+        val materializedNative = materializeNativeLibraries(listOf(sourceDir) + splitSourceDirs, packageName, primaryCpuAbi)
         guestNativeLibraryDir = materializedNative ?: nativeLibraryDir
         return GuestDomainClassLoader(dexPath, optimized.path, guestNativeLibraryDir, host.classLoader).also {
             loader = it
@@ -33,31 +33,13 @@ class GuestRuntimeClassLoader(private val host: Context) {
         }
     }
 
-    private fun materializeNativeLibraries(apkPaths: List<String>, packageName: String, dataRoot: String, primaryCpuAbi: String?): String? {
-        val abiCandidates = listOfNotNull(primaryCpuAbi) + Build.SUPPORTED_ABIS.toList()
-        val abi = abiCandidates.distinct().firstOrNull { candidate ->
-            apkPaths.any { apk -> runCatching { ZipFile(apk).use { zip -> zip.entries().asSequence().any { it.name.startsWith("lib/$candidate/") && it.name.endsWith(".so") } } }.getOrDefault(false) }
-        } ?: return null
+    private fun materializeNativeLibraries(apkPaths: List<String>, packageName: String, primaryCpuAbi: String?): String? {
+        val abiCandidates = (listOfNotNull(primaryCpuAbi) + Build.SUPPORTED_ABIS.toList()).distinct()
         val stamp = apkPaths.joinToString("|") { path -> "${File(path).length()}-${File(path).lastModified()}" }.hashCode().toUInt().toString(16)
-        val root = File(host.filesDir, "virtual/native/$packageName/$stamp/$abi").apply { mkdirs() }
-        val outputDirs = mutableListOf<String>()
-        var copied = 0
-        apkPaths.forEachIndexed { index, apk ->
-            val output = File(root, if (index == 0) "base" else "split$index").apply { mkdirs() }
-            ZipFile(apk).use { zip ->
-                zip.entries().asSequence().filter { it.name.startsWith("lib/$abi/") && it.name.endsWith(".so") }.forEach { entry ->
-                    val target = File(output, entry.name.substringAfterLast('/'))
-                    if (!target.exists() || target.length() != entry.size) {
-                        zip.getInputStream(entry).use { input -> target.outputStream().use { input.copyTo(it) } }
-                        target.setReadable(true, false); target.setExecutable(true, false)
-                    }
-                    copied++
-                }
-            }
-            if (output.listFiles()?.isNotEmpty() == true) outputDirs += output.path
-        }
-        Log.i("AppSandbox.M9", "GUEST_NATIVE_LIBS package=$packageName abi=$abi apks=$apkPaths roots=$outputDirs copied=$copied")
-        return outputDirs.joinToString(File.pathSeparator).takeIf { copied > 0 }
+        val result = materializeGuestNativeLibraries(apkPaths, abiCandidates, File(host.filesDir, "virtual/native/$packageName/$stamp")) ?: return null
+        result.conflicts.forEach { Log.w("AppSandbox.M9", "GUEST_NATIVE_LIB_CONFLICT package=$packageName $it kept=base-order") }
+        Log.i("AppSandbox.M9", "GUEST_NATIVE_LIBS package=$packageName abi=${result.abi} apks=$apkPaths dir=${result.directory} libs=${result.libraries.size}")
+        return result.directory.path
     }
 
     fun installInstrumentation(activityThread: Any, classLoader: ClassLoader, identityBridge: SystemIdentityBridge, activityManager: VirtualActivityManager) {
@@ -186,4 +168,41 @@ class GuestRuntimeClassLoader(private val host: Context) {
             delegate?.callActivityOnNewIntent(activity, restored) ?: super.callActivityOnNewIntent(activity, restored)
         }
     }
+}
+
+data class GuestNativeLibraries(val abi: String, val directory: File, val libraries: List<String>, val conflicts: List<String>)
+
+/**
+ * Copies the chosen ABI's libraries from the base APK and every split into one directory.
+ * ApplicationInfo.nativeLibraryDir is a single directory in Android and Guests build paths from it,
+ * so split libraries must not live in separate roots. Earlier APKs (base first) win name conflicts.
+ */
+internal fun materializeGuestNativeLibraries(apkPaths: List<String>, abiCandidates: List<String>, outputRoot: File): GuestNativeLibraries? {
+    fun soEntries(apk: String, abi: String): List<java.util.zip.ZipEntry> = runCatching {
+        ZipFile(apk).use { zip -> zip.entries().asSequence().filter { !it.isDirectory && it.name.startsWith("lib/$abi/") && it.name.endsWith(".so") && it.name.count { c -> c == '/' } == 2 }.toList() }
+    }.getOrDefault(emptyList())
+    val abi = abiCandidates.firstOrNull { candidate -> apkPaths.any { soEntries(it, candidate).isNotEmpty() } } ?: return null
+    val directory = File(outputRoot, abi).apply { mkdirs() }
+    val owners = linkedMapOf<String, String>()
+    val conflicts = mutableListOf<String>()
+    apkPaths.forEach { apk ->
+        ZipFile(apk).use { zip ->
+            soEntries(apk, abi).forEach { entry ->
+                val name = entry.name.substringAfterLast('/')
+                val owner = owners[name]
+                if (owner != null) {
+                    conflicts += "lib=$name kept=$owner skipped=$apk"
+                    return@forEach
+                }
+                owners[name] = apk
+                val target = File(directory, name)
+                if (!target.exists() || target.length() != entry.size) {
+                    zip.getInputStream(entry).use { input -> target.outputStream().use { input.copyTo(it) } }
+                    target.setReadable(true, false)
+                    target.setExecutable(true, false)
+                }
+            }
+        }
+    }
+    return GuestNativeLibraries(abi, directory, owners.keys.toList(), conflicts)
 }
