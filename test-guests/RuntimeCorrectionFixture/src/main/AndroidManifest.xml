@@ -6,5 +6,53 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service android:name="com.example.r15fixture.ProbeServices$S0" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S1" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S2" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S3" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S4" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S5" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S6" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S7" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S8" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S9" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S10" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S11" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S12" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S13" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S14" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S15" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S16" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S17" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S18" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S19" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S20" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S21" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S22" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S23" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S24" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S25" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S26" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S27" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S28" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S29" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S30" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S31" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S32" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S33" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S34" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S35" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S36" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S37" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S38" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$S39" android:exported="false" />
+        <service android:name="com.example.r15fixture.ProbeServices$R0" android:exported="false" android:process=":remote" />
+        <service android:name="com.example.r15fixture.ProbeServices$R1" android:exported="false" android:process=":remote" />
+        <service android:name="com.example.r15fixture.ProbeServices$R2" android:exported="false" android:process=":remote" />
+        <service android:name="com.example.r15fixture.ProbeServices$R3" android:exported="false" android:process=":remote" />
+        <service android:name="com.example.r15fixture.ProbeServices$R4" android:exported="false" android:process=":remote" />
+        <service android:name="com.example.r15fixture.ProbeServices$R5" android:exported="false" android:process=":remote" />
+        <service android:name="com.example.r15fixture.ProbeServices$R6" android:exported="false" android:process=":remote" />
+        <service android:name="com.example.r15fixture.ProbeServices$R7" android:exported="false" android:process=":remote" />
     </application>
 </manifest>

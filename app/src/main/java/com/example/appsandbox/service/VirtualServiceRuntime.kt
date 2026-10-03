@@ -38,7 +38,10 @@ object VirtualServiceRuntime {
     private const val EXTRA_ORIGINAL = "com.example.appsandbox.VSERVICE_ORIGINAL"
     private val byStub = ConcurrentHashMap<ComponentName, VirtualServiceRecord>()
     private val byToken = ConcurrentHashMap<IBinder, VirtualServiceRecord>()
-    private val allocations = ConcurrentHashMap<VirtualServiceKey, Int>()
+    // Index 0 (P<slot>Service) is the Host's own slot keep-alive Service (GuestRuntimeService starts it), so
+    // Guest Services use indexes 1..PER_SLOT-1; binding a Guest to it would reach the running stub instead.
+    private const val FIRST_GUEST_INDEX = 1
+    private val allocations = StubServiceAllocator<VirtualServiceKey>(StubServices.PER_SLOT - FIRST_GUEST_INDEX)
     private val connectionFacades = java.util.Collections.synchronizedMap(java.util.IdentityHashMap<Any, Any>())
 
     /**
@@ -47,15 +50,43 @@ object VirtualServiceRuntime {
      * whichever Guest Service bound the shared stub first.
      */
     fun prepareLocal(context: Context, key: VirtualServiceKey, virtualUid: Int, guestInfo: ServiceInfo, slot: Int): ComponentName {
-        val index = allocations.computeIfAbsent(key) {
-            val used = allocations.filterKeys { existing -> existing.packageName == key.packageName && existing.instanceId == key.instanceId }.values.toSet()
-            (0..3).firstOrNull { it !in used } ?: error("no StubService available for ${key.instanceId}")
-        }
+        // A stub process hosts one instance, so the slot's whole pool belongs to this instance's Services.
+        val index = allocations.allocate(key) + FIRST_GUEST_INDEX
         val stub = requireNotNull(StubServices.intent(context, slot, index).component)
-        byStub.computeIfAbsent(stub) { VirtualServiceRecord(key, virtualUid, guestInfo, stub) }
+        // A stub freed by a destroyed Guest Service is taken over by the next one.
+        byStub.compute(stub) { _, existing -> existing?.takeIf { it.key == key } ?: VirtualServiceRecord(key, virtualUid, guestInfo, stub) }
         Log.i("AppSandbox.M7", "VSERVICE package=${key.packageName} instance=${key.instanceId} virtualUid=$virtualUid " +
-            "guestComponent=${key.component.flattenToShortString()} stubComponent=${stub.flattenToShortString()} event=RESOLVE")
+            "guestComponent=${key.component.flattenToShortString()} stubComponent=${stub.flattenToShortString()} " +
+            "inUse=${allocations.liveCount()}/${StubServices.PER_SLOT - FIRST_GUEST_INDEX} event=RESOLVE")
         return stub
+    }
+
+    /**
+     * stopService for a Guest Service of this process that holds no stub is not running: answer like
+     * AMS (0) instead of allocating a stub that no destroy would ever free.
+     */
+    fun isLocalServiceStopped(identity: RuntimeIdentity, vpm: VirtualPackageManagerService, original: Intent): Boolean {
+        val component = original.component?.takeIf { it.packageName == identity.guestPackageName } ?: return false
+        val info = vpm.getServiceInfo(component) ?: return false
+        val currentProcess = com.example.appsandbox.runtime.CurrentGuestProcess.logicalProcessName ?: identity.guestPackageName
+        if (VirtualProcessKey.canonicalProcessName(identity.guestPackageName, info.processName) != currentProcess) return false
+        return !allocations.isLive(VirtualServiceKey(identity.guestPackageName, identity.instanceId, component))
+    }
+
+    /** The framework destroyed the Service behind [data]'s token: its stub is free again. */
+    private fun release(data: Any): Boolean {
+        // ActivityThread.H.STOP_SERVICE carries the Service token itself.
+        val token = data as? IBinder ?: field(data.javaClass, "token")?.get(data) as? IBinder
+        val record = token?.let(byToken::remove)
+        if (record != null) {
+            val index = record.stubComponent.className.substringAfterLast("Service").toIntOrNull() ?: 0
+            val freed = allocations.destroyed(record.key, index - FIRST_GUEST_INDEX)
+            Log.i("AppSandbox.M7", "VSERVICE_TX api=${android.os.Build.VERSION.SDK_INT} transaction=DESTROY " +
+                "physicalComponent=${record.stubComponent.flattenToShortString()} guestComponent=${record.key.component.flattenToShortString()} " +
+                "released=$freed inUse=${allocations.liveCount()}/${StubServices.PER_SLOT - FIRST_GUEST_INDEX}")
+        } else logToken("STOP", data)
+        // The framework still runs the Guest Service's onDestroy for this token.
+        return false
     }
 
     fun routedProbeIntent(stub: ComponentName, original: Intent): Intent = Intent(original).apply {
@@ -90,7 +121,7 @@ object VirtualServiceRuntime {
         return when (message.what) {
             114 -> restoreCreate(data, hostContext)
             115, 121, 122 -> restoreIntent(message.what, data)
-            116 -> logToken("STOP", data)
+            116 -> release(data)
             else -> false
         }
     }

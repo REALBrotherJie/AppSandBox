@@ -167,32 +167,286 @@
         <activity android:name=".stub.P8DialogActivity" android:taskAffinity="${applicationId}.vtask.p8" android:exported="false" android:process=":p8" android:theme="@style/Theme.AppSandbox.Dialog" />
         <service android:name=".stub.P8Service" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
         <provider android:name=".stub.P8Provider" android:authorities="${applicationId}.stub.p8" android:exported="false" android:process=":p8" />
+        <!-- stub-service-pool:begin -->
         <service android:name=".stub.P0Service1" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P0Service2" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P0Service3" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service4" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service5" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service6" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service7" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service8" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service9" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service10" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service11" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service12" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service13" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service14" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service15" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service16" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service17" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service18" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service19" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service20" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service21" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service22" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service23" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service24" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service25" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service26" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service27" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service28" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service29" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service30" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P0Service31" android:exported="false" android:process=":p0" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P1Service1" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P1Service2" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P1Service3" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service4" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service5" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service6" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service7" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service8" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service9" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service10" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service11" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service12" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service13" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service14" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service15" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service16" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service17" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service18" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service19" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service20" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service21" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service22" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service23" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service24" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service25" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service26" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service27" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service28" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service29" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service30" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P1Service31" android:exported="false" android:process=":p1" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P2Service1" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P2Service2" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P2Service3" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service4" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service5" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service6" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service7" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service8" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service9" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service10" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service11" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service12" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service13" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service14" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service15" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service16" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service17" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service18" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service19" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service20" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service21" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service22" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service23" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service24" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service25" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service26" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service27" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service28" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service29" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service30" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P2Service31" android:exported="false" android:process=":p2" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P3Service1" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P3Service2" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P3Service3" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service4" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service5" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service6" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service7" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service8" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service9" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service10" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service11" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service12" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service13" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service14" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service15" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service16" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service17" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service18" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service19" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service20" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service21" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service22" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service23" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service24" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service25" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service26" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service27" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service28" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service29" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service30" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P3Service31" android:exported="false" android:process=":p3" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P4Service1" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P4Service2" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P4Service3" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service4" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service5" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service6" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service7" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service8" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service9" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service10" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service11" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service12" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service13" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service14" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service15" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service16" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service17" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service18" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service19" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service20" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service21" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service22" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service23" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service24" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service25" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service26" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service27" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service28" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service29" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service30" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P4Service31" android:exported="false" android:process=":p4" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P5Service1" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P5Service2" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P5Service3" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service4" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service5" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service6" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service7" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service8" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service9" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service10" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service11" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service12" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service13" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service14" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service15" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service16" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service17" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service18" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service19" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service20" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service21" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service22" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service23" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service24" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service25" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service26" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service27" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service28" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service29" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service30" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P5Service31" android:exported="false" android:process=":p5" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P6Service1" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P6Service2" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P6Service3" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service4" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service5" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service6" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service7" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service8" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service9" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service10" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service11" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service12" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service13" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service14" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service15" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service16" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service17" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service18" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service19" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service20" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service21" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service22" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service23" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service24" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service25" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service26" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service27" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service28" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service29" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service30" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P6Service31" android:exported="false" android:process=":p6" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P7Service1" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P7Service2" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P7Service3" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service4" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service5" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service6" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service7" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service8" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service9" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service10" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service11" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service12" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service13" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service14" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service15" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service16" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service17" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service18" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service19" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service20" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service21" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service22" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service23" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service24" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service25" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service26" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service27" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service28" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service29" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service30" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P7Service31" android:exported="false" android:process=":p7" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P8Service1" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P8Service2" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
         <service android:name=".stub.P8Service3" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service4" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service5" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service6" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service7" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service8" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service9" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service10" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service11" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service12" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service13" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service14" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service15" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service16" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service17" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service18" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service19" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service20" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service21" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service22" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service23" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service24" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service25" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service26" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service27" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service28" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service29" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service30" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <service android:name=".stub.P8Service31" android:exported="false" android:process=":p8" android:foregroundServiceType="specialUse" />
+        <!-- stub-service-pool:end -->
     </application>
 </manifest>

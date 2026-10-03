@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.pm.ApplicationInfo;
 import android.net.ConnectivityManager;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.util.Log;
 import android.widget.TextView;
 
@@ -27,6 +28,71 @@ public final class ProbeActivity extends Activity {
         probeNative();
         probeExternalStorageAndProcess();
         new Thread(this::probeNetwork, "r15-network").start();
+        new Thread(this::probeServices, "r17-services").start();
+    }
+
+    /**
+     * Binds more Services than one stub slot holds, in two waves: every binder must be its own Service's,
+     * and the second wave only fits if Services destroyed after the first wave give their stubs back.
+     */
+    private void probeServices() {
+        java.util.List<Class<?>> first = new java.util.ArrayList<>();
+        for (int i = 0; i < ProbeServices.MAIN / 2; i++) first.add(serviceClass("S" + i));
+        for (int i = 0; i < ProbeServices.REMOTE; i++) first.add(serviceClass("R" + i));
+        java.util.List<Class<?>> second = new java.util.ArrayList<>();
+        for (int i = ProbeServices.MAIN / 2; i < ProbeServices.MAIN; i++) second.add(serviceClass("S" + i));
+        java.util.List<android.content.ServiceConnection> connections = bindWave(1, first);
+        for (android.content.ServiceConnection connection : connections) unbindService(connection);
+        try { Thread.sleep(3000); } catch (InterruptedException ignored) { }
+        java.util.List<android.content.ServiceConnection> wave2 = bindWave(2, second);
+        for (android.content.ServiceConnection connection : wave2) unbindService(connection);
+    }
+
+    private static Class<?> serviceClass(String name) {
+        try {
+            return Class.forName(ProbeServices.class.getName() + "$" + name);
+        } catch (ClassNotFoundException error) {
+            throw new IllegalStateException(error);
+        }
+    }
+
+    private java.util.List<android.content.ServiceConnection> bindWave(int wave, java.util.List<Class<?>> services) {
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(services.size());
+        java.util.Map<String, String> answers = new java.util.concurrent.ConcurrentHashMap<>();
+        java.util.List<android.content.ServiceConnection> connections = new java.util.ArrayList<>();
+        int refused = 0;
+        for (Class<?> service : services) {
+            android.content.ServiceConnection connection = new android.content.ServiceConnection() {
+                @Override public void onServiceConnected(android.content.ComponentName name, IBinder binder) {
+                    String descriptor;
+                    try {
+                        descriptor = binder.getInterfaceDescriptor();
+                    } catch (Throwable error) {
+                        descriptor = "ERROR " + error;
+                    }
+                    answers.put(service.getName(), String.valueOf(descriptor));
+                    latch.countDown();
+                }
+                @Override public void onServiceDisconnected(android.content.ComponentName name) { }
+            };
+            if (bindService(new android.content.Intent(this, service), connection, BIND_AUTO_CREATE)) {
+                connections.add(connection);
+            } else {
+                refused++;
+                latch.countDown();
+            }
+        }
+        try { latch.await(30, java.util.concurrent.TimeUnit.SECONDS); } catch (InterruptedException ignored) { }
+        int own = 0;
+        StringBuilder wrong = new StringBuilder();
+        for (Class<?> service : services) {
+            String answer = answers.get(service.getName());
+            if (service.getName().equals(answer)) own++;
+            else wrong.append(' ').append(service.getSimpleName()).append("->").append(answer);
+        }
+        Log.i(TAG, "R17_SERVICES wave=" + wave + " own=" + own + "/" + services.size() + " refused=" + refused
+                + " wrong=[" + wrong.toString().trim() + "]");
+        return connections;
     }
 
     /** App-specific external dirs (framework and self-assembled paths) and the /proc process name. */

@@ -219,6 +219,10 @@ class ActivityManagerAdapter(
             registry.register(name) { call, physical ->
                 val intentIndex = call.args.indexOfFirst { it is android.content.Intent }
                 val originalIntent = call.args.getOrNull(intentIndex) as? android.content.Intent
+                if (name == "stopService" && originalIntent != null &&
+                    com.example.appsandbox.service.VirtualServiceRuntime.isLocalServiceStopped(identity, packageService, originalIntent)) {
+                    return@register BinderCallResult(0, BinderRoute.VIRTUAL, IdentityDecision.VIRTUALIZE)
+                }
                 val routed = originalIntent?.let { com.example.appsandbox.service.VirtualServiceRuntime.route(context, identity, packageService, it) }
                 if (routed == null) return@register BinderCallResult(physical(call.args), BinderRoute.PHYSICAL, IdentityDecision.PASSTHROUGH)
                 val args = call.args.copyOf().apply { this[intentIndex] = routed }
