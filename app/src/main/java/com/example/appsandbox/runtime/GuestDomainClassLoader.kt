@@ -15,7 +15,8 @@ class GuestDomainClassLoader(
         findLoadedClass(name)?.let { return it }
         val domain = domainOf(name)
         val loaded = when (domain) {
-            ClassLoadingDomain.SYSTEM, ClassLoadingDomain.RUNTIME_BRIDGE -> hostLoader.loadClass(name)
+            ClassLoadingDomain.SYSTEM -> loadSystemClass(name)
+            ClassLoadingDomain.RUNTIME_BRIDGE -> hostLoader.loadClass(name)
             ClassLoadingDomain.GUEST -> runCatching { findClass(name) }.getOrElse { hostLoader.loadClass(name) }
         }
         if (resolve) resolveClass(loaded)
@@ -26,6 +27,14 @@ class GuestDomainClassLoader(
                 "decision=${if (domain == ClassLoadingDomain.GUEST && loaded.classLoader === this) "guest-first" else "parent"}")
         }
         loaded
+    }
+
+    private fun loadSystemClass(name: String): Class<*> {
+        // java.* remains platform-only; other compatibility namespaces may be
+        // packaged by a guest when the host/framework loader has no definition.
+        if (name.startsWith("java.")) return hostLoader.loadClass(name)
+        return runCatching { hostLoader.loadClass(name) }
+            .getOrElse { findClass(name) }
     }
 
     companion object {

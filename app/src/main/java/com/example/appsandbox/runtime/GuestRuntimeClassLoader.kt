@@ -19,12 +19,12 @@ class GuestRuntimeClassLoader(private val host: Context) {
     @Volatile var guestNativeLibraryDir: String? = null
         private set
 
-    fun prepare(sourceDir: String, splitSourceDirs: List<String>, nativeLibraryDir: String?, packageName: String, dataRoot: String): ClassLoader {
+    fun prepare(sourceDir: String, splitSourceDirs: List<String>, nativeLibraryDir: String?, packageName: String, dataRoot: String, primaryCpuAbi: String? = null): ClassLoader {
         val current = loader
         if (current != null && this.packageName == packageName) return current
         val optimized = File(dataRoot, "dex").apply { mkdirs() }
         val dexPath = (listOf(sourceDir) + splitSourceDirs).joinToString(File.pathSeparator)
-        val materializedNative = materializeNativeLibraries(sourceDir, packageName, dataRoot)
+        val materializedNative = materializeNativeLibraries(listOf(sourceDir) + splitSourceDirs, packageName, dataRoot, primaryCpuAbi)
         guestNativeLibraryDir = materializedNative ?: nativeLibraryDir
         return GuestDomainClassLoader(dexPath, optimized.path, guestNativeLibraryDir, host.classLoader).also {
             loader = it
@@ -33,24 +33,31 @@ class GuestRuntimeClassLoader(private val host: Context) {
         }
     }
 
-    private fun materializeNativeLibraries(sourceDir: String, packageName: String, dataRoot: String): String? {
-        val abi = Build.SUPPORTED_ABIS.firstOrNull { candidate ->
-            runCatching { ZipFile(sourceDir).use { zip -> zip.getEntry("lib/$candidate/") != null || zip.entries().asSequence().any { it.name.startsWith("lib/$candidate/") && it.name.endsWith(".so") } } }.getOrDefault(false)
+    private fun materializeNativeLibraries(apkPaths: List<String>, packageName: String, dataRoot: String, primaryCpuAbi: String?): String? {
+        val abiCandidates = listOfNotNull(primaryCpuAbi) + Build.SUPPORTED_ABIS.toList()
+        val abi = abiCandidates.distinct().firstOrNull { candidate ->
+            apkPaths.any { apk -> runCatching { ZipFile(apk).use { zip -> zip.entries().asSequence().any { it.name.startsWith("lib/$candidate/") && it.name.endsWith(".so") } } }.getOrDefault(false) }
         } ?: return null
-        val apkStamp = File(sourceDir).length().toString() + "-" + File(sourceDir).lastModified()
-        val out = File(host.filesDir, "virtual/native/$packageName/$apkStamp/$abi").apply { mkdirs() }
-        ZipFile(sourceDir).use { zip ->
-            zip.entries().asSequence().filter { it.name.startsWith("lib/$abi/") && it.name.endsWith(".so") }.forEach { entry ->
-                val target = File(out, entry.name.substringAfterLast('/'))
-                if (!target.exists() || target.length() != entry.size) {
-                    zip.getInputStream(entry).use { input -> target.outputStream().use { input.copyTo(it) } }
-                    target.setReadable(true, false)
-                    target.setExecutable(true, false)
+        val stamp = apkPaths.joinToString("|") { path -> "${File(path).length()}-${File(path).lastModified()}" }.hashCode().toUInt().toString(16)
+        val root = File(host.filesDir, "virtual/native/$packageName/$stamp/$abi").apply { mkdirs() }
+        val outputDirs = mutableListOf<String>()
+        var copied = 0
+        apkPaths.forEachIndexed { index, apk ->
+            val output = File(root, if (index == 0) "base" else "split$index").apply { mkdirs() }
+            ZipFile(apk).use { zip ->
+                zip.entries().asSequence().filter { it.name.startsWith("lib/$abi/") && it.name.endsWith(".so") }.forEach { entry ->
+                    val target = File(output, entry.name.substringAfterLast('/'))
+                    if (!target.exists() || target.length() != entry.size) {
+                        zip.getInputStream(entry).use { input -> target.outputStream().use { input.copyTo(it) } }
+                        target.setReadable(true, false); target.setExecutable(true, false)
+                    }
+                    copied++
                 }
             }
+            if (output.listFiles()?.isNotEmpty() == true) outputDirs += output.path
         }
-        Log.i("AppSandbox.M9", "GUEST_NATIVE_LIBS package=$packageName abi=$abi source=$sourceDir root=${out.path}")
-        return out.path
+        Log.i("AppSandbox.M9", "GUEST_NATIVE_LIBS package=$packageName abi=$abi apks=$apkPaths roots=$outputDirs copied=$copied")
+        return outputDirs.joinToString(File.pathSeparator).takeIf { copied > 0 }
     }
 
     fun installInstrumentation(activityThread: Any, classLoader: ClassLoader, identityBridge: SystemIdentityBridge, activityManager: VirtualActivityManager) {
