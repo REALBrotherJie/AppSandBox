@@ -99,8 +99,11 @@ class ActivityManagerAdapter(
             // otherwise capture every lookup through the callingPackage argument.
             val authority = (context.args.lastOrNull { it is String } as? String)?.takeIf(packageService::ownsProviderAuthority)
             val providerInfo = authority?.let(packageService::getProviderInfo)
+            // A provider is local only to the logical process that declares it; a Guest sub-process asking
+            // for a main-process provider (or the reverse) must reach the process that hosts it.
+            val currentProcess = com.example.appsandbox.runtime.CurrentGuestProcess.logicalProcessName ?: identity.guestPackageName
             val remoteInfo = providerInfo?.takeIf {
-                VirtualProcessKey.canonicalProcessName(identity.guestPackageName, it.processName) != identity.guestPackageName
+                VirtualProcessKey.canonicalProcessName(identity.guestPackageName, it.processName) != currentProcess
             }
             if (remoteInfo != null) {
                 val route = VirtualProcessCoordinatorClient.ensureProvider(this.context, identity.instanceId, remoteInfo)
@@ -187,8 +190,9 @@ class ActivityManagerAdapter(
                     .firstOrNull { call.method.parameterTypes[it] == Boolean::class.javaPrimitiveType }
                     ?.let { call.args[it] as? Boolean } == true
                 val logicalProcesses = infos.map { VirtualProcessKey.canonicalProcessName(identity.guestPackageName, it.processName) }.distinct()
+                val currentProcess = com.example.appsandbox.runtime.CurrentGuestProcess.logicalProcessName ?: identity.guestPackageName
                 val targetSlots = infos.map { info ->
-                    if (VirtualProcessKey.canonicalProcessName(identity.guestPackageName, info.processName) != identity.guestPackageName)
+                    if (VirtualProcessKey.canonicalProcessName(identity.guestPackageName, info.processName) != currentProcess)
                         VirtualProcessCoordinatorClient.ensureReceiver(context, identity.instanceId, info).slot
                     else identity.processSlot
                 }
@@ -321,6 +325,10 @@ class AppOpsAdapter(private val context: Context, private val identity: RuntimeI
             }
         }
         field.set(manager, ProxySupport.create(original, iface, serviceName, identity, registry))
+        // Every Guest ContextImpl creates its own AppOpsManager from ServiceManager; the patched field
+        // above only covers the Host context's instance.
+        val facade = PhysicalPackageServiceAdapter(identity, serviceName, interfaceName).install()
+        check(facade.installed) { "appops facade: ${facade.failureReason}" }
         Log.i("AppSandbox.M6", "VBINDER_INSTALL service=$serviceName interface=$interfaceName instance=${identity.instanceId} result=PASS")
         AdapterInstallResult(serviceName, true)
     }.getOrElse { AdapterInstallResult(serviceName, false, failureReason = it.toString()) }

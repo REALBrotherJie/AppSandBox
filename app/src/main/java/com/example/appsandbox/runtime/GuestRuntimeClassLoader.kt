@@ -130,12 +130,19 @@ class GuestRuntimeClassLoader(private val host: Context) {
         Log.i("AppSandbox.M2", "LoadedApk application-bound package=${application.packageName} application=${System.identityHashCode(application)}")
     }
 
+    companion object {
+        fun hasFrameworkBase(application: android.app.Application): Boolean =
+            application.baseContext?.javaClass?.name == "android.app.ContextImpl"
+    }
+
     fun unbindApplication(activityThread: Any) {
         val apk = loadedApk ?: return
         val field = generateSequence(apk.javaClass) { it.superclass }
             .mapNotNull { runCatching { it.getDeclaredField("mApplication") }.getOrNull() }
             .first().apply { isAccessible = true }
         val existing = field.get(apk) as? android.app.Application ?: return
+        // handleReceiver() can use an Application on a framework ContextImpl as is.
+        if (hasFrameworkBase(existing)) return
         field.set(apk, null)
         val allApplications = generateSequence(activityThread.javaClass) { it.superclass }
             .mapNotNull { runCatching { it.getDeclaredField("mAllApplications") }.getOrNull() }

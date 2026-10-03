@@ -16,6 +16,9 @@
 #include <atomic>
 #include <mutex>
 #include <string>
+#include <thread>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -31,6 +34,8 @@ struct Binding {
 
 std::mutex g_lock;
 Binding g_binding;
+// Additional logical -> physical roots of this process's instance (app-specific external storage).
+std::vector<std::pair<std::string, std::string>> g_extra_roots;
 std::atomic<bool> g_ready{false};
 std::atomic<uint64_t> g_guest_rewrites{0};
 std::atomic<uint32_t> g_passthrough_evidence{0};
@@ -70,9 +75,16 @@ bool is_logical_namespace(const char* raw) {
     if (raw == nullptr) return false;
     const std::string path(raw);
     std::string suffix;
-    return match_namespace(path, "/data/data/" + g_binding.package_name, &suffix) ||
+    if (match_namespace(path, "/data/data/" + g_binding.package_name, &suffix) ||
         match_namespace(path, "/data/user/0/" + g_binding.package_name, &suffix) ||
-        match_namespace(path, "/data/user_de/0/" + g_binding.package_name, &suffix);
+        match_namespace(path, "/data/user_de/0/" + g_binding.package_name, &suffix)) {
+        return true;
+    }
+    std::lock_guard<std::mutex> guard(g_lock);
+    for (const auto& entry : g_extra_roots) {
+        if (match_namespace(path, entry.first, &suffix)) return true;
+    }
+    return false;
 }
 
 void log_passthrough_once(uint32_t bit, const char* category, const std::string& path) {
@@ -101,6 +113,14 @@ std::string translate(const char* raw) {
     } else if (match_namespace(path, user_de, &suffix)) {
         root = &g_binding.device_root;
     } else {
+        for (const auto& entry : g_extra_roots) {
+            if (match_namespace(path, entry.first, &suffix)) {
+                root = &entry.second;
+                break;
+            }
+        }
+    }
+    if (root == nullptr) {
         if (path.find("/app_webview_") != std::string::npos) {
             log_passthrough_once(kWebViewPath, "WEBVIEW_PHYSICAL", path);
         } else if ((!g_binding.credential_root.empty() &&
@@ -150,12 +170,50 @@ std::string reverse_map(const std::string& physical) {
     std::string mapped = map_root(g_binding.credential_root, "/data/user/0/" + g_binding.package_name);
     if (!mapped.empty()) return mapped;
     mapped = map_root(g_binding.device_root, "/data/user_de/0/" + g_binding.package_name);
-    return mapped.empty() ? physical : mapped;
+    if (!mapped.empty()) return mapped;
+    for (const auto& entry : g_extra_roots) {
+        mapped = map_root(entry.second, entry.first);
+        if (!mapped.empty()) return mapped;
+    }
+    return physical;
 }
 
 bool denied() { return g_translation_denied; }
 
+// The Guest's logical process name, served for this process's /proc cmdline like the kernel does
+// (NUL-terminated). Process-name checks in Guest SDKs read it to decide main vs. sub-process.
+std::string g_logical_cmdline;
+
+bool is_own_cmdline(const char* path) {
+    if (path == nullptr || strncmp(path, "/proc/", 6) != 0) return false;
+    if (strcmp(path, "/proc/self/cmdline") == 0) return true;
+    char own[48];
+    snprintf(own, sizeof(own), "/proc/%d/cmdline", getpid());
+    return strcmp(path, own) == 0;
+}
+
+int open_logical_cmdline(const char* path, int flags) {
+    if ((flags & O_ACCMODE) != O_RDONLY || !is_own_cmdline(path)) return -2;
+    std::string content;
+    {
+        std::lock_guard<std::mutex> guard(g_lock);
+        if (g_logical_cmdline.empty()) return -2;
+        content = g_logical_cmdline;
+    }
+    const int fd = static_cast<int>(syscall(__NR_memfd_create, "cmdline", (flags & O_CLOEXEC) != 0 ? 1u : 0u));
+    if (fd < 0) return -2;
+    content.push_back('\0');
+    const ssize_t written = write(fd, content.data(), content.size());
+    if (written != static_cast<ssize_t>(content.size()) || lseek(fd, 0, SEEK_SET) != 0) {
+        close(fd);
+        return -2;
+    }
+    return fd;
+}
+
 extern "C" __attribute__((visibility("default"))) int appsandbox_open(const char* path, int flags, ...) {
+    const int cmdline = open_logical_cmdline(path, flags);
+    if (cmdline != -2) return cmdline;
     mode_t mode = 0;
     if (needs_mode(flags)) {
         va_list args;
@@ -169,6 +227,8 @@ extern "C" __attribute__((visibility("default"))) int appsandbox_open(const char
 }
 
 extern "C" __attribute__((visibility("default"))) int appsandbox_openat(int dirfd, const char* path, int flags, ...) {
+    const int cmdline = open_logical_cmdline(path, flags);
+    if (cmdline != -2) return cmdline;
     mode_t mode = 0;
     if (needs_mode(flags)) {
         va_list args;
@@ -182,12 +242,16 @@ extern "C" __attribute__((visibility("default"))) int appsandbox_openat(int dirf
 }
 
 extern "C" __attribute__((visibility("default"))) int appsandbox_open_fortify(const char* path, int flags) {
+    const int cmdline = open_logical_cmdline(path, flags);
+    if (cmdline != -2) return cmdline;
     const std::string physical = translate(path);
     if (denied()) return -1;
     return static_cast<int>(syscall(SYS_openat, AT_FDCWD, physical.c_str(), flags, 0));
 }
 
 extern "C" __attribute__((visibility("default"))) int appsandbox_openat_fortify(int dirfd, const char* path, int flags) {
+    const int cmdline = open_logical_cmdline(path, flags);
+    if (cmdline != -2) return cmdline;
     const std::string physical = translate(path);
     if (denied()) return -1;
     return static_cast<int>(syscall(SYS_openat, dirfd, physical.c_str(), flags, 0));
@@ -390,6 +454,72 @@ Java_com_example_appsandbox_runtime_NativeRuntimeBridge_nativeBindAndInstall(
     return JNI_TRUE;
 }
 
+// ART treats a JNI call without any managed caller frame as trusted, so a freshly attached native
+// thread may install the hidden-API exemption list that reflection from app code may not.
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_example_appsandbox_hidden_HiddenApiExemptions_nativeSetExemptions(
+    JNIEnv* env, jclass, jobjectArray prefixes) {
+    JavaVM* vm = nullptr;
+    if (env->GetJavaVM(&vm) != JNI_OK || vm == nullptr) return JNI_FALSE;
+    std::vector<std::string> values;
+    const jsize count = prefixes == nullptr ? 0 : env->GetArrayLength(prefixes);
+    for (jsize i = 0; i < count; ++i) {
+        auto item = static_cast<jstring>(env->GetObjectArrayElement(prefixes, i));
+        values.push_back(utf(env, item));
+        env->DeleteLocalRef(item);
+    }
+    bool ok = false;
+    std::thread worker([&]() {
+        JNIEnv* thread_env = nullptr;
+        if (vm->AttachCurrentThread(&thread_env, nullptr) != JNI_OK || thread_env == nullptr) return;
+        jclass runtime_class = thread_env->FindClass("dalvik/system/VMRuntime");
+        jclass string_class = thread_env->FindClass("java/lang/String");
+        jmethodID get_runtime = runtime_class == nullptr ? nullptr :
+            thread_env->GetStaticMethodID(runtime_class, "getRuntime", "()Ldalvik/system/VMRuntime;");
+        jmethodID set_exemptions = runtime_class == nullptr ? nullptr :
+            thread_env->GetMethodID(runtime_class, "setHiddenApiExemptions", "([Ljava/lang/String;)V");
+        if (get_runtime != nullptr && set_exemptions != nullptr && string_class != nullptr) {
+            jobject runtime = thread_env->CallStaticObjectMethod(runtime_class, get_runtime);
+            jobjectArray array = thread_env->NewObjectArray(static_cast<jsize>(values.size()), string_class, nullptr);
+            for (size_t i = 0; array != nullptr && i < values.size(); ++i) {
+                jstring value = thread_env->NewStringUTF(values[i].c_str());
+                thread_env->SetObjectArrayElement(array, static_cast<jsize>(i), value);
+                thread_env->DeleteLocalRef(value);
+            }
+            if (runtime != nullptr && array != nullptr && !thread_env->ExceptionCheck()) {
+                thread_env->CallVoidMethod(runtime, set_exemptions, array);
+                ok = !thread_env->ExceptionCheck();
+            }
+        }
+        if (thread_env->ExceptionCheck()) thread_env->ExceptionClear();
+        vm->DetachCurrentThread();
+    });
+    worker.join();
+    __android_log_print(ok ? ANDROID_LOG_INFO : ANDROID_LOG_ERROR, kTag, "HIDDEN_API_EXEMPTIONS count=%zu ok=%d",
+        values.size(), ok);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_example_appsandbox_runtime_NativeRuntimeBridge_nativeAddPathMapping(
+    JNIEnv* env, jclass, jstring logical_root, jstring physical_root) {
+    const std::string logical = utf(env, logical_root);
+    const std::string physical = utf(env, physical_root);
+    if (logical.size() < 2 || logical[0] != '/' || physical.size() < 2 || physical[0] != '/' ||
+        logical.find("/..") != std::string::npos || physical.find("/..") != std::string::npos) {
+        return JNI_FALSE;
+    }
+    std::lock_guard<std::mutex> guard(g_lock);
+    if (!g_ready.load(std::memory_order_acquire)) return JNI_FALSE;
+    for (const auto& entry : g_extra_roots) {
+        if (entry.first == logical) return entry.second == physical ? JNI_TRUE : JNI_FALSE;
+    }
+    g_extra_roots.emplace_back(logical, physical);
+    __android_log_print(ANDROID_LOG_INFO, kTag, "PATH_MAPPING_ADD instance=%s logical=%s physical=%s",
+        g_binding.instance_id.c_str(), logical.c_str(), physical.c_str());
+    return JNI_TRUE;
+}
+
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_example_appsandbox_runtime_NativeRuntimeBridge_nativeIsReady(JNIEnv*, jclass) {
     return g_ready.load(std::memory_order_acquire) ? JNI_TRUE : JNI_FALSE;
@@ -398,4 +528,12 @@ Java_com_example_appsandbox_runtime_NativeRuntimeBridge_nativeIsReady(JNIEnv*, j
 extern "C" JNIEXPORT jlong JNICALL
 Java_com_example_appsandbox_runtime_NativeRuntimeBridge_nativeGuestRewriteCount(JNIEnv*, jclass) {
     return static_cast<jlong>(g_guest_rewrites.load(std::memory_order_relaxed));
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_example_appsandbox_runtime_NativeRuntimeBridge_nativeSetLogicalProcessName(JNIEnv* env, jclass, jstring name) {
+    const std::string value = utf(env, name);
+    std::lock_guard<std::mutex> guard(g_lock);
+    g_logical_cmdline = value;
+    __android_log_print(ANDROID_LOG_INFO, kTag, "LOGICAL_CMDLINE pid=%d name=%s", getpid(), value.c_str());
 }

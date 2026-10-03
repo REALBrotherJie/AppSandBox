@@ -29,6 +29,13 @@ class VirtualBinderManager(
         , NotificationIdentityAdapter(identity)
         , PhysicalPackageServiceAdapter(identity, "media_session", "android.media.session.ISessionManager")
         , PhysicalPackageServiceAdapter(identity, "audio", "android.media.IAudioService")
+        , PhysicalPackageServiceAdapter(identity, "uri_grants", "android.app.IUriGrantsManager", optional = true)
+        , PhysicalPackageServiceAdapter(identity, "mount", "android.os.storage.IStorageManager", optional = true)
+        , PhysicalPackageServiceAdapter(identity, "telephony.registry", "com.android.internal.telephony.ITelephonyRegistry", optional = true)
+        , PhysicalPackageServiceAdapter(identity, "clipboard", "android.content.IClipboard", optional = true)
+        , PhysicalPackageServiceAdapter(identity, "netstats", "android.net.INetworkStatsService", optional = true)
+        , PhysicalPackageServiceAdapter(identity, "appwidget", "com.android.internal.appwidget.IAppWidgetService", optional = true)
+        , PhysicalPackageServiceAdapter(identity, "role", "android.app.role.IRoleManager", optional = true)
         , LocationServiceAdapter(context, identity, requireNotNull(GuestProcessLocationBindings.current()) { "Guest process location binding missing" })
     ))
 

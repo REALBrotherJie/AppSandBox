@@ -25,7 +25,38 @@ public final class ProbeActivity extends Activity {
         setContentView(view);
         probeClassLoading();
         probeNative();
+        probeExternalStorageAndProcess();
         new Thread(this::probeNetwork, "r15-network").start();
+    }
+
+    /** App-specific external dirs (framework and self-assembled paths) and the /proc process name. */
+    private void probeExternalStorageAndProcess() {
+        File files = getExternalFilesDir(null);
+        File cache = getExternalCacheDir();
+        File assembled = new File(android.os.Environment.getExternalStorageDirectory(),
+                "Android/data/" + getPackageName() + "/files/assembled.txt");
+        Log.i(TAG, "R16_EXTERNAL files=" + files + " cache=" + cache
+                + " filesWrite=" + writeMarker(files == null ? null : new File(files, "framework.txt"))
+                + " cacheWrite=" + writeMarker(cache == null ? null : new File(cache, "cache.txt"))
+                + " assembledWrite=" + writeMarker(assembled) + " assembledVisible=" + new File(files, "assembled.txt").exists());
+        String cmdline = "";
+        try (BufferedReader reader = new BufferedReader(new FileReader("/proc/self/cmdline"))) {
+            String line = reader.readLine();
+            cmdline = line == null ? "" : line.replace("\u0000", "");
+        } catch (Throwable error) {
+            cmdline = "ERROR " + error;
+        }
+        Log.i(TAG, "R16_PROCESS cmdline=" + cmdline + " applicationProcess=" + android.app.Application.getProcessName());
+    }
+
+    private static String writeMarker(File file) {
+        if (file == null) return "NULL_DIR";
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(file)) {
+            out.write("r16".getBytes());
+            return "PASS";
+        } catch (Throwable error) {
+            return "FAIL " + error.getMessage();
+        }
     }
 
     private void probeClassLoading() {

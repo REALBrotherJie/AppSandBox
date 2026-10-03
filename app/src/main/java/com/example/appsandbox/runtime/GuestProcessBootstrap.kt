@@ -142,8 +142,11 @@ class GuestProcessBootstrap(private val context: Context) {
         // This is the last Host-controlled point before the Guest ClassLoader can
         // execute a static initializer containing System.loadLibrary().
         NativeRuntimeBridge.bind(identity, storage)
+        com.example.appsandbox.storage.GuestExternalStorage.install(context, envelope.packageName, envelope.instanceId)
         val packageRevision = runCatching { File(info.applicationInfo?.sourceDir.orEmpty()).lastModified() }.getOrDefault(0L)
         val logicalProcessName = VirtualProcessKey.canonicalProcessName(envelope.packageName, info.processName)
+        CurrentGuestProcess.logicalProcessName = logicalProcessName
+        NativeRuntimeBridge.setLogicalProcessName(logicalProcessName)
         val processKey = VirtualProcessKey(packageRevision, envelope.packageName, envelope.instanceId, logicalProcessName)
         VirtualWebViewProcessPolicy.configure(processKey)
         if (GuestProcessLocationBindings.current()?.key != processKey) {
@@ -157,6 +160,12 @@ class GuestProcessBootstrap(private val context: Context) {
             // ContextImpl, so clear the canonical Guest Application before AMS
             // enters ActivityThread.handleReceiver().
             guestLoader.unbindApplication(thread)
+        }
+        if (activityLaunch && entryToken == null) {
+            // Routes from this instance's other logical processes must reach this process, not start a copy.
+            entryToken = GuestComponentAgent.entryMessenger(context, envelope.processSlot).binder
+            runCatching { VirtualProcessCoordinatorClient.registerEntryProcess(context, processKey, envelope.processSlot, requireNotNull(entryToken)) }
+                .onFailure { Log.w(TAG, "entry process registration failed key=$processKey", it) }
         }
         if (activityLaunch) {
             val stub = StubActivities.standardIntent(context, envelope.processSlot)
@@ -224,9 +233,11 @@ class GuestProcessBootstrap(private val context: Context) {
         val preparation = GuestRuntimePreparation(context, identity, loader, resources, app, root, thread, guestInstrumentation,
             applicationBase = { guestLoader.createAppContext(thread) }) {
             // Activity/provider paths need the canonical Guest Application on LoadedApk.
-            // Receiver dispatch is entered by ActivityThread.handleReceiver(), which
-            // requires its LoadedApk application base to remain a framework ContextImpl.
-            if (bindGuestApplication) guestLoader.bindApplication(thread, it)
+            // Receiver dispatch is entered by ActivityThread.handleReceiver(), which casts the
+            // LoadedApk application's base to ContextImpl; an Application attached to a framework
+            // ContextImpl satisfies that, and makeApplication must then return it instead of
+            // creating a second Application (Apps abort on double initialization).
+            if (bindGuestApplication || GuestRuntimeClassLoader.hasFrameworkBase(it)) guestLoader.bindApplication(thread, it)
         }
         val providers = packageInfo.providers?.map { android.content.pm.ProviderInfo(it) }?.toMutableList() ?: mutableListOf()
         if (providers.isEmpty()) {
@@ -269,9 +280,7 @@ class GuestProcessBootstrap(private val context: Context) {
         Log.i("AppSandbox.M10", "LOGICAL_PROCESS_NAME published=$logicalProcessName physical=${physicalProcessName()}")
     }
 
-    private fun physicalProcessName(): String = runCatching {
-        File("/proc/self/cmdline").readText().trim { it <= ' ' || it == '\u0000' }
-    }.getOrDefault(context.packageName)
+    private fun physicalProcessName(): String = NativeRuntimeBridge.physicalProcessName()
 
     /** The installed Guest's resolved uses-library paths (e.g. /system/framework/org.apache.http.legacy.jar). */
     private fun guestSharedLibraryFiles(context: Context, packageName: String): List<String> = runCatching {
@@ -292,6 +301,10 @@ class GuestProcessBootstrap(private val context: Context) {
     companion object {
         private const val TAG = "AppSandbox.M2"
         private val runtimeStates = ConcurrentHashMap<String, RuntimeState>()
+        fun hasRuntime(instanceId: String): Boolean = runtimeStates.containsKey(instanceId)
+
+        /** This entry process's component agent; the coordinator also watches it to retire the entry record. */
+        @Volatile private var entryToken: IBinder? = null
         private val localLocationGeneration = AtomicLong((android.os.Process.myPid().toLong() shl 32) or 1L)
     }
 }

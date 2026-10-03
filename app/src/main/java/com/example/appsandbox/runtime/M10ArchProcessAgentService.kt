@@ -33,6 +33,15 @@ abstract class BaseProcessAgentService(private val declaredSlot: Int) : Service(
     private fun handle(message: Message): Boolean {
         when (message.what) {
             M10ArchProtocol.MSG_BIND_PROCESS -> bindProcess(message)
+            M10ArchProtocol.MSG_PREPARE_COMPONENT -> {
+                // Once the Guest runtime exists this is a lookup (installed provider, stub allocation) and
+                // must not wait for the main thread: it may itself be blocked in a cross-process start whose
+                // target process is asking for this provider.
+                if (GuestProcessBootstrap.hasRuntime(message.data.getString(M10ArchProtocol.KEY_INSTANCE).orEmpty())) {
+                    val copy = Message.obtain(message)
+                    worker.post { prepareComponent(copy); copy.recycle() }
+                } else prepareComponent(message)
+            }
             M10ArchProtocol.MSG_STALE_PROBE -> reply(message, Bundle().apply {
                 val expected = message.data.getLong(M10ArchProtocol.KEY_GENERATION)
                 putBoolean(M10ArchProtocol.KEY_REJECTED, expected != generation)
@@ -47,7 +56,7 @@ abstract class BaseProcessAgentService(private val declaredSlot: Int) : Service(
     private fun bindProcess(message: Message) {
         val data = message.data
         val slot = data.getInt(M10ArchProtocol.KEY_SLOT)
-        val physicalProcessName = File("/proc/self/cmdline").readText().substringBefore('\u0000')
+        val physicalProcessName = NativeRuntimeBridge.physicalProcessName()
         val actualSlot = Regex(":p(\\d+)$").find(physicalProcessName)?.groupValues?.get(1)?.toInt() ?: -1
         require(slot == actualSlot && slot == declaredSlot) { "agent slot mismatch expected=$slot actual=$actualSlot declared=$declaredSlot" }
         val componentKind = requireNotNull(data.getString(M10ArchProtocol.KEY_COMPONENT_KIND))
@@ -61,17 +70,10 @@ abstract class BaseProcessAgentService(private val declaredSlot: Int) : Service(
         GuestProcessLocationBindings.bind(requireNotNull(key), generation)
         val bootstrap = GuestProcessBootstrap(applicationContext)
         var providerBinder: IBinder? = null
+        var stubComponent: ComponentName? = null
         when (componentKind) {
-            M10ArchProtocol.COMPONENT_SERVICE -> {
-                val serviceInfo = requireNotNull(data.parcelable<ServiceInfo>(M10ArchProtocol.KEY_SERVICE_INFO))
-                val prepared = bootstrap.prepareService(packageName, instanceId, slot, serviceInfo)
-                val stub = requireNotNull(com.example.appsandbox.stub.StubServices.intent(this, slot).component)
-                VirtualServiceRuntime.registerAgentRoute(VirtualServiceRecord(
-                    VirtualServiceKey(packageName, instanceId, ComponentName(packageName, serviceInfo.name)),
-                    RuntimeIdentity.create(this, packageName, instanceId, slot).virtualUidNumber,
-                    prepared, stub, lastStartId = generation.toInt()
-                ))
-            }
+            M10ArchProtocol.COMPONENT_SERVICE -> stubComponent = prepareService(bootstrap, packageName, instanceId, slot,
+                requireNotNull(data.parcelable<ServiceInfo>(M10ArchProtocol.KEY_SERVICE_INFO)))
             M10ArchProtocol.COMPONENT_RECEIVER -> bootstrap.prepareReceiverRuntime(
                 packageName,
                 instanceId,
@@ -99,19 +101,88 @@ abstract class BaseProcessAgentService(private val declaredSlot: Int) : Service(
             putInt(M10ArchProtocol.KEY_SLOT, slot)
             putLong(M10ArchProtocol.KEY_GENERATION, generation)
             providerBinder?.let { putBinder(M10ArchProtocol.KEY_PROVIDER_BINDER, it) }
+            stubComponent?.let { putParcelable(M10ArchProtocol.KEY_STUB_COMPONENT, it) }
         })
     }
+
+    private fun prepareService(bootstrap: GuestProcessBootstrap, packageName: String, instanceId: String, slot: Int,
+                               serviceInfo: ServiceInfo): ComponentName =
+        GuestComponentAgent.prepareService(this, bootstrap, packageName, instanceId, slot, serviceInfo)
+
+    private fun prepareComponent(message: Message) = GuestComponentAgent.prepareComponent(applicationContext, declaredSlot, message)
 
     override fun onDestroy() {
         GuestProcessLocationBindings.clear(generation)
         super.onDestroy()
     }
 
-    private fun reply(message: Message, data: Bundle) {
-        message.replyTo?.send(Message.obtain(null, M10ArchProtocol.MSG_REPLY).apply { this.data = data })
+    private fun reply(message: Message, data: Bundle) = GuestComponentAgent.reply(message, data)
+
+    companion object {
+        private const val TAG = "AppSandbox.M10.Arch"
+        private val worker get() = GuestComponentAgent.worker
+    }
+}
+
+/**
+ * Prepares one more component of the logical process a slot already hosts (another provider authority
+ * or Service) for the coordinator. Entry processes started by an Activity launch hand the coordinator
+ * [entryMessenger] directly: binding their agent Service would need their main thread, which may be
+ * blocked in the very cross-process start that asks for this component.
+ */
+object GuestComponentAgent {
+    private const val TAG = "AppSandbox.M10.Arch"
+    val worker: Handler by lazy { Handler(android.os.HandlerThread("GuestAgentWorker").apply { start() }.looper) }
+    @Volatile private var entry: Messenger? = null
+
+    @Synchronized
+    fun entryMessenger(context: android.content.Context, slot: Int): Messenger = entry ?: Messenger(Handler(worker.looper) { message ->
+        if (message.what == M10ArchProtocol.MSG_PREPARE_COMPONENT) {
+            // Registration precedes the end of the entry bootstrap; wait for its runtime before looking up.
+            val instanceId = message.data.getString(M10ArchProtocol.KEY_INSTANCE).orEmpty()
+            val deadline = android.os.SystemClock.uptimeMillis() + 15_000
+            while (!GuestProcessBootstrap.hasRuntime(instanceId) && android.os.SystemClock.uptimeMillis() < deadline) Thread.sleep(20)
+            prepareComponent(context.applicationContext, slot, message)
+        } else if (message.what == M10ArchProtocol.MSG_DIE) {
+            worker.postDelayed({ Process.killProcess(Process.myPid()) }, 150)
+        }
+        true
+    }).also { entry = it }
+
+    fun prepareService(context: android.content.Context, bootstrap: GuestProcessBootstrap, packageName: String, instanceId: String,
+                       slot: Int, serviceInfo: ServiceInfo): ComponentName {
+        val prepared = bootstrap.prepareService(packageName, instanceId, slot, serviceInfo)
+        return VirtualServiceRuntime.prepareLocal(context,
+            VirtualServiceKey(packageName, instanceId, ComponentName(packageName, serviceInfo.name)),
+            RuntimeIdentity.create(context, packageName, instanceId, slot).virtualUidNumber, prepared, slot)
     }
 
-    companion object { private const val TAG = "AppSandbox.M10.Arch" }
+    fun prepareComponent(context: android.content.Context, declaredSlot: Int, message: Message) {
+        val data = message.data
+        val slot = data.getInt(M10ArchProtocol.KEY_SLOT)
+        val packageName = requireNotNull(data.getString(M10ArchProtocol.KEY_PACKAGE))
+        val instanceId = requireNotNull(data.getString(M10ArchProtocol.KEY_INSTANCE))
+        val result = Bundle()
+        runCatching {
+            require(slot == declaredSlot) { "agent slot mismatch expected=$slot declared=$declaredSlot" }
+            val bootstrap = GuestProcessBootstrap(context)
+            when (val kind = requireNotNull(data.getString(M10ArchProtocol.KEY_COMPONENT_KIND))) {
+                M10ArchProtocol.COMPONENT_PROVIDER -> result.putBinder(M10ArchProtocol.KEY_PROVIDER_BINDER, bootstrap.prepareProvider(
+                    packageName, instanceId, slot, requireNotNull(data.parcelable<ProviderInfo>(M10ArchProtocol.KEY_PROVIDER_INFO))))
+                M10ArchProtocol.COMPONENT_SERVICE -> result.putParcelable(M10ArchProtocol.KEY_STUB_COMPONENT, prepareService(
+                    context, bootstrap, packageName, instanceId, slot, requireNotNull(data.parcelable<ServiceInfo>(M10ArchProtocol.KEY_SERVICE_INFO))))
+                else -> error("unsupported component kind=$kind")
+            }
+        }.onFailure {
+            Log.e(TAG, "AGENT_PREPARE_COMPONENT failed slot=$slot instance=$instanceId", it)
+            result.putString(M10ArchProtocol.KEY_ERROR, it.toString())
+        }
+        reply(message, result)
+    }
+
+    fun reply(message: Message, data: Bundle) {
+        message.replyTo?.send(Message.obtain(null, M10ArchProtocol.MSG_REPLY).apply { this.data = data })
+    }
 }
 
 class P0ProcessAgent : BaseProcessAgentService(0)
@@ -128,7 +199,10 @@ object M10ArchProtocol {
     const val MSG_BIND_PROCESS = 1
     const val MSG_STALE_PROBE = 2
     const val MSG_DIE = 3
+    const val MSG_PREPARE_COMPONENT = 4
     const val MSG_REPLY = 100
+    const val KEY_STUB_COMPONENT = "stubComponent"
+    const val KEY_ERROR = "error"
     const val KEY_PACKAGE = "package"
     const val KEY_INSTANCE = "instance"
     const val KEY_LOGICAL_PROCESS = "logicalProcess"

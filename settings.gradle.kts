@@ -16,6 +16,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "AppSandbox"
 include(":app")
+include(":hidden-bridge")
 include(":test-guests:GuestTestApp")
 include(":test-guests:IndependentGuest")
 include(":test-guests:ContractInvalidFixtures")

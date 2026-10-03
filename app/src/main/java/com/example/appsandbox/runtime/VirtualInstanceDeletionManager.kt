@@ -50,6 +50,7 @@ class VirtualInstanceDeletionManager(
         registry.deleteInstance(packageName, instanceId) {
             storageRemoved = InstanceStorageManager.delete(context, instanceId, it.dataRoot)
         }
+        val externalStorageRemoved = com.example.appsandbox.storage.GuestExternalStorage.delete(context, instanceId)
         val webViewStorageRemoved = VirtualWebViewProcessPolicy.deleteDataDirectories(context, webViewSuffixes)
         val locationStateRemoved = VirtualLocationCoordinatorClient.delete(context, instanceId)
         M12RuntimeRegistries.removeInstance(packageName, instanceId)
@@ -61,7 +62,7 @@ class VirtualInstanceDeletionManager(
             "taskCleanup=${if (running) "process-terminated" else "no-record"} " +
             "processCleanup=${if (running) "killed" else "not-running"} " +
             "registryCleanup=${if (recordGone) "removed" else "present"} storageCleanup=$storageRemoved " +
-            "webViewSuffixes=$webViewSuffixes webViewStorageCleanup=$webViewStorageRemoved locationStateCleanup=$locationStateRemoved result=success")
+            "webViewSuffixes=$webViewSuffixes webViewStorageCleanup=$webViewStorageRemoved externalStorageCleanup=$externalStorageRemoved locationStateCleanup=$locationStateRemoved result=success")
         return VirtualInstanceDeleteResult(slot, running, storageRemoved)
     }
 

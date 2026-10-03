@@ -34,6 +34,19 @@ object HiddenApiAccess {
     @Synchronized
     private fun installExemptions() {
         if (exemptionsInstalled) return
+        val prefixes = arrayOf(
+            "Landroid/app/ActivityThread;", "Landroid/app/ActivityTaskManager;", "Landroid/util/Singleton;",
+            "Landroid/location/", "Landroid/os/ServiceManager;", "Landroid/app/ContextImpl;",
+            "Landroid/os/Environment\$UserEnvironment;", "Landroid/app/IUriGrantsManager", "Lcom/android/internal/app/IAppOpsService",
+            "Landroid/os/storage/IStorageManager", "Lcom/android/internal/telephony/ITelephonyRegistry",
+            "Landroid/content/IClipboard", "Landroid/net/INetworkStatsService",
+            "Lcom/android/internal/appwidget/IAppWidgetService", "Landroid/app/role/IRoleManager"
+        )
+        // Reflection on VMRuntime.setHiddenApiExemptions is itself blocked for apps since API 30.
+        if (runCatching { HiddenApiExemptions.install(prefixes) }.getOrDefault(false)) {
+            exemptionsInstalled = true
+            return
+        }
         try {
             val vmRuntimeClass = Class.forName("dalvik.system.VMRuntime")
             val getRuntime = vmRuntimeClass.declaredMethods.firstOrNull { it.name == "getRuntime" && it.parameterCount == 0 }
@@ -41,11 +54,6 @@ object HiddenApiAccess {
             val setExemptions = vmRuntimeClass.declaredMethods.firstOrNull { it.name == "setHiddenApiExemptions" }
                 ?: throw NoSuchMethodException("VMRuntime.setHiddenApiExemptions")
             val runtime = getRuntime.invoke(null)
-            val prefixes = arrayOf(
-                "Landroid/app/ActivityThread;", "Landroid/app/ActivityTaskManager;", "Landroid/util/Singleton;",
-                "Landroid/location/"
-                , "Landroid/os/ServiceManager;", "Landroid/app/ContextImpl;"
-            )
             setExemptions.invoke(runtime, arrayOf<Any>(prefixes))
             exemptionsInstalled = true
         } catch (error: Throwable) {

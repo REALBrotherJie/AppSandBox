@@ -16,7 +16,9 @@ import java.lang.reflect.Proxy
 class PhysicalPackageServiceAdapter(
     private val identity: RuntimeIdentity,
     override val serviceName: String,
-    override val interfaceName: String
+    override val interfaceName: String,
+    /** An optional facade that cannot be installed (service absent on this build) does not block the Guest. */
+    private val optional: Boolean = false
 ) : BinderServiceAdapter {
     override fun install(): AdapterInstallResult = runCatching {
         val serviceManager = Class.forName("android.os.ServiceManager")
@@ -42,7 +44,12 @@ class PhysicalPackageServiceAdapter(
         cache[serviceName] = facade(service, raw)
         Log.i("AppSandbox.M7", "VSERVICE $serviceName physical-package facade installed")
         AdapterInstallResult(serviceName, true)
-    }.getOrElse { AdapterInstallResult(serviceName, false, failureReason = it.toString()) }
+    }.getOrElse {
+        if (optional) {
+            Log.w("AppSandbox.M7", "VSERVICE $serviceName optional facade skipped: $it")
+            AdapterInstallResult(serviceName, true, failureReason = it.toString())
+        } else AdapterInstallResult(serviceName, false, failureReason = it.toString())
+    }
 
     private fun facade(service: IInterface, original: IBinder): IBinder =
         Proxy.newProxyInstance(IBinder::class.java.classLoader, arrayOf(IBinder::class.java)) { proxy, method, args ->

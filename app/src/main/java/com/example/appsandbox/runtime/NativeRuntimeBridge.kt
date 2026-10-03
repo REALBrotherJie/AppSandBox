@@ -39,10 +39,24 @@ object NativeRuntimeBridge {
         credentialRoot: String,
         deviceRoot: String
     ): Boolean
+    /** Adds a logical -> physical root for this process's instance; only valid after [bind]. */
+    fun addPathMapping(logicalRoot: String, physicalRoot: String) {
+        check(nativeAddPathMapping(logicalRoot, physicalRoot)) { "native path mapping rejected logical=$logicalRoot physical=$physicalRoot" }
+    }
+
+    external fun nativeAddPathMapping(logicalRoot: String, physicalRoot: String): Boolean
     external fun nativeIsReady(): Boolean
     external fun nativeGuestRewriteCount(): Long
 
-    private fun physicalProcessName(): String = runCatching {
+    /** The stub process name, captured before the Guest's /proc/self/cmdline is virtualized. */
+    fun physicalProcessName(): String = physicalProcessName
+
+    /** Serves [name] as this process's /proc cmdline to Guest code from now on. */
+    fun setLogicalProcessName(name: String) = nativeSetLogicalProcessName(name)
+
+    @JvmStatic private external fun nativeSetLogicalProcessName(name: String)
+
+    private val physicalProcessName: String = runCatching {
         File("/proc/self/cmdline").readText().trim { it <= ' ' || it == '\u0000' }
     }.getOrDefault(Application.getProcessName())
 

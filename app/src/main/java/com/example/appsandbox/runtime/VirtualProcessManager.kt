@@ -2,6 +2,11 @@ package com.example.appsandbox.runtime
 
 import java.util.concurrent.atomic.AtomicLong
 
+/** The logical Guest process this stub process currently hosts; set before any Guest code runs. */
+object CurrentGuestProcess {
+    @Volatile var logicalProcessName: String? = null
+}
+
 data class VirtualProcessKey(
     val packageRevision: Long,
     val packageName: String,

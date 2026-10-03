@@ -41,9 +41,21 @@ object VirtualServiceRuntime {
     private val allocations = ConcurrentHashMap<VirtualServiceKey, Int>()
     private val connectionFacades = java.util.Collections.synchronizedMap(java.util.IdentityHashMap<Any, Any>())
 
-    fun registerAgentRoute(record: VirtualServiceRecord) {
-        byStub[record.stubComponent] = record
-        Log.i("AppSandbox.M10.Arch", "AGENT_SERVICE_ROUTE generation=${record.lastStartId} stub=${record.stubComponent.flattenToShortString()} guest=${record.key.component.flattenToShortString()}")
+    /**
+     * Gives one Guest Service its own stub Service in this (target) process: every Guest Service of a
+     * logical process needs a distinct stub component, or AMS hands every binder request the binder of
+     * whichever Guest Service bound the shared stub first.
+     */
+    fun prepareLocal(context: Context, key: VirtualServiceKey, virtualUid: Int, guestInfo: ServiceInfo, slot: Int): ComponentName {
+        val index = allocations.computeIfAbsent(key) {
+            val used = allocations.filterKeys { existing -> existing.packageName == key.packageName && existing.instanceId == key.instanceId }.values.toSet()
+            (0..3).firstOrNull { it !in used } ?: error("no StubService available for ${key.instanceId}")
+        }
+        val stub = requireNotNull(StubServices.intent(context, slot, index).component)
+        byStub.computeIfAbsent(stub) { VirtualServiceRecord(key, virtualUid, guestInfo, stub) }
+        Log.i("AppSandbox.M7", "VSERVICE package=${key.packageName} instance=${key.instanceId} virtualUid=$virtualUid " +
+            "guestComponent=${key.component.flattenToShortString()} stubComponent=${stub.flattenToShortString()} event=RESOLVE")
+        return stub
     }
 
     fun routedProbeIntent(stub: ComponentName, original: Intent): Intent = Intent(original).apply {
@@ -57,27 +69,17 @@ object VirtualServiceRuntime {
         if (component.packageName != identity.guestPackageName) return null
         val info = vpm.getServiceInfo(component) ?: return null
         val logicalProcess = VirtualProcessKey.canonicalProcessName(identity.guestPackageName, info.processName)
-        if (logicalProcess != identity.guestPackageName) {
+        val currentProcess = com.example.appsandbox.runtime.CurrentGuestProcess.logicalProcessName ?: identity.guestPackageName
+        if (logicalProcess != currentProcess) {
             val route = VirtualProcessCoordinatorClient.ensureService(context, identity.instanceId, info)
-            val stub = requireNotNull(StubServices.intent(context, route.slot).component)
+            val stub = requireNotNull(route.stubComponent) { "remote service route returned no stub component" }
             Log.i("AppSandbox.M10", "REMOTE_SERVICE_ROUTE package=${identity.guestPackageName} instance=${identity.instanceId} " +
-                "logicalProcess=$logicalProcess slot=${route.slot} pid=${route.pid} generation=${route.generation} transaction=${route.transactionId}")
+                "logicalProcess=$logicalProcess slot=${route.slot} pid=${route.pid} generation=${route.generation} " +
+                "stub=${stub.flattenToShortString()} transaction=${route.transactionId}")
             return routedProbeIntent(stub, original)
         }
         val key = VirtualServiceKey(identity.guestPackageName, identity.instanceId, component)
-        val index = allocations.computeIfAbsent(key) {
-            val used = allocations.filterKeys { existing -> existing.packageName == key.packageName && existing.instanceId == key.instanceId }.values.toSet()
-            (0..3).firstOrNull { it !in used } ?: error("no StubService available for ${key.instanceId}")
-        }
-        val stub = requireNotNull(StubServices.intent(context, identity.processSlot, index).component)
-        byStub.computeIfAbsent(stub) { VirtualServiceRecord(key, identity.virtualUidNumber, info, stub) }
-        Log.i("AppSandbox.M7", "VSERVICE package=${key.packageName} instance=${key.instanceId} virtualUid=${identity.virtualUidNumber} " +
-            "guestComponent=${component.flattenToShortString()} stubComponent=${stub.flattenToShortString()} event=RESOLVE")
-        return Intent(original).apply {
-            setComponent(stub)
-            putExtra(EXTRA_MARKER, true)
-            putExtra(EXTRA_ORIGINAL, Intent(original))
-        }
+        return routedProbeIntent(prepareLocal(context, key, identity.virtualUidNumber, info, identity.processSlot), original)
     }
 
     fun logicalResult(physical: Any?, routed: Intent): Any? =

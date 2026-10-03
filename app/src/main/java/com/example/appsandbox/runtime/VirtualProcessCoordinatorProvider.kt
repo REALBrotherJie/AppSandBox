@@ -50,6 +50,13 @@ class VirtualProcessCoordinatorProvider : ContentProvider() {
             val info = requireNotNull(data.parcelable<ProviderInfo>(KEY_PROVIDER_INFO))
             coordinator.ensureProvider(requireNotNull(data.getString(KEY_INSTANCE)), info).toBundle()
         }
+        METHOD_REGISTER_ENTRY -> {
+            val data = requireNotNull(extras)
+            val key = VirtualProcessKey(data.getLong(KEY_REVISION), requireNotNull(data.getString(KEY_PACKAGE)),
+                requireNotNull(data.getString(KEY_INSTANCE)), requireNotNull(data.getString(KEY_LOGICAL_PROCESS)))
+            coordinator.registerEntry(key, data.getInt(KEY_SLOT), data.getInt(KEY_PID), requireNotNull(data.getBinder(KEY_TOKEN)))
+            Bundle()
+        }
         METHOD_TERMINATE_INSTANCE -> {
             val instanceId = requireNotNull(extras?.getString(KEY_INSTANCE))
             Bundle().apply {
@@ -72,6 +79,12 @@ class VirtualProcessCoordinatorProvider : ContentProvider() {
         const val METHOD_ENSURE_PROVIDER = "ensureProvider"
         const val METHOD_ENSURE_ACTIVITY = "ensureActivity"
         const val METHOD_TERMINATE_INSTANCE = "terminateInstance"
+        const val METHOD_REGISTER_ENTRY = "registerEntry"
+        const val KEY_PACKAGE = "package"
+        const val KEY_LOGICAL_PROCESS = "logicalProcess"
+        const val KEY_REVISION = "revision"
+        const val KEY_TOKEN = "token"
+        const val KEY_STUB_COMPONENT = "stubComponent"
         const val KEY_INSTANCE = "instance"
         const val KEY_SERVICE_INFO = "serviceInfo"
         const val KEY_RECEIVER_INFO = "receiverInfo"
@@ -86,13 +99,21 @@ class VirtualProcessCoordinatorProvider : ContentProvider() {
     }
 }
 
-data class ProcessRoute(val slot: Int, val pid: Int, val generation: Long, val transactionId: String, val providerBinder: IBinder? = null) {
+data class ProcessRoute(
+    val slot: Int,
+    val pid: Int,
+    val generation: Long,
+    val transactionId: String,
+    val providerBinder: IBinder? = null,
+    val stubComponent: ComponentName? = null
+) {
     fun toBundle() = Bundle().apply {
         putInt(VirtualProcessCoordinatorProvider.KEY_SLOT, slot)
         putInt(VirtualProcessCoordinatorProvider.KEY_PID, pid)
         putLong(VirtualProcessCoordinatorProvider.KEY_GENERATION, generation)
         putString(VirtualProcessCoordinatorProvider.KEY_TRANSACTION, transactionId)
         providerBinder?.let { putBinder(VirtualProcessCoordinatorProvider.KEY_PROVIDER_BINDER, it) }
+        stubComponent?.let { putParcelable(VirtualProcessCoordinatorProvider.KEY_STUB_COMPONENT, it) }
     }
 }
 
@@ -117,8 +138,28 @@ object VirtualProcessCoordinatorClient {
             result.getInt(VirtualProcessCoordinatorProvider.KEY_SLOT),
             result.getInt(VirtualProcessCoordinatorProvider.KEY_PID),
             result.getLong(VirtualProcessCoordinatorProvider.KEY_GENERATION),
-            requireNotNull(result.getString(VirtualProcessCoordinatorProvider.KEY_TRANSACTION))
+            requireNotNull(result.getString(VirtualProcessCoordinatorProvider.KEY_TRANSACTION)),
+            stubComponent = result.parcelable(VirtualProcessCoordinatorProvider.KEY_STUB_COMPONENT)
         )
+    }
+
+    /**
+     * Records a logical process that an Activity launch started in a pool slot, so later Service,
+     * provider, receiver and Activity routes to it reuse this process instead of starting a second
+     * copy of it. [token] lives as long as this process and tells the coordinator when it dies.
+     */
+    fun registerEntryProcess(context: Context, key: VirtualProcessKey, slot: Int, token: IBinder) {
+        val authority = context.packageName + VirtualProcessCoordinatorProvider.AUTHORITY_SUFFIX
+        context.contentResolver.call(Uri.parse("content://$authority"),
+            VirtualProcessCoordinatorProvider.METHOD_REGISTER_ENTRY, null, Bundle().apply {
+                putString(VirtualProcessCoordinatorProvider.KEY_INSTANCE, key.instanceId)
+                putString(VirtualProcessCoordinatorProvider.KEY_PACKAGE, key.packageName)
+                putString(VirtualProcessCoordinatorProvider.KEY_LOGICAL_PROCESS, key.logicalProcessName)
+                putLong(VirtualProcessCoordinatorProvider.KEY_REVISION, key.packageRevision)
+                putInt(VirtualProcessCoordinatorProvider.KEY_SLOT, slot)
+                putInt(VirtualProcessCoordinatorProvider.KEY_PID, android.os.Process.myPid())
+                putBinder(VirtualProcessCoordinatorProvider.KEY_TOKEN, token)
+            })
     }
 
     fun ensureReceiver(context: Context, instanceId: String, info: ActivityInfo): ProcessRoute {
@@ -178,6 +219,7 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
         var agent: IBinder? = null,
         var connection: ServiceConnection? = null,
         var providerBinder: IBinder? = null,
+        var stubComponent: ComponentName? = null,
         var error: Throwable? = null
     )
 
@@ -191,20 +233,44 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
             File(info.applicationInfo.sourceDir).lastModified(), packageName, instanceId,
             VirtualProcessKey.canonicalProcessName(packageName, info.processName)
         )
-        val transaction = UUID.randomUUID().toString()
+        val (route, fresh) = ensureRecord(key) { record -> startAgent(record, M10ArchProtocol.COMPONENT_SERVICE, info, null) }
+        val record = route.first
+        // A process started for this Service already allocated its stub; any other Service of a running
+        // process gets its own stub from that process.
+        val stub = if (fresh) record.stubComponent else request(record, M10ArchProtocol.COMPONENT_SERVICE) {
+            putParcelable(M10ArchProtocol.KEY_SERVICE_INFO, ServiceInfo(info))
+        }.parcelable<ComponentName>(M10ArchProtocol.KEY_STUB_COMPONENT)
+        return ProcessRoute(record.slot, record.pid, record.generation, route.second, stubComponent = requireNotNull(stub) {
+            "no stub Service for ${info.name} in $key"
+        })
+    }
+
+    /** Registers a logical process started by an Activity launch in a pool slot (see the client). */
+    fun registerEntry(key: VirtualProcessKey, slot: Int, pid: Int, token: IBinder) {
         val record = synchronized(this) {
-            records[key]?.takeIf { it.state != State.DEAD && it.state != State.DYING } ?: allocate(key).also {
+            val existing = records[key]?.takeIf { it.state != State.DEAD && it.state != State.DYING }
+            if (existing != null) {
+                Log.i(TAG, "VPROCESS_ENTRY key=$key slot=$slot pid=$pid existingSlot=${existing.slot} existingPid=${existing.pid} result=EXISTING")
+                return
+            }
+            slots[slot]?.let { owner ->
+                Log.w(TAG, "VPROCESS_ENTRY key=$key slot=$slot pid=$pid owner=$owner result=SLOT_CONFLICT")
+                return
+            }
+            val prefs = context.getSharedPreferences("virtual_process_generations", Context.MODE_PRIVATE)
+            val generation = prefs.getLong("next", 0L) + 1
+            check(prefs.edit().putLong("next", generation).commit())
+            Record(key, slot, generation, state = State.READY, pid = pid, agent = token).also {
                 records[key] = it
-                slots[it.slot] = key
-                handler.post { startAgent(it, M10ArchProtocol.COMPONENT_SERVICE, info, null) }
+                slots[slot] = key
+                it.ready.countDown()
             }
         }
-        Log.i(TAG, "VPROCESS_TX id=$transaction key=$key generation=${record.generation} state=QUEUED slot=${record.slot}")
-        check(record.ready.await(15, TimeUnit.SECONDS)) { "process READY timeout key=$key slot=${record.slot}" }
-        record.error?.let { throw IllegalStateException("process bootstrap failed key=$key", it) }
-        check(record.state == State.READY) { "process not READY key=$key state=${record.state}" }
-        Log.i(TAG, "VPROCESS_TX id=$transaction key=$key generation=${record.generation} state=DISPATCHED slot=${record.slot} pid=${record.pid}")
-        return ProcessRoute(record.slot, record.pid, record.generation, transaction)
+        token.linkToDeath({
+            Log.i(TAG, "VPROCESS_TEARDOWN event=ENTRY_DEATH key=$key generation=${record.generation}")
+            handler.post { markDead(record) }
+        }, 0)
+        Log.i(TAG, "VPROCESS_ENTRY key=$key slot=$slot pid=$pid generation=${record.generation} result=REGISTERED")
     }
 
     fun ensureReceiver(instanceId: String, info: ActivityInfo): ProcessRoute {
@@ -224,7 +290,16 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
     fun ensureProvider(instanceId: String, info: ProviderInfo): ProcessRoute {
         val key = VirtualProcessKey(File(info.applicationInfo.sourceDir).lastModified(), info.packageName, instanceId,
             VirtualProcessKey.canonicalProcessName(info.packageName, info.processName))
-        return ensure(key) { record -> startAgent(record, M10ArchProtocol.COMPONENT_PROVIDER, null, null, info) }
+        val (route, fresh) = ensureRecord(key) { record -> startAgent(record, M10ArchProtocol.COMPONENT_PROVIDER, null, null, info) }
+        val record = route.first
+        // The binder from process start belongs to the authority that started it; every other authority
+        // is published by the running process on request.
+        val binder = if (fresh) record.providerBinder else request(record, M10ArchProtocol.COMPONENT_PROVIDER) {
+            putParcelable(M10ArchProtocol.KEY_PROVIDER_INFO, ProviderInfo(info))
+        }.getBinder(M10ArchProtocol.KEY_PROVIDER_BINDER)
+        return ProcessRoute(record.slot, record.pid, record.generation, route.second, providerBinder = requireNotNull(binder) {
+            "no provider binder for ${info.authority} in $key"
+        })
     }
 
     fun terminateInstance(instanceId: String): List<String> {
@@ -252,21 +327,81 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
     }
 
     private fun ensure(key: VirtualProcessKey, starter: (Record) -> Unit): ProcessRoute {
+        val (route, _) = ensureRecord(key, starter)
+        val record = route.first
+        return ProcessRoute(record.slot, record.pid, record.generation, route.second)
+    }
+
+    /** The READY record for [key] with its transaction id, and whether this call started the process. */
+    private fun ensureRecord(key: VirtualProcessKey, starter: (Record) -> Unit): Pair<Pair<Record, String>, Boolean> {
         val transaction = UUID.randomUUID().toString()
+        var fresh = false
         val record = synchronized(this) {
             records[key]?.takeIf { it.state != State.DEAD && it.state != State.DYING } ?: allocate(key).also {
                 records[key] = it
                 slots[it.slot] = key
+                fresh = true
                 handler.post { starter(it) }
             }
         }
-        Log.i(TAG, "VPROCESS_TX id=$transaction key=$key generation=${record.generation} state=QUEUED slot=${record.slot}")
+        Log.i(TAG, "VPROCESS_TX id=$transaction key=$key generation=${record.generation} state=QUEUED slot=${record.slot} fresh=$fresh")
         check(record.ready.await(15, TimeUnit.SECONDS)) { "process READY timeout key=$key slot=${record.slot}" }
         record.error?.let { throw IllegalStateException("process bootstrap failed key=$key", it) }
         check(record.state == State.READY) { "process not READY key=$key state=${record.state}" }
         Log.i(TAG, "VPROCESS_TX id=$transaction key=$key generation=${record.generation} state=DISPATCHED slot=${record.slot} pid=${record.pid}")
-        return ProcessRoute(record.slot, record.pid, record.generation, transaction, record.providerBinder)
+        return (record to transaction) to fresh
     }
+
+    /** Asks the agent of a READY process to prepare one more component; runs on a Binder thread. */
+    private fun request(record: Record, componentKind: String, fill: Bundle.() -> Unit): Bundle {
+        val agent = agentBinder(record)
+        val latch = CountDownLatch(1)
+        var result: Bundle? = null
+        Messenger(agent).send(Message.obtain(null, M10ArchProtocol.MSG_PREPARE_COMPONENT).apply {
+            data = Bundle().apply {
+                putString(M10ArchProtocol.KEY_PACKAGE, record.key.packageName)
+                putString(M10ArchProtocol.KEY_INSTANCE, record.key.instanceId)
+                putInt(M10ArchProtocol.KEY_SLOT, record.slot)
+                putString(M10ArchProtocol.KEY_COMPONENT_KIND, componentKind)
+                fill()
+            }
+            replyTo = Messenger(Handler(replyThread.looper) { reply ->
+                result = reply.data
+                latch.countDown()
+                true
+            })
+        })
+        check(latch.await(15, TimeUnit.SECONDS)) { "agent prepare timeout key=${record.key} kind=$componentKind" }
+        val data = requireNotNull(result)
+        data.getString(M10ArchProtocol.KEY_ERROR)?.let { throw IllegalStateException("agent prepare failed key=${record.key}: $it") }
+        return data
+    }
+
+    /** The agent of [record]'s slot; entry processes are bound on first use. */
+    private fun agentBinder(record: Record): IBinder {
+        record.agent?.takeIf { it.isBinderAlive }?.let { return it }
+        val latch = CountDownLatch(1)
+        val connection = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName, binder: IBinder) {
+                record.agent = binder
+                latch.countDown()
+            }
+            override fun onServiceDisconnected(name: ComponentName) {
+                record.agent = null
+            }
+        }
+        synchronized(this) {
+            record.connection?.let { runCatching { context.unbindService(it) } }
+            record.connection = connection
+        }
+        check(context.bindService(Intent(context, agentClass(record.slot)), connection, Context.BIND_AUTO_CREATE)) {
+            "agent bind returned false slot=${record.slot}"
+        }
+        check(latch.await(10, TimeUnit.SECONDS)) { "agent connect timeout slot=${record.slot}" }
+        return requireNotNull(record.agent) { "agent disconnected slot=${record.slot}" }
+    }
+
+    private val replyThread = android.os.HandlerThread("VirtualProcessReplies").apply { start() }
 
     @Synchronized
     private fun allocate(key: VirtualProcessKey): Record {
@@ -306,6 +441,7 @@ private class ProductionVirtualProcessCoordinator(private val context: Context) 
                             reply.data.getLong(M10ArchProtocol.KEY_GENERATION) == record.generation) {
                             record.pid = reply.data.getInt(M10ArchProtocol.KEY_PID)
                             record.providerBinder = reply.data.getBinder(M10ArchProtocol.KEY_PROVIDER_BINDER)
+                            record.stubComponent = reply.data.parcelable(M10ArchProtocol.KEY_STUB_COMPONENT)
                             record.state = State.READY
                             Log.i(TAG, "VPROCESS_READY key=${record.key} slot=${record.slot} pid=${record.pid} generation=${record.generation}")
                         } else record.error = IllegalStateException("invalid agent READY")
