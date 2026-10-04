@@ -1,0 +1,16 @@
+# M12 JobScheduler Guest Execution Closure Result
+- START HEAD: `bd8c7dec78195816bbbe43f5563a4ebb0f844c30`; FINAL HEAD: pending; branch `main`.
+- Verdict: `PARTIAL / IMPLEMENTATION_GAP` (API31 build/integration only; no fabricated runtime PASS).
+- Previous baseline: Host `JobStubService` resolved mappings then immediately completed; Guest execution was absent.
+- Changes: `GuestJobExecutionManager` routes through M10 `ensureService`, binds the installed stub, and invokes the real Guest `JobService` `IJobService`/`JobServiceEngine` binder.
+- Guest `JobParameters` keeps logical guest job id/extras; callback proxy translates completion to physical Host parameters and rejects stale generations.
+- `onStartJob` ack, async `jobFinished(false/true)`, stop dispatch, process-disconnect cleanup, and instance-scoped session identity are implemented; not device-proven.
+- Fixture: added zero-adaptation `JobProbeService` with false, async-false, async-reschedule and stop evidence.
+- API31 `7b670025`: app/fixture installed; MainActivity launch check completed. Full Job execution matrix: `NOT_RUN` (no existing scheduling harness reached the path).
+- API36: `emulator-5556` responds with API36; required `emulator-5554` is unavailable, classify `ENVIRONMENT_BLOCKER`.
+- Kuaixun BEFORE: `uid 10293 cannot schedule job in skysky.cy.kuaixun`. AFTER: same virtual scenario was not reached; normal launch produced no AppSandbox Job trace, so blocker remains `UNVERIFIED`, not fixed.
+- Process death, I0/I1 collision execution, deletion, stale-generation runtime: `NOT_RUN`; host-process-death persistence gap remains because registry is in-memory.
+- Lint baseline: START 46 errors/111 warnings; FINAL 46 errors/116 warnings, no findings attributed to changed Job files. Existing baseline is broader than the task's cited GuestTestApp error.
+- Build gates: unit tests, assembleDebug, assembleRelease, bundleRelease, fixture assemble PASS; repository lint remains pre-existing FAIL; `git diff --check` PASS.
+- Remaining classifications: `RUNTIME_DEFECT` (runtime path unproven), `HARNESS_DEBT` (no Job scheduling automation), `HOST_PROCESS_DEATH_PERSISTENCE_GAP`, `ENVIRONMENT_BLOCKER` (required API36 serial).
+- Commit: pending focused commit; M12 remains ACTIVE / PHASED; M13 not entered.

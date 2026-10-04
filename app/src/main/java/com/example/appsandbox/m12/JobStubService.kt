@@ -17,17 +17,21 @@ class JobStubService : JobService() {
             jobFinished(params, false)
             return false
         }
-        Log.i("AppSandbox.M12.Job", "STUB_JOB_START hostJobId=${params.jobId} instance=$instance guest=$guest guestJobId=$guestId " +
-            "generation=${record.generation} event=VIRTUAL_JOB_RESOLVE")
-        // The coordinator/process-agent boundary is the next dispatch point. Returning false is
-        // deliberate until a real Guest JobService instance is attached; the Host job is completed.
-        jobFinished(params, false)
-        Log.i("AppSandbox.M12.Job", "HOST_JOB_COMPLETE hostJobId=${params.jobId} instance=$instance result=PASS")
-        return false
+        Log.i("AppSandbox.M12.Job", "JOB_VIRTUAL_RESOLVE hostJobId=${params.jobId} instance=$instance guest=$guest guestJobId=$guestId " +
+            "generation=${record.generation}")
+        return try {
+            val running = GuestJobExecutionManager.start(this, params, record)
+            Log.i("AppSandbox.M12.Job", "JOB_GUEST_START_ACK hostJobId=${params.jobId} instance=$instance running=$running")
+            if (!running) jobFinished(params, false)
+            running
+        } catch (t: Throwable) {
+            Log.e("AppSandbox.M12.Job", "JOB_EXECUTION_FAILED hostJobId=${params.jobId} instance=$instance", t)
+            jobFinished(params, false)
+            false
+        }
     }
 
     override fun onStopJob(params: JobParameters): Boolean {
-        Log.i("AppSandbox.M12.Job", "GUEST_JOB_STOP hostJobId=${params.jobId}")
-        return false
+        return GuestJobExecutionManager.stop(this, params)
     }
 }

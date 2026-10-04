@@ -86,7 +86,14 @@ class JobSchedulerAdapter(private val identity: RuntimeIdentity) : BinderService
             }
         }
         set("mJobId", id); set("jobId", id); set("mService", component); set("service", component)
-        set("mExtras", android.os.Bundle().apply { putString("m12_guest_package", key.packageName); putString("m12_instance", key.instanceId); putInt("m12_guest_job_id", key.guestJobId); putString("m12_guest_service", guest?.flattenToString()) })
+        val guestExtras = source.extras?.let { android.os.Bundle(it) } ?: android.os.Bundle()
+        set("mExtras", android.os.Bundle().apply {
+            putString("m12_guest_package", key.packageName)
+            putString("m12_instance", key.instanceId)
+            putInt("m12_guest_job_id", key.guestJobId)
+            putString("m12_guest_service", guest?.flattenToString())
+            putBundle("m12_guest_extras", guestExtras)
+        })
         return copy
     }
 }
