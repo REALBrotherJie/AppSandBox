@@ -50,11 +50,31 @@ class GuestActivityStartBridge(
                 BinderCallResult(if (reused) 3 else physical(args), BinderRoute.VIRTUAL, IdentityDecision.CUSTOM)
             }
         }
+        // getAppTasks(callingPackage): the caller's own tasks. The physical caller is the Host, whose tasks
+        // include the Host UI and every other instance; this instance owns the tasks rooted in its slot's stubs.
+        registry.register("getAppTasks") { call, physical ->
+            val args = call.args.copyOf()
+            args.indices.filter { args[it] == identity.guestPackageName }.forEach { args[it] = identity.hostPackageName }
+            @Suppress("UNCHECKED_CAST")
+            val tasks = (physical(args) as? List<android.os.IBinder>).orEmpty()
+            val own = tasks.filter { isOwnSlotTask(it) }
+            Log.i(TAG, "VTASK method=getAppTasks instance=${identity.instanceId} slot=${identity.processSlot} physical=${tasks.size} own=${own.size}")
+            BinderCallResult(own, BinderRoute.VIRTUAL, IdentityDecision.VIRTUALIZE)
+        }
         val proxy = ProxySupport.create(original, iface, serviceName, identity, registry)
         field.set(singleton, proxy)
         Log.i(TAG, "activity-start-bridge installed api=${android.os.Build.VERSION.SDK_INT} instance=${identity.instanceId}")
         AdapterInstallResult(serviceName, true)
     }.getOrElse { AdapterInstallResult(serviceName, false, failureReason = it.toString()) }
+
+    private fun isOwnSlotTask(binder: android.os.IBinder): Boolean = runCatching {
+        val task = Class.forName("android.app.IAppTask\$Stub").getDeclaredMethod("asInterface", android.os.IBinder::class.java)
+            .invoke(null, binder) ?: return false
+        val info = task.javaClass.getMethod("getTaskInfo").invoke(task) as? android.app.ActivityManager.RecentTaskInfo ?: return false
+        val stubPrefix = "${StubActivities::class.java.`package`?.name}.P${identity.processSlot}"
+        listOfNotNull(info.baseIntent?.component, info.baseActivity, info.topActivity, info.origActivity)
+            .any { it.packageName == identity.hostPackageName && it.className.startsWith(stubPrefix) }
+    }.getOrDefault(false)
 
     private fun rewrite(method: Method, args: Array<Any?>): Boolean {
         var deliveredLocally = false

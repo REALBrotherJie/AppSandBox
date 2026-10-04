@@ -239,6 +239,15 @@ class ActivityManagerAdapter(
                 BinderCallResult(com.example.appsandbox.service.VirtualServiceRuntime.logicalResult(physical(args), routed), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
             }
         }
+        // Self-queries the system only allows for a package of the calling UID; the Guest runs under the
+        // Host UID, so its own package is asked as the Host's.
+        setOf("isBackgroundRestricted", "getPackageProcessState").forEach { name ->
+            registry.register(name) { call, physical ->
+                val args = PhysicalPackageServiceAdapter.physicalPackageArgs(call.args, identity.guestPackageName, identity.hostPackageName)
+                identityBridge.logIdentityRewrite(serviceName, name, "PHYSICAL_FOR_SYSTEM")
+                BinderCallResult(physical(args), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
+            }
+        }
         setOf("stopServiceToken", "setServiceForeground", "publishService", "unbindFinished").forEach { name ->
             registry.register(name) { call, physical ->
                 val args = com.example.appsandbox.service.VirtualServiceRuntime.restoreCallbackArgs(name, call.args)

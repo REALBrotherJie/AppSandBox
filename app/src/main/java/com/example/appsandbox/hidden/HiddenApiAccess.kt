@@ -40,7 +40,8 @@ object HiddenApiAccess {
             "Landroid/os/Environment\$UserEnvironment;", "Landroid/app/IUriGrantsManager", "Lcom/android/internal/app/IAppOpsService",
             "Landroid/os/storage/IStorageManager", "Lcom/android/internal/telephony/ITelephonyRegistry",
             "Landroid/content/IClipboard", "Landroid/net/INetworkStatsService",
-            "Lcom/android/internal/appwidget/IAppWidgetService", "Landroid/app/role/IRoleManager"
+            "Lcom/android/internal/appwidget/IAppWidgetService", "Landroid/app/role/IRoleManager",
+            "Landroid/content/pm/ApplicationInfo;->requestsIsolatedSplitLoading", "Landroid/app/IAppTask", "Landroid/os/IUserManager", "Landroid/app/usage/IUsageStatsManager"
         )
         // Reflection on VMRuntime.setHiddenApiExemptions is itself blocked for apps since API 30.
         if (runCatching { HiddenApiExemptions.install(prefixes) }.getOrDefault(false)) {

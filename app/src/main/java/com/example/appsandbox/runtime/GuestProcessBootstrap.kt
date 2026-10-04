@@ -200,8 +200,11 @@ class GuestProcessBootstrap(private val context: Context) {
         }.getOrNull()
         val sharedLibraryFiles = guestSharedLibraryFiles(context, envelope.packageName)
         if (sharedLibraryFiles.isNotEmpty()) app.sharedLibraryFiles = sharedLibraryFiles.toTypedArray()
+        val isolatedSplits = runCatching {
+            ApplicationInfo::class.java.getDeclaredMethod("requestsIsolatedSplitLoading").invoke(app) as Boolean
+        }.getOrDefault(false)
         val loader = guestLoader.prepare(app.sourceDir, app.splitSourceDirs.orEmpty().toList(), app.nativeLibraryDir, envelope.packageName,
-            root.path, primaryCpuAbi, sharedLibraryFiles)
+            root.path, primaryCpuAbi, sharedLibraryFiles, isolatedSplits)
         guestLoader.guestNativeLibraryDir?.let { app.nativeLibraryDir = it }
         // LoadedApk.makeApplication installs the App's loader as the main thread's context loader
         // (initializeJavaContextClassLoader); Guests and ServiceLoader rely on it.
@@ -252,6 +255,8 @@ class GuestProcessBootstrap(private val context: Context) {
         // and cache it (Application.getProcessName/ActivityThread.currentProcessName) during attach.
         publishLogicalProcessName(thread, logicalProcessName)
         val runtime = preparation.prepare(providers.toTypedArray(), logicalProcessName)
+        runtime.application.registerActivityLifecycleCallbacks(
+            GuestActivityLifecycleFallback(activityManager, envelope.instanceId, envelope.processSlot))
         runtimeStates[envelope.instanceId] = RuntimeState(loader, ApplicationInfo(app), runtime.application)
         val contentRefresh = binderManager.refreshContentService()
         require(contentRefresh.installed) { "ContentService refresh failed: ${contentRefresh.failureReason}" }

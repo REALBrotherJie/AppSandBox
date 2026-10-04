@@ -26,12 +26,16 @@ class GuestRuntimeClassLoader(private val host: Context) {
         packageName: String,
         dataRoot: String,
         primaryCpuAbi: String? = null,
-        sharedLibraryFiles: List<String> = emptyList()
+        sharedLibraryFiles: List<String> = emptyList(),
+        isolatedSplits: Boolean = false
     ): ClassLoader {
         val current = loader
         if (current != null && this.packageName == packageName) return current
         val optimized = File(dataRoot, "dex").apply { mkdirs() }
-        val dexPath = (listOf(sourceDir) + splitSourceDirs).joinToString(File.pathSeparator)
+        // With android:isolatedSplits the base loader holds base.apk only; LoadedApk builds each split's
+        // own loader (parented per splitDependencies) and Apps check that a split class came from it.
+        val codePaths = if (isolatedSplits) listOf(sourceDir) else listOf(sourceDir) + splitSourceDirs
+        val dexPath = codePaths.joinToString(File.pathSeparator)
         val materializedNative = materializeNativeLibraries(listOf(sourceDir) + splitSourceDirs, packageName, primaryCpuAbi)
         guestNativeLibraryDir = materializedNative ?: nativeLibraryDir
         val platform = android.content.Context::class.java.classLoader
@@ -43,7 +47,7 @@ class GuestRuntimeClassLoader(private val host: Context) {
         return GuestDomainClassLoader(dexPath, optimized.path, guestNativeLibraryDir, host.classLoader, platform, sharedLoader).also {
             loader = it
             this.packageName = packageName
-            Log.i("AppSandbox.M3", "CLASSLOAD_SETUP package=$packageName base=$sourceDir splits=$splitSourceDirs dexPath=$dexPath " +
+            Log.i("AppSandbox.M3", "CLASSLOAD_SETUP package=$packageName base=$sourceDir splits=$splitSourceDirs isolatedSplits=$isolatedSplits dexPath=$dexPath " +
                 "sharedLibraries=$libraries loader=$it")
         }
     }
@@ -131,6 +135,17 @@ class GuestRuntimeClassLoader(private val host: Context) {
     }
 
     companion object {
+        /** Whether [instrumentation] is ours or an App Instrumentation that still delegates to ours. */
+        fun reachesGuestInstrumentation(instrumentation: Instrumentation?): Boolean =
+            instrumentation is GuestInstrumentation || (instrumentation != null && wrapsGuestInstrumentation(instrumentation))
+
+        private fun wrapsGuestInstrumentation(instrumentation: Instrumentation): Boolean =
+            generateSequence<Class<*>>(instrumentation.javaClass) { it.superclass }
+                .takeWhile { it != Instrumentation::class.java }
+                .flatMap { it.declaredFields.asSequence() }
+                .filter { Instrumentation::class.java.isAssignableFrom(it.type) }
+                .any { field -> runCatching { field.isAccessible = true; field.get(instrumentation) is GuestInstrumentation }.getOrDefault(false) }
+
         fun hasFrameworkBase(application: android.app.Application): Boolean =
             application.baseContext?.javaClass?.name == "android.app.ContextImpl"
     }
@@ -158,15 +173,25 @@ class GuestRuntimeClassLoader(private val host: Context) {
         private val activityManager: VirtualActivityManager
     ) : Instrumentation() {
         override fun newApplication(cl: ClassLoader?, className: String?, context: android.content.Context?): android.app.Application {
-            val guestLoader = guestLoaderProvider()
+            val guestLoader = guestLoaderFor(cl)
             return delegate?.newApplication(guestLoader, className, context)
                 ?: super.newApplication(guestLoader, className, context)
         }
 
         override fun newActivity(cl: ClassLoader?, className: String?, intent: android.content.Intent?): android.app.Activity {
-            val guestLoader = guestLoaderProvider()
+            val guestLoader = guestLoaderFor(cl)
             return delegate?.newActivity(guestLoader, className, intent)
                 ?: super.newActivity(guestLoader, className, intent)
+        }
+
+        /**
+         * The loader the platform chose (the Activity context's: a split's own loader for a component
+         * declared in an isolated split) when it belongs to the Guest; otherwise the Guest LoadedApk's
+         * current loader, because stub launches may hand in the Host's.
+         */
+        private fun guestLoaderFor(cl: ClassLoader?): ClassLoader {
+            val guestLoader = guestLoaderProvider()
+            return cl?.takeIf { candidate -> generateSequence(candidate) { it.parent }.any { it === guestLoader } } ?: guestLoader
         }
 
         override fun callActivityOnCreate(activity: android.app.Activity, state: android.os.Bundle?) {

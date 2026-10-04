@@ -36,6 +36,8 @@ class VirtualBinderManager(
         , PhysicalPackageServiceAdapter(identity, "netstats", "android.net.INetworkStatsService", optional = true)
         , PhysicalPackageServiceAdapter(identity, "appwidget", "com.android.internal.appwidget.IAppWidgetService", optional = true)
         , PhysicalPackageServiceAdapter(identity, "role", "android.app.role.IRoleManager", optional = true)
+        , PhysicalPackageServiceAdapter(identity, "user", "android.os.IUserManager", optional = true)
+        , PhysicalPackageServiceAdapter(identity, "usagestats", "android.app.usage.IUsageStatsManager", optional = true)
         , LocationServiceAdapter(context, identity, requireNotNull(GuestProcessLocationBindings.current()) { "Guest process location binding missing" })
     ))
 
