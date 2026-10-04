@@ -181,6 +181,7 @@ object GuestJobExecutionManager {
     }
 
     private fun cloneParameters(source: JobParameters, guestId: Int, callback: Any): JobParameters {
+        if (android.os.Build.VERSION.SDK_INT >= 35) return cloneApi35(source, guestId, callback as IBinder)
         val encoded = Parcel.obtain()
         val rewritten = Parcel.obtain()
         return try {
@@ -206,6 +207,37 @@ object GuestJobExecutionManager {
             encoded.recycle()
             rewritten.recycle()
         }
+    }
+
+    /** Android 15/16 added namespace, user-initiated and cleanup fields to the parcel. */
+    private fun cloneApi35(source: JobParameters, guestId: Int, callback: IBinder): JobParameters {
+        val guestExtras = source.extras.getPersistableBundle(KEY_GUEST_EXTRAS)?.let(::PersistableBundle)
+            ?: PersistableBundle()
+        val out = Parcel.obtain()
+        return try {
+            out.writeInt(guestId)
+            val namespace = runCatching { JobParameters::class.java.getMethod("getJobNamespace").invoke(source) as? String }.getOrNull()
+            out.writeString(namespace)
+            out.writePersistableBundle(guestExtras)
+            out.writeBundle(source.transientExtras)
+            val clip = source.clipData
+            if (clip != null) {
+                out.writeInt(1); clip.writeToParcel(out, 0); out.writeInt(source.clipGrantFlags)
+            } else out.writeInt(0)
+            out.writeStrongBinder(callback)
+            out.writeInt(if (source.isOverrideDeadlineExpired) 1 else 0)
+            out.writeBoolean(source.isExpeditedJob)
+            val userInitiated = runCatching { JobParameters::class.java.getMethod("isUserInitiatedJob").invoke(source) as Boolean }.getOrDefault(false)
+            out.writeBoolean(userInitiated)
+            out.writeTypedArray(source.triggeredContentUris, 0)
+            out.writeStringArray(source.triggeredContentAuthorities)
+            source.network?.let { out.writeInt(1); it.writeToParcel(out, 0) } ?: out.writeInt(0)
+            out.writeInt(source.stopReason)
+            out.writeInt(-1)
+            out.writeString(null)
+            out.setDataPosition(0)
+            JobParameters.CREATOR.createFromParcel(out)
+        } finally { out.recycle() }
     }
 
     private fun findField(type: Class<*>, predicate: (java.lang.reflect.Field) -> Boolean): java.lang.reflect.Field? =

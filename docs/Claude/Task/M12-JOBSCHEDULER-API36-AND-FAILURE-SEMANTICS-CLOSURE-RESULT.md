@@ -1,0 +1,13 @@
+# M12 JobScheduler API36 and Failure Semantics Closure
+- START HEAD: `8817cd4f316f9676d7910d10e8735281cec44f35`.
+- API31 baseline retained: core runtime PASS and Kuaixun UID scheduling blocker remains fixed.
+- Root cause: API36 `JobParameters` parcel order is `jobId, namespace, extras, transientExtras, clip, callback, flags...`; prior bridge assumed API31 prefix/tail and failed with Bundle alignment errors.
+- Fix: API35+ dedicated parcel writer preserves namespace, extras, transient extras, clip, callback, expedited/user-initiated flags, content triggers, network and stop fields. API31 path remains unchanged.
+- API31 failure semantics evidence retained: cancel/timeout -> onStopJob, process death -> M10 teardown and fresh-slot recovery, reschedule completion, same-job replacement IDs, stale/duplicate completion guards, instance cleanup paths.
+- API36 runtime was not rerun because user instruction forbids `emulator-5556`; alternate API36 AVD startup failed due local broken `ANDROID_SDK_ROOT`/system-image path. No API36 runtime PASS is claimed.
+- API36 implementation is statically aligned with SDK 36 source and builds successfully; remaining runtime verification is device-limited.
+- Kuaixun API31 regression was not changed as a development target; prior AFTER evidence remains valid.
+- Build: `:app:testDebugUnitTest`, `:app:assembleDebug`, `:app:assembleRelease` PASS.
+- Lint baseline remains 46 errors/115 warnings; no new task-specific lint issue was introduced.
+- Existing user modifications were preserved and excluded from the focused commit.
+- Commit: recorded in final response.
