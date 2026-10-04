@@ -31,6 +31,7 @@ class JobSchedulerAdapter(private val identity: RuntimeIdentity) : BinderService
                 "schedule", "enqueue" -> {
                     val index = args.indexOfFirst { it is JobInfo }
                     if (index >= 0) {
+                        Log.i("AppSandbox.M12.Job", "R3_JOB_ADAPTER_ENTER method=${method.name} instance=${identity.instanceId}")
                         val guest = args[index] as JobInfo
                         val component = guest.service
                         val guestId = guest.id
@@ -74,26 +75,43 @@ class JobSchedulerAdapter(private val identity: RuntimeIdentity) : BinderService
     }.getOrElse { Log.e("AppSandbox.M12.Job", "JOB_ADAPTER_INSTALL_FAILED", it); AdapterInstallResult(serviceName, false, failureReason = it.toString()) }
 
     private fun copyJob(source: JobInfo, id: Int, component: ComponentName, key: VirtualJobKey, guest: ComponentName?): JobInfo {
-        val parcel = android.os.Parcel.obtain()
-        source.writeToParcel(parcel, 0); parcel.setDataPosition(0)
-        val copy = JobInfo.CREATOR.createFromParcel(parcel); parcel.recycle()
-        fun set(name: String, value: Any?) {
-            var type: Class<*>? = copy.javaClass
-            while (type != null) {
-                val field = runCatching { type!!.getDeclaredField(name) }.getOrNull()
-                if (field != null) { field.isAccessible = true; field.set(copy, value); return }
-                type = type!!.superclass
-            }
-        }
-        set("mJobId", id); set("jobId", id); set("mService", component); set("service", component)
-        val guestExtras = source.extras?.let { android.os.Bundle(it) } ?: android.os.Bundle()
-        set("mExtras", android.os.Bundle().apply {
+        val guestExtras = source.extras?.let { android.os.PersistableBundle(it) } ?: android.os.PersistableBundle()
+        val physicalExtras = android.os.PersistableBundle().apply {
             putString("m12_guest_package", key.packageName)
             putString("m12_instance", key.instanceId)
             putInt("m12_guest_job_id", key.guestJobId)
             putString("m12_guest_service", guest?.flattenToString())
-            putBundle("m12_guest_extras", guestExtras)
-        })
+            putLong("m12_generation", GuestProcessLocationBindings.current()?.generation ?: 0L)
+            putPersistableBundle("m12_guest_extras", guestExtras)
+        }
+        val builder = JobInfo.Builder(id, component)
+            .setExtras(physicalExtras)
+            .setRequiresCharging(source.isRequireCharging)
+            .setRequiresDeviceIdle(source.isRequireDeviceIdle)
+            .setRequiresBatteryNotLow(source.isRequireBatteryNotLow)
+            .setRequiresStorageNotLow(source.isRequireStorageNotLow)
+        if (!source.isPersisted && !source.transientExtras.isEmpty) builder.setTransientExtras(source.transientExtras)
+        source.clipData?.let { builder.setClipData(it, source.clipGrantFlags) }
+        source.requiredNetwork?.let(builder::setRequiredNetwork)
+        source.triggerContentUris?.forEach(builder::addTriggerContentUri)
+        if (source.triggerContentUpdateDelay >= 0) builder.setTriggerContentUpdateDelay(source.triggerContentUpdateDelay)
+        if (source.triggerContentMaxDelay >= 0) builder.setTriggerContentMaxDelay(source.triggerContentMaxDelay)
+        if (source.isPeriodic) builder.setPeriodic(source.intervalMillis, source.flexMillis)
+        else {
+            if (source.minLatencyMillis > 0) builder.setMinimumLatency(source.minLatencyMillis)
+            if (source.maxExecutionDelayMillis > 0) builder.setOverrideDeadline(source.maxExecutionDelayMillis)
+        }
+        if (!source.isRequireDeviceIdle) builder.setBackoffCriteria(source.initialBackoffMillis, source.backoffPolicy)
+        if (source.estimatedNetworkDownloadBytes >= 0 || source.estimatedNetworkUploadBytes >= 0)
+            builder.setEstimatedNetworkBytes(source.estimatedNetworkDownloadBytes, source.estimatedNetworkUploadBytes)
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            if (source.minimumNetworkChunkBytes > 0) builder.setMinimumNetworkChunkBytes(source.minimumNetworkChunkBytes)
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            builder.setExpedited(source.isExpedited)
+        }
+        val copy = builder.build()
+        Log.i("AppSandbox.M12.Job", "R3_PHYSICAL_JOB_READY hostJobId=$id extras=${copy.extras.keySet().sorted()}")
         return copy
     }
 }

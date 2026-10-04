@@ -2,6 +2,7 @@ package com.example.appsandbox.m12
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import java.security.MessageDigest
 
 data class VirtualObjectKey(val packageRevision: String, val packageName: String, val instanceId: String,
     val logicalProcess: String? = null, val logicalId: String)
@@ -112,16 +113,16 @@ data class VirtualJobRecord(val key: VirtualJobKey, val hostJobId: Int, val gues
 class VirtualJobRegistry {
     private val values = ConcurrentHashMap<VirtualJobKey, VirtualJobRecord>()
     private val ids = ConcurrentHashMap<Int, VirtualJobKey>()
-    private val next = AtomicInteger(100000)
     fun hostJobId(key: VirtualJobKey): Int {
         values[key]?.let { return it.hostJobId }
-        var candidate = 0
-        while (candidate == 0) {
-            val n = next.getAndIncrement() and 0x3fffffff
-            candidate = 100000 + n
-            val owner = ids.putIfAbsent(candidate, key)
-            if (owner != null && owner != key) candidate = 0
-        }
+        val identity = listOf(key.packageRevision, key.packageName, key.instanceId, key.guestJobId.toString()).joinToString("\u0000")
+        val digest = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray(Charsets.UTF_8))
+        var candidate = ((digest[0].toInt() and 0x7f) shl 24) or
+            ((digest[1].toInt() and 0xff) shl 16) or
+            ((digest[2].toInt() and 0xff) shl 8) or (digest[3].toInt() and 0xff)
+        if (candidate < 100000) candidate += 100000
+        val owner = ids.putIfAbsent(candidate, key)
+        check(owner == null || owner == key) { "Host jobId digest collision: $candidate" }
         return candidate
     }
     fun put(record: VirtualJobRecord) { values[record.key] = record }

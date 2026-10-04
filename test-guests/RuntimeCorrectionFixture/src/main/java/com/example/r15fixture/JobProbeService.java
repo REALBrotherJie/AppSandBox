@@ -13,8 +13,9 @@ public final class JobProbeService extends JobService {
             .putString("start", params.getJobId() + ":" + mode).apply();
         if ("false".equals(mode)) return false;
         boolean reschedule = "reschedule".equals(mode);
+        long delayMs = "long".equals(mode) ? 15000L : 250L;
         new Thread(() -> {
-            try { Thread.sleep(250); } catch (InterruptedException ignored) { }
+            try { Thread.sleep(delayMs); } catch (InterruptedException ignored) { }
             getSharedPreferences("job-evidence", MODE_PRIVATE).edit()
                 .putString("finished", params.getJobId() + ":" + reschedule).apply();
             jobFinished(params, reschedule);

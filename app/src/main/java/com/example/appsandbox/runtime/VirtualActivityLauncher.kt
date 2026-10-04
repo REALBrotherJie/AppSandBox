@@ -33,12 +33,15 @@ class VirtualActivityLauncher(private val context: Context) {
         val virtualUid = com.example.appsandbox.identity.RuntimeIdentity.create(context, packageName, instanceId, slot).virtualUidNumber
         registry.registerInstance(packageName, VirtualInstanceRecord(instanceId, virtualUid, slot, dataRoot.path))
         val original = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).apply {
-            component = android.content.ComponentName(packageName, snapshot.launcherActivity.name)
+            val requested = launchExtras?.getString("m12TargetActivity")
+            component = android.content.ComponentName(packageName, requested ?: snapshot.launcherActivity.name)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             launchExtras?.let(::putExtras)
         }
+        val targetInfo = packageInfo.activities.orEmpty().firstOrNull { it.name == original.component?.className }
+            ?: snapshot.launcherActivity
         val envelope = LaunchEnvelope(packageName, instanceId, requireNotNull(original.component), original,
-            snapshot.launcherActivity, slot, UUID.randomUUID().toString(), dataRoot.path)
+            targetInfo, slot, UUID.randomUUID().toString(), dataRoot.path)
         val stub = envelope.putInto(StubActivities.standardIntent(context, slot)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         Log.i(TAG, "substitute original=${original.component?.flattenToShortString()} stub=${stub.component?.flattenToShortString()} " +

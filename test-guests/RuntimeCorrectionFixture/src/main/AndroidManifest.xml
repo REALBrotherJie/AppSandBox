@@ -6,6 +6,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name="com.example.r15fixture.JobProbeActivity" android:exported="true" />
         <service android:name="com.example.r15fixture.JobProbeService"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />

@@ -7,6 +7,8 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.ServiceInfo
 import android.os.Bundle
+import android.os.PersistableBundle
+import android.os.Binder
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -14,7 +16,6 @@ import android.os.Parcel
 import android.util.Log
 import com.example.appsandbox.runtime.VirtualProcessCoordinatorClient
 import com.example.appsandbox.service.VirtualServiceRuntime
-import java.lang.reflect.Proxy
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -28,8 +29,20 @@ object GuestJobExecutionManager {
     private val sequence = AtomicLong()
     private val sessions = ConcurrentHashMap<Int, Session>()
 
-    fun start(context: Context, hostParams: JobParameters, record: VirtualJobRecord): Boolean {
+    fun start(context: Context, hostParams: JobParameters, record: VirtualJobRecord, finishHost: (Boolean) -> Unit) {
         val token = sequence.incrementAndGet()
+        Thread({
+            runCatching { startBlocking(context, hostParams, record, token, finishHost) }
+                .onFailure {
+                    Log.e(TAG, "JOB_EXECUTION_FAILED hostJobId=${hostParams.jobId} token=$token", it)
+                    sessions.remove(hostParams.jobId)?.let { runCatching { context.unbindService(it.connection) } }
+                    Handler(Looper.getMainLooper()).post { finishHost(false) }
+                }
+        }, "virtual-job-$token").start()
+    }
+
+    private fun startBlocking(context: Context, hostParams: JobParameters, record: VirtualJobRecord, token: Long,
+                              finishHost: (Boolean) -> Unit) {
         val component = ComponentName.unflattenFromString(record.guestService)
             ?: throw IllegalStateException("invalid guest service")
         val info = serviceInfo(context, component) ?: throw IllegalStateException("guest service missing")
@@ -38,7 +51,7 @@ object GuestJobExecutionManager {
         val stub = requireNotNull(route.stubComponent)
         val guestIntent = Intent(JobServiceIntent.ACTION).setComponent(component)
         val routed = VirtualServiceRuntime.routedProbeIntent(stub, guestIntent)
-        val session = Session(token, record, hostParams, context.applicationContext)
+        val session = Session(token, record, hostParams, context.applicationContext, route.generation, finishHost)
         sessions[hostParams.jobId] = session
         Log.i(TAG, "JOB_PROCESS_READY instance=${record.key.instanceId} guestJobId=${record.key.guestJobId} hostJobId=${hostParams.jobId} generation=${record.generation} token=$token")
         val connected = context.bindService(routed, session.connection, Context.BIND_AUTO_CREATE)
@@ -51,7 +64,7 @@ object GuestJobExecutionManager {
             runCatching { context.unbindService(session.connection) }
             throw IllegalStateException("guest bind timeout")
         }
-        return session.start()
+        session.start()
     }
 
     fun stop(context: Context, hostParams: JobParameters): Boolean {
@@ -71,7 +84,9 @@ object GuestJobExecutionManager {
         val token: Long,
         val record: VirtualJobRecord,
         val host: JobParameters,
-        val context: Context
+        val context: Context,
+        val processGeneration: Long,
+        val finishHost: (Boolean) -> Unit
     ) {
         val connected = CountDownLatch(1)
         private var binder: IBinder? = null
@@ -80,27 +95,32 @@ object GuestJobExecutionManager {
         val connection = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName, service: IBinder) {
                 binder = service
+                runCatching { service.linkToDeath({ terminateForProcessDeath() }, 0) }
                 connected.countDown()
                 Log.i(TAG, "JOB_GUEST_BIND instance=${record.key.instanceId} guestJobId=${record.key.guestJobId} hostJobId=${host.jobId} token=$token")
             }
             override fun onServiceDisconnected(name: ComponentName) {
-                binder = null
-                sessions.remove(host.jobId)
-                Log.w(TAG, "JOB_EXECUTION_DESTROY hostJobId=${host.jobId} token=$token reason=guest-process-death")
+                terminateForProcessDeath()
                 connected.countDown()
             }
+            override fun onBindingDied(name: ComponentName) = terminateForProcessDeath()
         }
 
-        fun start(): Boolean {
+        private fun terminateForProcessDeath() {
+            binder = null
+            if (!sessions.remove(host.jobId, this)) return
+            Log.w(TAG, "JOB_EXECUTION_DESTROY hostJobId=${host.jobId} token=$token reason=guest-process-death")
+            Handler(Looper.getMainLooper()).post { finishHost(false) }
+        }
+
+        fun start() {
             val raw = requireNotNull(binder)
             val ifaceName = "android.app.job.IJobService"
-            val iface = Class.forName(ifaceName)
             val api = Class.forName("$ifaceName\$Stub").getDeclaredMethod("asInterface", IBinder::class.java).invoke(null, raw)
-            guest = cloneParameters(host, record.key.guestJobId, callbackProxy(iface))
+            guest = cloneParameters(host, record.key.guestJobId, callbackBridge())
             started = true
             Log.i(TAG, "JOB_GUEST_START instance=${record.key.instanceId} guestJobId=${record.key.guestJobId} hostJobId=${host.jobId} token=$token")
             api.javaClass.getMethod("startJob", JobParameters::class.java).invoke(api, guest)
-            return true
         }
 
         fun stop() {
@@ -114,40 +134,78 @@ object GuestJobExecutionManager {
             }.onFailure { Log.e(TAG, "JOB_GUEST_STOP_FAILED hostJobId=${host.jobId}", it) }
         }
 
-        private fun callbackProxy(iface: Class<*>): Any {
+        private fun callbackBridge(): Any {
             val callbackField = findField(host.javaClass) { it.type.name.contains("IJobCallback") || it.name.contains("callback", true) }
-            val callback = callbackField?.get(host) ?: return Proxy.newProxyInstance(iface.classLoader, emptyArray()) { _, _, _ -> null }
-            val callbackType = callbackField.type
-            return Proxy.newProxyInstance(callbackType.classLoader, arrayOf(callbackType)) { _, method, args ->
-                val translated = args?.copyOf() ?: emptyArray()
-                if (method.name.contains("jobFinished", true)) {
-                    val current = M12RuntimeRegistries.jobs.get(record.key)
-                    if (current == null || current.generation != record.generation || !current.active) {
-                        Log.w(TAG, "JOB_STALE_EXECUTION_REJECT hostJobId=${host.jobId} token=$token generation=${record.generation}")
-                        return@newProxyInstance null
+            val callback = requireNotNull(callbackField?.get(host)) { "Host Job callback missing" }
+            val original = callback as? IBinder
+                ?: callback.javaClass.getMethod("asBinder").invoke(callback) as IBinder
+            // IJobCallback.aidl has kept these transaction positions stable since API 21.
+            // Some production framework jars strip the generated TRANSACTION_* fields.
+            val ackStart = IBinder.FIRST_CALL_TRANSACTION
+            val finished = IBinder.FIRST_CALL_TRANSACTION + 4
+            val facade = object : Binder() {
+                override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
+                    data.enforceInterface("android.app.job.IJobCallback")
+                    data.readInt() // Guest-visible logical job id.
+                    if (code == ackStart) {
+                        val ongoing = data.readInt() != 0
+                        Log.i(TAG, "JOB_GUEST_START_ACK hostJobId=${host.jobId} guestJobId=${record.key.guestJobId} ongoing=$ongoing token=$token generation=$processGeneration")
+                        if (!ongoing && sessions.remove(host.jobId, this@Session))
+                            Handler(Looper.getMainLooper()).post { finishHost(false) }
+                        return true
                     }
-                    if (translated.isNotEmpty() && translated[0] is JobParameters) translated[0] = host
-                    Log.i(TAG, "JOB_GUEST_FINISHED instance=${record.key.instanceId} guestJobId=${record.key.guestJobId} hostJobId=${host.jobId} token=$token")
-                    sessions.remove(host.jobId)
-                    runCatching { context.unbindService(connection) }
-                } else if (translated.isNotEmpty() && translated[0] is Int) translated[0] = host.jobId
-                method.invoke(callback, *translated)
+                    if (code == finished) {
+                        val reschedule = data.readInt() != 0
+                        if (sessions[host.jobId] !== this@Session) {
+                            Log.w(TAG, "JOB_STALE_EXECUTION_REJECT hostJobId=${host.jobId} token=$token generation=$processGeneration")
+                            return true
+                        }
+                        Log.i(TAG, "JOB_GUEST_FINISHED instance=${record.key.instanceId} guestJobId=${record.key.guestJobId} hostJobId=${host.jobId} token=$token")
+                        sessions.remove(host.jobId)
+                        runCatching { context.unbindService(connection) }
+                        Handler(Looper.getMainLooper()).post { finishHost(reschedule) }
+                        return true
+                    }
+                    val outgoing = Parcel.obtain()
+                    return try {
+                        outgoing.writeInterfaceToken("android.app.job.IJobCallback")
+                        outgoing.writeInt(host.jobId)
+                        if (data.dataAvail() > 0) outgoing.appendFrom(data, data.dataPosition(), data.dataAvail())
+                        original.transact(code, outgoing, reply, flags)
+                    } finally { outgoing.recycle() }
+                }
             }
+            facade.attachInterface(null, "android.app.job.IJobCallback")
+            return facade
         }
     }
 
     private fun cloneParameters(source: JobParameters, guestId: Int, callback: Any): JobParameters {
-        val parcel = Parcel.obtain()
-        source.writeToParcel(parcel, 0); parcel.setDataPosition(0)
-        val copy = JobParameters.CREATOR.createFromParcel(parcel); parcel.recycle()
-        findField(copy.javaClass) { it.name in setOf("mJobId", "jobId") }?.let { it.set(copy, guestId) }
-        findField(copy.javaClass) { it.type == Bundle::class.java && it.name.contains("extras", true) }?.let {
-            val hostExtras = (it.get(source) as? Bundle)
-            val extras = hostExtras?.getBundle("m12_guest_extras")?.let { Bundle(it) } ?: Bundle()
-            it.set(copy, extras)
+        val encoded = Parcel.obtain()
+        val rewritten = Parcel.obtain()
+        return try {
+            source.writeToParcel(encoded, 0)
+            encoded.setDataPosition(0)
+            val callbackFirst = android.os.Build.VERSION.SDK_INT >= 35
+            if (callbackFirst) encoded.readStrongBinder()
+            encoded.readInt()
+            encoded.readPersistableBundle(javaClass.classLoader)
+            val tailOffset = encoded.dataPosition()
+            val guestExtras = source.extras.getPersistableBundle("m12_guest_extras")?.let(::PersistableBundle)
+                ?: PersistableBundle()
+            Log.i(TAG, "JOB_PARAMETER_BRIDGE hostJobId=${source.jobId} guestJobId=$guestId guestExtras=${guestExtras.keySet().sorted()}")
+            if (callbackFirst) rewritten.writeStrongBinder(callback as IBinder)
+            rewritten.writeInt(guestId)
+            rewritten.writePersistableBundle(guestExtras)
+            rewritten.appendFrom(encoded, tailOffset, encoded.dataSize() - tailOffset)
+            rewritten.setDataPosition(0)
+            JobParameters.CREATOR.createFromParcel(rewritten).also { copy ->
+                if (!callbackFirst) findField(copy.javaClass) { it.name in setOf("mCallback", "callback") }?.set(copy, callback)
+            }
+        } finally {
+            encoded.recycle()
+            rewritten.recycle()
         }
-        findField(copy.javaClass) { it.type.name.contains("IJobCallback") || it.name.contains("callback", true) }?.let { it.set(copy, callback) }
-        return copy
     }
 
     private fun findField(type: Class<*>, predicate: (java.lang.reflect.Field) -> Boolean): java.lang.reflect.Field? =

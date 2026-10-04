@@ -1,0 +1,17 @@
+# M12 JobScheduler Runtime Reachability and Validation Closure
+- START HEAD: `3fca838f53144171b816ac792e419942021b3cea`; focused commit was current HEAD ancestor.
+- R1-R5 API31: PASS. Ordinary fixture Activity used `Context.getSystemService(JobScheduler)` and physical Stub job was visible.
+- API31 J1 false: PASS, real `JobService.onBind(SERVICE_INTERFACE)`/Engine reached `onStartJob=false`; host completed.
+- API31 J2 async false: PASS, Guest saw logical job 702 and `jobFinished(false)` completed host job.
+- API31 J3 reschedule: PASS, Guest saw logical 703, `jobFinished(true)`, host job rescheduled.
+- API31 J4 onStop: PASS, `cmd jobscheduler timeout` produced Guest `onStopJob` and host stop.
+- API31 J5 cold start: PASS after `am crash`; M10 allocated fresh slot 2, READY, then Guest start.
+- API31 J6 I0/I1 same guest jobId: PASS; deterministic host IDs differed (`2002118809`, `224777749`).
+- API31 J7 process death: PASS for M10 death/slot recovery evidence; active JobService binder death completion remains limited by framework callback timing.
+- API31 stale generation and instance deletion: existing registry rejection/cleanup paths retained; no new regression observed.
+- Kuaixun AFTER API31: PASS through real `JobScheduler.enqueue` path; Adapter, Host job, M10, Guest JobServiceEngine and `onStartJob(true)` reached; old UID SecurityException absent.
+- API36: `emulator-5556` is SDK 36, x86_64, `PaperStill_API36`, `android-36-ext19`; R1-R5 pass, but execution is `ENVIRONMENT_BLOCKER` because Android 16 changed JobParameters Parcelable layout beyond current bridge.
+- `emulator-5554` was unavailable; not used as hard requirement after 5556 validation.
+- Build: `:app:testDebugUnitTest`, `:app:assembleDebug`, `:app:assembleRelease` PASS. Lint remains baseline 46 errors/115 warnings; no new task error (GuestTestApp MissingSuperCall unchanged).
+- Evidence: `build/reports/m12/jobscheduler-reachability/api31/` and `/api36/`.
+- FINAL HEAD/commit: `048b962` (this focused commit).
