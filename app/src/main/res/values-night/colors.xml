@@ -1,0 +1,9 @@
+<resources>
+    <color name="sandbox_primary">#ADC6FF</color>
+    <color name="sandbox_background">#111318</color>
+    <color name="sandbox_surface">#1C2028</color>
+    <color name="sandbox_text">#E3E5EC</color>
+    <color name="sandbox_text_secondary">#B6BECC</color>
+    <color name="sandbox_outline">#596273</color>
+    <color name="sandbox_error">#FFB4AB</color>
+</resources>

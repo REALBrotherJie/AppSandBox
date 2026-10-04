@@ -1,94 +1,35 @@
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/sandbox_background">
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="24dp">
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="App Sandbox"
-            android:textAppearance="?attr/textAppearanceHeadlineMedium"
-            android:textStyle="bold" />
-        <Button
-            android:id="@+id/importApkButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/import_apk" />
-        <Button
-            android:id="@+id/runExperimentButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Run EXP-001"
-            android:visibility="gone" />
-        <Button
-            android:id="@+id/runExp003aButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Run EXP-003A"
-            android:visibility="gone" />
-        <Button
-            android:id="@+id/runExp003b0Button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Run EXP-003B0-P"
-            android:visibility="gone" />
-        <LinearLayout
-            android:id="@+id/guestSummary"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:orientation="vertical"
-            android:visibility="gone">
-            <ImageView
-                android:id="@+id/appIcon"
-                android:layout_width="72dp"
-                android:layout_height="72dp"
-                android:contentDescription="@null" />
-            <TextView android:id="@+id/appLabel" style="@style/SummaryText" />
-            <TextView android:id="@+id/packageName" style="@style/SummaryText" />
-            <TextView android:id="@+id/version" style="@style/SummaryText" />
-            <TextView android:id="@+id/componentCounts" style="@style/SummaryText" />
-            <TextView
-                android:id="@+id/importStatus"
-                style="@style/SummaryText"
-                android:textStyle="bold" />
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:id="@+id/mainScroll" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/sandbox_background" android:clipToPadding="false" android:fillViewport="true">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingStart="20dp" android:paddingTop="24dp" android:paddingEnd="20dp" android:paddingBottom="32dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/home_title" android:textColor="@color/sandbox_text" android:textSize="28sp" android:textStyle="bold" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/home_subtitle" android:textColor="@color/sandbox_text_secondary" android:textSize="14sp" />
+            </LinearLayout>
+            <ImageButton android:id="@+id/settingsButton" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="@string/settings" android:src="@android:drawable/ic_menu_preferences" android:tint="@color/sandbox_text_secondary" />
         </LinearLayout>
-        <TextView
-            android:id="@+id/errorText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:textColor="#B00020"
-            android:visibility="gone" />
-        <TextView
-            android:id="@+id/workspaceTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="Guest Library"
-            android:textStyle="bold" />
-        <LinearLayout
-            android:id="@+id/guestLibraryList"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical" />
-        <Button
-            android:id="@+id/createInstanceButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Create instance from selected revision" />
-        <LinearLayout
-            android:id="@+id/workspaceList"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical" />
+        <com.google.android.material.card.MaterialCardView android:id="@+id/importCard" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" app:cardBackgroundColor="@color/sandbox_surface" app:cardCornerRadius="18dp" app:cardElevation="1dp" app:strokeColor="@color/sandbox_outline" app:strokeWidth="1dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/import_title" android:textColor="@color/sandbox_text" android:textSize="18sp" android:textStyle="bold" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/import_subtitle" android:textColor="@color/sandbox_text_secondary" android:textSize="14sp" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/importApkButton" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="16dp" android:text="@string/import_apk" android:textSize="16sp" app:cornerRadius="16dp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+        <com.google.android.material.textfield.TextInputLayout android:id="@+id/searchLayout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:hint="@string/search_apps" app:boxCornerRadiusBottomEnd="16dp" app:boxCornerRadiusBottomStart="16dp" app:boxCornerRadiusTopEnd="16dp" app:boxCornerRadiusTopStart="16dp">
+            <com.google.android.material.textfield.TextInputEditText android:id="@+id/searchInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:imeOptions="actionDone" android:inputType="text" android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+        <TextView android:id="@+id/instancesTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="28dp" android:text="@string/instances_title" android:textColor="@color/sandbox_text" android:textSize="18sp" android:textStyle="bold" />
+        <TextView android:id="@+id/instancesHint" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/instances_hint" android:textColor="@color/sandbox_text_secondary" android:textSize="14sp" />
+        <LinearLayout android:id="@+id/instanceList" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+        <TextView android:id="@+id/instancesEmpty" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:padding="16dp" android:text="@string/instances_empty" android:textColor="@color/sandbox_text_secondary" android:textSize="14sp" />
+        <TextView android:id="@+id/libraryTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="32dp" android:text="@string/library_title" android:textColor="@color/sandbox_text" android:textSize="18sp" android:textStyle="bold" />
+        <TextView android:id="@+id/libraryHint" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/library_hint" android:textColor="@color/sandbox_text_secondary" android:textSize="14sp" />
+        <LinearLayout android:id="@+id/guestLibraryList" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+        <com.google.android.material.card.MaterialCardView android:id="@+id/emptyState" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" app:cardBackgroundColor="@color/sandbox_surface" app:cardCornerRadius="18dp" app:cardElevation="0dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_horizontal" android:orientation="vertical" android:padding="28dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/empty_title" android:textColor="@color/sandbox_text" android:textSize="16sp" android:textStyle="bold" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:gravity="center" android:text="@string/empty_subtitle" android:textColor="@color/sandbox_text_secondary" android:textSize="14sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+        <TextView android:id="@+id/statusText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:textColor="@color/sandbox_text_secondary" android:textSize="12sp" android:visibility="gone" />
     </LinearLayout>
 </ScrollView>
