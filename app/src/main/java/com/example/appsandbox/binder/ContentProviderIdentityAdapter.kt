@@ -5,6 +5,7 @@ import com.example.appsandbox.identity.RuntimeIdentity
 import com.example.appsandbox.identity.SystemIdentityBridge
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
+import java.util.concurrent.atomic.AtomicReference
 
 class ContentProviderIdentityAdapter(
     private val identity: RuntimeIdentity,
@@ -34,11 +35,29 @@ class ContentProviderIdentityAdapter(
             BinderCallResult(physical(rewritten), BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
         } }
         lateinit var virtualProvider: Any
+        val stableBinder = AtomicReference<IBinder?>()
         registry.register("asBinder") { _, physical ->
             val physicalBinder = physical(emptyArray()) as IBinder
-            val binderProxy = Proxy.newProxyInstance(IBinder::class.java.classLoader, arrayOf(IBinder::class.java)) { proxy, method, args ->
+            val binderProxy = stableBinderFacade(stableBinder, physicalBinder) { virtualProvider }
+            BinderCallResult(binderProxy, BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
+        }
+        virtualProvider = ProxySupport.create(provider, iface, "content", identity, registry)
+        return virtualProvider
+    }
+
+    companion object {
+        internal fun stableBinderFacade(
+            retained: AtomicReference<IBinder?>,
+            physicalBinder: IBinder,
+            provider: () -> Any
+        ): IBinder = retained.updateAndGet { existing ->
+            existing ?: createBinderFacade(physicalBinder, provider)
+        }!!
+
+        internal fun createBinderFacade(physicalBinder: IBinder, provider: () -> Any): IBinder =
+            Proxy.newProxyInstance(IBinder::class.java.classLoader, arrayOf(IBinder::class.java)) { proxy, method, args ->
                 when (method.name) {
-                    "queryLocalInterface" -> virtualProvider
+                    "queryLocalInterface" -> provider()
                     "equals" -> proxy === args?.firstOrNull()
                     "hashCode" -> System.identityHashCode(proxy)
                     "toString" -> "VirtualContentProviderBinder($physicalBinder)"
@@ -49,9 +68,5 @@ class ContentProviderIdentityAdapter(
                     }
                 }
             } as IBinder
-            BinderCallResult(binderProxy, BinderRoute.PHYSICAL, IdentityDecision.USE_PHYSICAL)
-        }
-        virtualProvider = ProxySupport.create(provider, iface, "content", identity, registry)
-        return virtualProvider
     }
 }

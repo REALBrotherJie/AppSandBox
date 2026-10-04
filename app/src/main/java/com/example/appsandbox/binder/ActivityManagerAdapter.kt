@@ -108,9 +108,10 @@ class ActivityManagerAdapter(
             if (remoteInfo != null) {
                 val route = VirtualProcessCoordinatorClient.ensureProvider(this.context, identity.instanceId, remoteInfo)
                 val binder = requireNotNull(route.providerBinder) { "remote provider returned no Transport Binder" }
+                val holderInfo = physicalProviderHolderInfo(remoteInfo, identity.hostUid)
                 val holderType = Class.forName("android.app.ContentProviderHolder")
                 val holder = holderType.getDeclaredConstructor(android.content.pm.ProviderInfo::class.java)
-                    .apply { isAccessible = true }.newInstance(remoteInfo)
+                    .apply { isAccessible = true }.newInstance(holderInfo)
                 val providerFactory = sequenceOf("android.content.ContentProviderNative", "android.content.IContentProvider\$Stub")
                     .mapNotNull { runCatching { Class.forName(it) }.getOrNull() }
                     .mapNotNull { type -> runCatching { type.getDeclaredMethod("asInterface", android.os.IBinder::class.java).apply { isAccessible = true } }.getOrNull() }
@@ -292,6 +293,15 @@ class ActivityManagerAdapter(
         pm.javaClass.methods.first { it.name == "isProtectedBroadcast" && it.parameterCount == 1 }
             .invoke(pm, action) as Boolean
     }.getOrDefault(false)
+
+    companion object {
+        internal fun physicalProviderHolderInfo(info: android.content.pm.ProviderInfo, hostUid: Int) =
+            android.content.pm.ProviderInfo(info).apply {
+                applicationInfo = android.content.pm.ApplicationInfo(requireNotNull(info.applicationInfo)).apply {
+                    uid = hostUid
+                }
+            }
+    }
 }
 
 class AppOpsAdapter(private val context: Context, private val identity: RuntimeIdentity, private val identityBridge: SystemIdentityBridge) : BinderServiceAdapter {

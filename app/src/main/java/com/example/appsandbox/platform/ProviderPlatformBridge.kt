@@ -25,9 +25,8 @@ object ProviderPlatformBridge {
         require(guestContext.packageName == info.packageName) {
             "installProvider context/package mismatch context=${guestContext.packageName} info=${info.packageName}"
         }
-        require(guestContext.classLoader.loadClass(info.name).name == info.name) {
-            "Guest Context ClassLoader cannot load ${info.name}"
-        }
+        // Let ActivityThread and the Guest's current LoadedApk class loader instantiate the provider.
+        // AppComponentFactory and plugin loaders may intentionally substitute the manifest class.
         val method = activityThread.javaClass.declaredMethods.singleOrNull {
             it.name == "installProvider" && it.parameterTypes.size == 6 && it.parameterTypes[0] == Context::class.java
         } ?: error("ActivityThread.installProvider(Context,holder,ProviderInfo,boolean,boolean,boolean) unavailable")
