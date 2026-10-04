@@ -39,6 +39,7 @@ class VirtualBinderManager(
         , PhysicalPackageServiceAdapter(identity, "user", "android.os.IUserManager", optional = true)
         , PhysicalPackageServiceAdapter(identity, "usagestats", "android.app.usage.IUsageStatsManager", optional = true)
         , LocationServiceAdapter(context, identity, requireNotNull(GuestProcessLocationBindings.current()) { "Guest process location binding missing" })
+        , JobSchedulerAdapter(identity)
     ))
 
     fun install(): List<AdapterInstallResult> {

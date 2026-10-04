@@ -20,6 +20,7 @@
             </intent-filter>
         </activity>
         <service android:name=".runtime.GuestRuntimeService" android:exported="false" android:process=":vs" />
+        <service android:name=".m12.JobStubService" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" android:process=":vs" />
         <service android:name=".runtime.P0ProcessAgent" android:exported="false" android:process=":p0" />
         <service android:name=".runtime.P1ProcessAgent" android:exported="false" android:process=":p1" />
         <service android:name=".runtime.P2ProcessAgent" android:exported="false" android:process=":p2" />

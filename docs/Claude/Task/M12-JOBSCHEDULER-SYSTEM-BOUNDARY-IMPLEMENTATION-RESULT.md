@@ -1,0 +1,15 @@
+# M12 JobScheduler Implementation Result
+- START HEAD: `51dd3572f66fb2beefc59b3797e383ab5a807e65`; branch `main`.
+- Production changes: `JobSchedulerAdapter`, installed `JobStubService`, collision-safe `VirtualJobRegistry` allocation and instance-scoped cancel/cancelAll.
+- Physical path: Guest JobInfo is copied, Host package/component and namespaced Host jobId are submitted through the real `jobscheduler` Binder; Guest metadata remains in mapping/extras.
+- Mapping namespace: package revision + Guest package + instance + Guest jobId; same instance replaces, I0/I1 cannot collide; deletion removes ids and mappings.
+- Stub routing: Host `BIND_JOB_SERVICE` entry validates instance/package/job id and rejects stale records before completing the physical job.
+- Completion: stub calls real Host `jobFinished`; `onStopJob` is logged. Full Guest JobService instantiation/JobParameters bridge is not yet connected to M10 Coordinator.
+- API31 device `7b670025`: online; build and unit tests pass. New fixture/cold-start/I0-I1 runtime matrix was not available in this turn.
+- Kuaixun BEFORE: `uid 10293 cannot schedule job in skysky.cy.kuaixun` reproduced in `build/reports/m12/kuaixun-logcat.txt`.
+- Kuaixun AFTER: not proven; captured launch still reaches old `IJobScheduler` validation and no `AppSandbox.M12.Job` adapter trace appeared.
+- API36 `emulator-5554`: unavailable both before and after (`device not found`), evidence in `build/reports/m12/jobscheduler/api36-after.txt`.
+- Build gates: `testDebugUnitTest`, `assembleDebug`, `assembleRelease`, `bundleRelease`, `git diff --check` PASS; repository-wide lint remains blocked by pre-existing GuestTestApp MissingSuperCall errors.
+- Host-process death/device reboot durability is not implemented; mappings are in-memory.
+- Verdict: `PARTIAL / IMPLEMENTATION_GAP + API36_ENVIRONMENT_BLOCKED`.
+- M12 remains `ACTIVE / PHASED`; M13 not started. Commit follows.

@@ -106,15 +106,28 @@ class VirtualAlarmRegistry {
 }
 
 data class VirtualJobKey(val packageRevision: String, val packageName: String, val instanceId: String, val guestJobId: Int)
-data class VirtualJobRecord(val key: VirtualJobKey, val hostJobId: Int, val guestService: String, val generation: Long)
+data class VirtualJobRecord(val key: VirtualJobKey, val hostJobId: Int, val guestService: String, val generation: Long,
+    val hostComponent: String = "", val active: Boolean = true)
 
 class VirtualJobRegistry {
     private val values = ConcurrentHashMap<VirtualJobKey, VirtualJobRecord>()
-    fun hostJobId(key: VirtualJobKey): Int = 100000 + (key.hashCode() and 0x3fffffff)
+    private val ids = ConcurrentHashMap<Int, VirtualJobKey>()
+    private val next = AtomicInteger(100000)
+    fun hostJobId(key: VirtualJobKey): Int {
+        values[key]?.let { return it.hostJobId }
+        var candidate = 0
+        while (candidate == 0) {
+            val n = next.getAndIncrement() and 0x3fffffff
+            candidate = 100000 + n
+            val owner = ids.putIfAbsent(candidate, key)
+            if (owner != null && owner != key) candidate = 0
+        }
+        return candidate
+    }
     fun put(record: VirtualJobRecord) { values[record.key] = record }
     fun get(key: VirtualJobKey) = values[key]
-    fun remove(key: VirtualJobKey) = values.remove(key)
-    fun removeInstance(packageName: String, instanceId: String) { values.keys.removeIf { it.packageName == packageName && it.instanceId == instanceId } }
+    fun remove(key: VirtualJobKey) = values.remove(key)?.also { ids.remove(it.hostJobId, key) }
+    fun removeInstance(packageName: String, instanceId: String) { values.keys.filter { it.packageName == packageName && it.instanceId == instanceId }.forEach(::remove) }
     fun cancelAllForInstance(packageName: String, instanceId: String): List<VirtualJobRecord> = values.entries
         .filter { it.key.packageName == packageName && it.key.instanceId == instanceId }
         .map { it.value }.also { removeInstance(packageName, instanceId) }
