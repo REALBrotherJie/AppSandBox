@@ -2,6 +2,7 @@
     <application>
         <activity android:name="com.example.appsandbox.archprobe.GuestReceiverColdHarnessActivity" android:exported="true" />
         <activity android:name="com.example.appsandbox.archprobe.JobReachabilityHarnessActivity" android:exported="true" />
+        <activity android:name="com.example.appsandbox.archprobe.InstanceDeletionHarnessActivity" android:exported="true" />
         <receiver
             android:name="com.example.appsandbox.archprobe.OrderedProbeReceiverA"
             android:exported="true">

@@ -1,6 +1,7 @@
 package com.example.appsandbox.runtime
 
 import android.app.ActivityManager
+import android.app.job.JobScheduler
 import android.content.Context
 import android.os.Process
 import android.util.Log
@@ -10,6 +11,7 @@ import com.example.appsandbox.stub.StubServices
 import com.example.appsandbox.vpm.VirtualPackageRegistry
 import com.example.appsandbox.location.VirtualLocationCoordinatorClient
 import com.example.appsandbox.m12.M12RuntimeRegistries
+import com.example.appsandbox.m12.JobStubService
 
 data class VirtualInstanceDeleteResult(val slot: Int, val running: Boolean, val storageRemoved: Boolean)
 
@@ -29,6 +31,13 @@ class VirtualInstanceDeletionManager(
                     "processCleanup=none registryCleanup=already-absent storageCleanup=none result=idempotent")
             }
         val slot = registered.processSlot
+        val jobs = context.getSystemService(JobScheduler::class.java)
+        val cancelledJobs = jobs.allPendingJobs.filter {
+            it.service.className == JobStubService::class.java.name &&
+                it.extras.getString("m12_guest_package") == packageName &&
+                it.extras.getString("m12_instance") == instanceId
+        }
+        cancelledJobs.forEach { jobs.cancel(it.id) }
         val webViewSuffixes = VirtualProcessCoordinatorClient.terminateInstance(context, instanceId)
         val conflicts = registry.readAll().flatMap { it.instances.values }
             .filter { it.instanceId != instanceId && pool.query(it.instanceId) == slot }
@@ -62,6 +71,7 @@ class VirtualInstanceDeletionManager(
             "taskCleanup=${if (running) "process-terminated" else "no-record"} " +
             "processCleanup=${if (running) "killed" else "not-running"} " +
             "registryCleanup=${if (recordGone) "removed" else "present"} storageCleanup=$storageRemoved " +
+            "jobCleanup=${cancelledJobs.size} " +
             "webViewSuffixes=$webViewSuffixes webViewStorageCleanup=$webViewStorageRemoved externalStorageCleanup=$externalStorageRemoved locationStateCleanup=$locationStateRemoved result=success")
         return VirtualInstanceDeleteResult(slot, running, storageRemoved)
     }

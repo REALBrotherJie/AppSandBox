@@ -13,6 +13,7 @@ class JobReachabilityHarnessActivity : Activity() {
         val slot = intent.getIntExtra("slot", 0)
         val extras = Bundle().apply {
             putString("mode", intent.getStringExtra("mode") ?: "false")
+            putString("action", intent.getStringExtra("action") ?: "schedule")
             putInt("jobId", intent.getIntExtra("jobId", 701))
             putLong("delayMs", intent.getLongExtra("delayMs", 1L))
             intent.getStringExtra("targetActivity")?.let { putString("m12TargetActivity", it) }

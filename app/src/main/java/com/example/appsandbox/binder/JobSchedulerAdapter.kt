@@ -27,6 +27,8 @@ class JobSchedulerAdapter(private val identity: RuntimeIdentity) : BinderService
             if (method.name == "equals") return@newProxyInstance p === args0?.firstOrNull()
             if (method.name == "hashCode") return@newProxyInstance System.identityHashCode(p)
             val args = args0?.copyOf() ?: emptyArray()
+            if (method.name.contains("cancel", ignoreCase = true))
+                Log.i("AppSandbox.M12.Job", "JOB_CANCEL_CALL method=${method.name} instance=${identity.instanceId}")
             when (method.name) {
                 "schedule", "enqueue" -> {
                     val index = args.indexOfFirst { it is JobInfo }
@@ -58,12 +60,23 @@ class JobSchedulerAdapter(private val identity: RuntimeIdentity) : BinderService
                         Log.i("AppSandbox.M12.Job", "JOB_CANCEL instance=${identity.instanceId} guestJobId=$guestId")
                     }
                 }
-                "cancelAll" -> {
+                "cancelAll", "cancelAllInNamespace", "cancelAllInAllNamespaces" -> {
                     val records = M12RuntimeRegistries.jobs.cancelAllForInstance(identity.guestPackageName, identity.instanceId)
                     // JobScheduler.cancelAll() has no namespace. Cancel individually to preserve isolation.
                     val cancel = original.javaClass.methods.firstOrNull { it.name == "cancel" && it.parameterTypes.any { p -> p == Int::class.javaPrimitiveType } }
-                    records.forEach { record -> runCatching { cancel?.invoke(original, record.hostJobId) } }
-                    return@newProxyInstance 0
+                    records.forEach { record ->
+                        val cancelArgs = cancel?.parameterTypes?.map { type ->
+                            when (type) {
+                                Int::class.javaPrimitiveType -> record.hostJobId
+                                String::class.java -> null
+                                else -> error("unsupported IJobScheduler.cancel parameter ${type.name}")
+                            }
+                        }?.toTypedArray()
+                        runCatching { cancel?.invoke(original, *(cancelArgs ?: emptyArray())) }
+                            .onFailure { Log.e("AppSandbox.M12.Job", "JOB_CANCEL_ALL_FAILED hostJobId=${record.hostJobId}", it) }
+                    }
+                    Log.i("AppSandbox.M12.Job", "JOB_CANCEL_ALL instance=${identity.instanceId} count=${records.size}")
+                    return@newProxyInstance if (method.returnType == Void.TYPE) null else 0
                 }
             }
             try { method.invoke(original, *args) } catch (e: InvocationTargetException) { throw e.targetException }

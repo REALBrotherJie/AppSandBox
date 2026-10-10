@@ -32,4 +32,9 @@ class JobStubService : JobService() {
     override fun onStopJob(params: JobParameters): Boolean {
         return GuestJobExecutionManager.stop(this, params)
     }
+
+    override fun onDestroy() {
+        GuestJobExecutionManager.destroy()
+        super.onDestroy()
+    }
 }

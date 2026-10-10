@@ -51,7 +51,7 @@ object GuestJobExecutionManager {
         val stub = requireNotNull(route.stubComponent)
         val guestIntent = Intent(JobServiceIntent.ACTION).setComponent(component)
         val routed = VirtualServiceRuntime.routedProbeIntent(stub, guestIntent)
-        val session = Session(token, record, hostParams, context.applicationContext, route.generation, finishHost)
+        val session = Session(token, record, hostParams, context, route.generation, finishHost)
         sessions[hostParams.jobId] = session
         Log.i(TAG, "JOB_PROCESS_READY instance=${record.key.instanceId} guestJobId=${record.key.guestJobId} hostJobId=${hostParams.jobId} generation=${record.generation} token=$token")
         val connected = context.bindService(routed, session.connection, Context.BIND_AUTO_CREATE)
@@ -72,6 +72,12 @@ object GuestJobExecutionManager {
         session.stop()
         Log.i(TAG, "JOB_HOST_STOP hostJobId=${hostParams.jobId} token=${session.token}")
         return false
+    }
+
+    fun destroy() {
+        sessions.values.toList().forEach { session ->
+            if (sessions.remove(session.host.jobId, session)) session.detachForHostDestroy()
+        }
     }
 
     private fun serviceInfo(context: Context, component: ComponentName): ServiceInfo? = runCatching {
@@ -109,6 +115,7 @@ object GuestJobExecutionManager {
         private fun terminateForProcessDeath() {
             binder = null
             if (!sessions.remove(host.jobId, this)) return
+            unbind()
             Log.w(TAG, "JOB_EXECUTION_DESTROY hostJobId=${host.jobId} token=$token reason=guest-process-death")
             Handler(Looper.getMainLooper()).post { finishHost(false) }
         }
@@ -132,6 +139,7 @@ object GuestJobExecutionManager {
                 api.javaClass.getMethod("stopJob", JobParameters::class.java).invoke(api, guestParams)
                 Log.i(TAG, "JOB_GUEST_STOP instance=${record.key.instanceId} guestJobId=${record.key.guestJobId} hostJobId=${host.jobId} token=$token")
             }.onFailure { Log.e(TAG, "JOB_GUEST_STOP_FAILED hostJobId=${host.jobId}", it) }
+            if (sessions.remove(host.jobId, this)) unbind()
         }
 
         private fun callbackBridge(): Any {
@@ -139,19 +147,23 @@ object GuestJobExecutionManager {
             val callback = requireNotNull(callbackField?.get(host)) { "Host Job callback missing" }
             val original = callback as? IBinder
                 ?: callback.javaClass.getMethod("asBinder").invoke(callback) as IBinder
-            // IJobCallback.aidl has kept these transaction positions stable since API 21.
-            // Some production framework jars strip the generated TRANSACTION_* fields.
-            val ackStart = IBinder.FIRST_CALL_TRANSACTION
-            val finished = IBinder.FIRST_CALL_TRANSACTION + 4
+            // API 35 added download/upload progress callbacks ahead of the legacy methods.
+            val modern = android.os.Build.VERSION.SDK_INT >= 35
+            val ackStart = IBinder.FIRST_CALL_TRANSACTION + if (modern) 2 else 0
+            val finished = IBinder.FIRST_CALL_TRANSACTION + if (modern) 6 else 4
+            Log.i(TAG, "JOB_CALLBACK_TRANSACTIONS api=${android.os.Build.VERSION.SDK_INT} ackStart=$ackStart finished=$finished")
             val facade = object : Binder() {
                 override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
+                    Log.i(TAG, "JOB_CALLBACK_TRANSACTION code=$code flags=$flags token=$token")
                     data.enforceInterface("android.app.job.IJobCallback")
                     data.readInt() // Guest-visible logical job id.
                     if (code == ackStart) {
                         val ongoing = data.readInt() != 0
                         Log.i(TAG, "JOB_GUEST_START_ACK hostJobId=${host.jobId} guestJobId=${record.key.guestJobId} ongoing=$ongoing token=$token generation=$processGeneration")
-                        if (!ongoing && sessions.remove(host.jobId, this@Session))
+                        if (!ongoing && sessions.remove(host.jobId, this@Session)) {
+                            unbind()
                             Handler(Looper.getMainLooper()).post { finishHost(false) }
+                        }
                         return true
                     }
                     if (code == finished) {
@@ -162,7 +174,7 @@ object GuestJobExecutionManager {
                         }
                         Log.i(TAG, "JOB_GUEST_FINISHED instance=${record.key.instanceId} guestJobId=${record.key.guestJobId} hostJobId=${host.jobId} token=$token")
                         sessions.remove(host.jobId)
-                        runCatching { context.unbindService(connection) }
+                        unbind()
                         Handler(Looper.getMainLooper()).post { finishHost(reschedule) }
                         return true
                     }
@@ -177,6 +189,17 @@ object GuestJobExecutionManager {
             }
             facade.attachInterface(null, "android.app.job.IJobCallback")
             return facade
+        }
+
+        private fun unbind() {
+            runCatching { context.unbindService(connection) }
+                .onFailure { Log.w(TAG, "JOB_GUEST_UNBIND_FAILED hostJobId=${host.jobId} token=$token", it) }
+        }
+
+        fun detachForHostDestroy() {
+            binder = null
+            unbind()
+            Log.w(TAG, "JOB_EXECUTION_DESTROY hostJobId=${host.jobId} token=$token reason=host-service-destroy")
         }
     }
 

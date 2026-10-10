@@ -19,6 +19,7 @@ public final class JobProbeService extends JobService {
             getSharedPreferences("job-evidence", MODE_PRIVATE).edit()
                 .putString("finished", params.getJobId() + ":" + reschedule).apply();
             jobFinished(params, reschedule);
+            if ("duplicate".equals(mode)) jobFinished(params, false);
         }, "job-probe-finish").start();
         return true;
     }
